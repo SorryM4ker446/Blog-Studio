@@ -7,6 +7,8 @@ interface PostPageProps {
   params: Promise<{ id: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function PostPage({ params }: PostPageProps) {
   const { id } = await params;
   const post: Post | null = await getPost(id);
@@ -18,9 +20,15 @@ export default async function PostPage({ params }: PostPageProps) {
   return (
     <div className="post-detail">
       {/* 文章元信息头部 */}
-      <div className="post-meta">
-        <span className="post-category">
-          {post.category ? post.category.name : "Uncategorized"}
+      <div className="post-meta" style={{ marginBottom: "2.5rem" }}>
+        <span 
+          className="post-category"
+          style={{
+            background: post.category_id === 0 ? "rgba(128,128,128,0.15)" : "rgba(168, 199, 250, 0.12)",
+            color: post.category_id === 0 ? "var(--text-muted)" : "var(--accent-blue)"
+          }}
+        >
+          {post.category_id === 0 ? "无标签" : (post.category ? post.category.name : "Uncategorized")}
         </span>
         <span className="post-date">
           {new Date(post.created_at).toLocaleDateString("zh-CN", {
@@ -31,7 +39,9 @@ export default async function PostPage({ params }: PostPageProps) {
         </span>
       </div>
 
-      <h1 className="post-title">{post.title}</h1>
+      <h1 className="post-title" style={{ marginBottom: "2.5rem" }}>
+          {post.title}
+      </h1>
 
       {/* 文章正文内容 */}
       <article 

@@ -13,6 +13,7 @@ interface Post {
   id: number;
   title: string;
   slug: string;
+  summary: string;
   content: string;
   category_id: number;
   category: Category;
@@ -95,7 +96,7 @@ export async function getPost(id: string): Promise<Post | null> {
 }
 
 export async function createPost(
-  data: { title: string; content: string; category_id?: number; status?: string }
+  data: { title: string; summary: string; content: string; category_id?: number; status?: string }
 ): Promise<Post | null> {
     const res = await fetch(`${API_BASE}/admin/posts`, {
         method: "POST",
@@ -111,7 +112,7 @@ export async function createPost(
 
 export async function updatePost(
   id: number,
-  data: { title?: string; content?: string; category_id?: number; status?: string }
+  data: { title?: string; summary?: string; content?: string; category_id?: number; status?: string }
 ): Promise<Post | null> {
     const res = await fetch(`${API_BASE}/admin/posts/${id}`, {
         method: "PUT",
@@ -161,6 +162,31 @@ export async function createCategory(name: string): Promise<Category | null> {
     } catch {
         return null;
     }
+}
+
+export async function updateCategory(id: number, name: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/admin/categories/${id}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ name })
+    });
+    return res.ok;
+  } catch (error) {
+    return false;
+  }
+}
+
+export async function deleteCategory(id: number): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/admin/categories/${id}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+    return res.ok;
+  } catch (error) {
+    return false;
+  }
 }
 
 // ==================== File API（云盘） ====================

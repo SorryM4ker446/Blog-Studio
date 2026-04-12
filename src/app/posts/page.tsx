@@ -127,14 +127,32 @@ function PostsListContent() {
                   >
                     {post.title}
                   </h4>
+                  {post.summary && (
+                    <div
+                      style={{
+                        fontSize: "0.9rem",
+                        color: "var(--text-secondary)",
+                        marginTop: "0.4rem",
+                        lineHeight: 1.5,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis"
+                      }}
+                    >
+                      {post.summary}
+                    </div>
+                  )}
                   <div
                     style={{
                       fontSize: "0.82rem",
                       color: "var(--text-muted)",
-                      marginTop: "0.3rem",
+                      marginTop: post.summary ? "0.6rem" : "0.3rem",
                       display: "flex",
                       gap: "0.8rem",
                       flexWrap: "wrap",
+                      alignItems: "center"
                     }}
                   >
                     <span>
@@ -142,14 +160,14 @@ function PostsListContent() {
                     </span>
                     <span
                       style={{
-                        background: "rgba(109, 214, 140, 0.12)",
-                        color: "var(--accent-green)",
-                        padding: "1px 8px",
+                        background: post.category_id === 0 ? "rgba(128,128,128,0.15)" : "rgba(109, 214, 140, 0.12)",
+                        color: post.category_id === 0 ? "var(--text-muted)" : "var(--accent-green)",
+                        padding: "2px 8px",
                         borderRadius: "4px",
                         fontSize: "0.75rem",
                       }}
                     >
-                      {post.category ? post.category.name : "Uncategorized"}
+                      {post.category_id === 0 ? "无标签" : (post.category ? post.category.name : "Uncategorized")}
                     </span>
                   </div>
                 </div>

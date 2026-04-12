@@ -313,10 +313,20 @@ body.theme-light .post-category {
   color: var(--text-primary);
 }
 
-.post-body {
-  color: var(--text-secondary);
+.post-body, .post-body p, .post-body li {
+  color: var(--text-primary) !important;
   font-size: 1.05rem;
   line-height: 1.85;
+}
+
+.post-intro {
+  color: var(--text-secondary);
+  font-size: 1.15rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+  font-weight: 400;
+  border-left: 2px solid var(--accent-blue);
+  padding-left: 1.5rem;
 }
 
 .post-body p {
@@ -529,11 +539,7 @@ body.theme-light .custom-select-options {
 }
 
 /* Post Body & Markdown Content Styling */
-.post-body {
-    font-size: 1.05rem;
-    line-height: 1.8;
-    color: var(--text-primary);
-}
+/* Handled above to prevent duplication */
 
 .post-body p {
     margin-bottom: 1.5rem;

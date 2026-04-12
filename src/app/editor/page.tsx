@@ -50,6 +50,7 @@ export default function EditorPage() {
   
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [editSummary, setEditSummary] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editCategoryId, setEditCategoryId] = useState<number>(0);
   const [editStatus, setEditStatus] = useState<string>("draft");
@@ -70,7 +71,7 @@ export default function EditorPage() {
   // 删除确认弹窗状态
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
-    type: "post" | "file";
+    type: "post" | "file" | "category";
     id: number | null;
     isDeleting: boolean;
   }>({ isOpen: false, type: "post", id: null, isDeleting: false });
@@ -133,6 +134,7 @@ export default function EditorPage() {
   function openEditor(post: Post) {
     setEditingPost(post);
     setEditTitle(post.title);
+    setEditSummary(post.summary || "");
     setEditContent(post.content);
     setEditCategoryId(post.category_id);
     setEditStatus(post.status || "draft");
@@ -143,8 +145,9 @@ export default function EditorPage() {
   function handleNewPost() {
     setEditingPost(null);
     setEditTitle("");
+    setEditSummary("");
     setEditContent("");
-    setEditCategoryId(categories.length > 0 ? categories[0].id : 0);
+    setEditCategoryId(0);
     setEditStatus("draft");
     setSaveMsg("");
     setViewMode("edit");
@@ -164,15 +167,17 @@ export default function EditorPage() {
         if (editingPost) {
             result = await updatePost(editingPost.id, {
                 title: editTitle,
+                summary: editSummary,
                 content: editContent,
-                category_id: editCategoryId || undefined,
+                category_id: editCategoryId || 0,
                 status: editStatus,
             });
         } else {
             result = await createPost({
                 title: editTitle,
+                summary: editSummary,
                 content: editContent,
-                category_id: editCategoryId || undefined,
+                category_id: editCategoryId || 0,
                 status: editStatus,
             });
         }
@@ -182,6 +187,7 @@ export default function EditorPage() {
             // Refresh current post page if editing, else go to first page
             editingPost ? await loadPosts(postPage) : await loadPosts(1);
             notifyUpdate();
+            router.refresh(); // Invalidate Next.js router cache
             // Auto-redirect back to list after a brief delay
             setTimeout(() => setViewMode("list"), 600);
         } else {
@@ -228,9 +234,15 @@ export default function EditorPage() {
         setViewMode("list");
       }
       await loadPosts(postPage);
-    } else {
+    } else if (deleteModal.type === "file") {
       await deleteFile(deleteModal.id);
       await loadFiles(filePage);
+    } else if (deleteModal.type === "category") {
+      const { deleteCategory } = await import("@/lib/api");
+      await deleteCategory(deleteModal.id);
+      if (editCategoryId === deleteModal.id) setEditCategoryId(0);
+      await loadCategories();
+      await loadPosts(postPage); // re-fetch posts to show 'Uncategorized' fallback
     }
     
     notifyUpdate();
@@ -278,38 +290,54 @@ export default function EditorPage() {
     }
   };
 
-  // 自定义 Select 组件
+  // 自定义 Select 组件带编辑器
   const CustomSelect = ({ 
     value, 
     onChange, 
     options, 
     placeholder,
-    width = "100%"
+    width = "100%",
+    allowActions = false,
+    onRename,
+    onDelete
   }: { 
     value: any, 
     onChange: (val: any) => void, 
     options: { value: any, label: string }[],
     placeholder?: string,
-    width?: string
+    width?: string,
+    allowActions?: boolean,
+    onRename?: (id: number, newName: string) => void,
+    onDelete?: (id: number) => void
   }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editName, setEditName] = useState("");
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
                 setIsOpen(false);
+                setEditingId(null);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    const handleSaveRename = (id: number) => {
+        if (onRename && editName.trim()) {
+            onRename(id, editName.trim());
+        }
+        setEditingId(null);
+    };
+
     const selectedOption = options.find(o => o.value === value);
 
     return (
         <div className="custom-select-container" ref={containerRef} style={{ width }}>
-            <div className="custom-select-trigger" onClick={() => setIsOpen(!isOpen)}>
+            <div className="custom-select-trigger" onClick={() => !editingId && setIsOpen(!isOpen)}>
                 <span>{selectedOption ? selectedOption.label : placeholder}</span>
                 <span style={{ fontSize: "0.8rem", opacity: 0.5, marginLeft: "10px" }}>{isOpen ? "▲" : "▼"}</span>
             </div>
@@ -318,13 +346,51 @@ export default function EditorPage() {
                     {options.map(opt => (
                         <li 
                             key={opt.value} 
+                            style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
                             className={`custom-select-option ${value === opt.value ? "active" : ""}`}
-                            onClick={() => {
-                                onChange(opt.value);
-                                setIsOpen(false);
+                            onMouseEnter={(e) => {
+                                const actions = e.currentTarget.querySelector('.opt-actions') as HTMLElement | null;
+                                if (actions) actions.style.display = "flex";
+                            }}
+                            onMouseLeave={(e) => {
+                                const actions = e.currentTarget.querySelector('.opt-actions') as HTMLElement | null;
+                                if (actions) actions.style.display = "none";
                             }}
                         >
-                            {opt.label}
+                            {editingId === opt.value ? (
+                                <div style={{ display: "flex", gap: "5px", width: "100%" }} onClick={e => e.stopPropagation()}>
+                                    <input 
+                                        autoFocus
+                                        value={editName}
+                                        onChange={e => setEditName(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleSaveRename(opt.value); if (e.key === 'Escape') setEditingId(null); }}
+                                        style={{ flex: 1, background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-primary)", padding: "2px 5px", borderRadius: "4px" }}
+                                    />
+                                    <button onClick={() => handleSaveRename(opt.value)} style={{ background: "var(--accent-blue)", border: "none", color: "#fff", borderRadius: "4px", cursor: "pointer", fontSize: "0.7rem", padding: "0 5px" }}>✓</button>
+                                </div>
+                            ) : (
+                                <>
+                                    <span style={{ flex: 1 }} onClick={() => { onChange(opt.value); setIsOpen(false); }}>
+                                        {opt.label}
+                                    </span>
+                                    {allowActions && opt.value !== 0 && (
+                                        <div className="opt-actions" style={{ display: "none", gap: "5px" }} onClick={e => e.stopPropagation()}>
+                                            <span 
+                                                title="Rename"
+                                                onClick={() => { setEditingId(opt.value); setEditName(opt.label); }}
+                                                style={{ cursor: "pointer", fontSize: "0.9rem", color: "var(--text-muted)" }}>
+                                                ✏️
+                                            </span>
+                                            <span 
+                                                title="Delete"
+                                                onClick={() => { onDelete && onDelete(opt.value); }}
+                                                style={{ cursor: "pointer", fontSize: "0.9rem", color: "var(--accent-red)" }}>
+                                                ❌
+                                            </span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </li>
                     ))}
                 </ul>
@@ -545,16 +611,22 @@ export default function EditorPage() {
                   ✕
                 </button>
               </div>
-              <p
+              <div
                 style={{
                   fontSize: "0.85rem",
-                  color: "var(--text-muted)",
+                  color: "var(--text-secondary)",
                   margin: "0 0 1.5rem 0",
                   flex: 1,
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  lineHeight: "1.6",
                 }}
               >
-                {post.content.slice(0, 100)}...
-              </p>
+                {post.summary || <span style={{opacity: 0.4}}>No introduction provided.</span>}
+              </div>
               <div
                 style={{
                   display: "flex",
@@ -563,10 +635,17 @@ export default function EditorPage() {
                   marginTop: "auto",
                 }}
               >
-                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                  {new Date(post.updated_at).toLocaleDateString()} •{" "}
-                  <span style={{ color: "var(--accent-blue)" }}>
-                    {post.category?.name || "Uncategorized"}
+                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>{new Date(post.updated_at).toLocaleDateString()}</span>
+                  <span style={{ 
+                      background: post.category_id === 0 ? "rgba(128,128,128,0.15)" : "rgba(168, 199, 250, 0.1)",
+                      color: post.category_id === 0 ? "var(--text-muted)" : "var(--accent-blue)",
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                  }}>
+                    {post.category_id === 0 ? "无标签" : post.category?.name || "Uncategorized"}
                   </span>
                 </div>
                 <button
@@ -699,100 +778,6 @@ export default function EditorPage() {
         />
       )}
 
-      {/* 美化的删除确认弹窗 */}
-      {deleteModal.isOpen && (
-        <div
-          className="fade-in"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.4)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div
-            className="ai-card"
-            style={{
-              background: "var(--bg-surface)",
-              padding: "2rem 2.5rem",
-              borderRadius: "20px",
-              maxWidth: "400px",
-              width: "100%",
-              height: "auto", // 强制高度自适应，防止拉伸
-              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-              border: "1px solid var(--border-color)",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                width: "64px",
-                height: "64px",
-                background: "rgba(242, 139, 130, 0.15)",
-                color: "var(--accent-red)",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "2rem",
-                margin: "0 auto 1.5rem auto",
-              }}
-            >
-              🗑️
-            </div>
-            <h2 style={{ margin: "0 0 10px 0", fontSize: "1.25rem", color: "var(--text-primary)" }}>
-              Confirm Deletion
-            </h2>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.95rem", marginBottom: "2rem", lineHeight: 1.5 }}>
-              Are you sure you want to delete this {deleteModal.type}? This action cannot be undone.
-            </p>
-            <div style={{ display: "flex", gap: "1rem" }}>
-              <button
-                onClick={() => setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false })}
-                disabled={deleteModal.isDeleting}
-                style={{
-                  flex: 1,
-                  padding: "0.75rem",
-                  background: "transparent",
-                  border: "1px solid var(--border-color)",
-                  color: "var(--text-primary)",
-                  borderRadius: "10px",
-                  fontWeight: 600,
-                  cursor: deleteModal.isDeleting ? "not-allowed" : "pointer",
-                  opacity: deleteModal.isDeleting ? 0.6 : 1,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executeDelete}
-                disabled={deleteModal.isDeleting}
-                style={{
-                  flex: 1,
-                  padding: "0.75rem",
-                  background: "var(--accent-red)",
-                  border: "none",
-                  color: "#fff",
-                  borderRadius: "10px",
-                  fontWeight: 600,
-                  cursor: deleteModal.isDeleting ? "not-allowed" : "pointer",
-                  opacity: deleteModal.isDeleting ? 0.6 : 1,
-                  boxShadow: "0 4px 12px rgba(242, 139, 130, 0.3)",
-                }}
-              >
-                {deleteModal.isDeleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 
@@ -926,6 +911,40 @@ export default function EditorPage() {
               letterSpacing: "0.05em",
             }}
           >
+            INTRODUCTION
+          </label>
+          <textarea
+            value={editSummary}
+            onChange={(e) => setEditSummary(e.target.value)}
+            style={{
+              width: "100%",
+              background: "rgba(0,0,0,0.2)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "8px",
+              padding: "1rem",
+              color: "var(--text-secondary)",
+              fontSize: "0.95rem",
+              resize: "vertical",
+              minHeight: "80px",
+              outline: "none",
+              lineHeight: 1.5,
+              fontFamily: "inherit"
+            }}
+            placeholder="Write a brief introduction for this post..."
+          />
+        </div>
+
+        <div style={{ marginBottom: "2rem" }}>
+          <label
+            style={{
+              display: "block",
+              fontSize: "0.8rem",
+              color: "var(--text-muted)",
+              marginBottom: "0.8rem",
+              fontWeight: 600,
+              letterSpacing: "0.05em",
+            }}
+          >
             CATEGORY / TAG
           </label>
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -933,7 +952,20 @@ export default function EditorPage() {
                   value={editCategoryId}
                   onChange={setEditCategoryId}
                   placeholder="Select a category..."
-                  options={categories.map(c => ({ value: c.id, label: c.name }))}
+                  allowActions={true}
+                  onRename={async (id, newName) => {
+                      const { updateCategory } = await import("@/lib/api");
+                      await updateCategory(id, newName);
+                      loadCategories();
+                      notifyUpdate();
+                  }}
+                  onDelete={(id) => {
+                      setDeleteModal({ isOpen: true, type: "category", id, isDeleting: false });
+                  }}
+                  options={[
+                      { value: 0, label: "无标签 (None)" },
+                      ...categories.map(c => ({ value: c.id, label: c.name }))
+                  ]}
               />
               <button 
                   onClick={() => setShowNewCat(!showNewCat)}
@@ -1047,5 +1079,105 @@ export default function EditorPage() {
     </div>
   );
 
-  return viewMode === "list" ? renderListView() : renderEditView();
+  return (
+    <>
+      {viewMode === "list" ? renderListView() : renderEditView()}
+
+      {/* 美化的删除确认弹窗 - 全局渲染，不受 viewMode 影响 */}
+      {deleteModal.isOpen && (
+        <div
+          className="fade-in"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.4)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            className="ai-card"
+            style={{
+              background: "var(--bg-surface)",
+              padding: "2rem 2.5rem",
+              borderRadius: "20px",
+              maxWidth: "400px",
+              width: "100%",
+              height: "auto",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+              border: "1px solid var(--border-color)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                width: "64px",
+                height: "64px",
+                background: "rgba(242, 139, 130, 0.15)",
+                color: "var(--accent-red)",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "2rem",
+                margin: "0 auto 1.5rem auto",
+              }}
+            >
+              🗑️
+            </div>
+            <h2 style={{ margin: "0 0 10px 0", fontSize: "1.25rem", color: "var(--text-primary)" }}>
+              Confirm Deletion
+            </h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.95rem", marginBottom: "2rem", lineHeight: 1.5 }}>
+              Are you sure you want to delete this {deleteModal.type}? This action cannot be undone.
+              {deleteModal.type === "category" && " Posts in this category will automatically become Uncategorized."}
+            </p>
+            <div style={{ display: "flex", gap: "1rem" }}>
+              <button
+                onClick={() => setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false })}
+                disabled={deleteModal.isDeleting}
+                style={{
+                  flex: 1,
+                  padding: "0.75rem",
+                  background: "transparent",
+                  border: "1px solid var(--border-color)",
+                  color: "var(--text-primary)",
+                  borderRadius: "10px",
+                  fontWeight: 600,
+                  cursor: deleteModal.isDeleting ? "not-allowed" : "pointer",
+                  opacity: deleteModal.isDeleting ? 0.6 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeDelete}
+                disabled={deleteModal.isDeleting}
+                style={{
+                  flex: 1,
+                  padding: "0.75rem",
+                  background: "var(--accent-red)",
+                  border: "none",
+                  color: "#fff",
+                  borderRadius: "10px",
+                  fontWeight: 600,
+                  cursor: deleteModal.isDeleting ? "not-allowed" : "pointer",
+                  opacity: deleteModal.isDeleting ? 0.6 : 1,
+                  boxShadow: "0 4px 12px rgba(242, 139, 130, 0.3)",
+                }}
+              >
+                {deleteModal.isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

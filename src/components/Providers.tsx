@@ -23,7 +23,11 @@ export function SidebarContent() {
 
   const refreshCategories = useCallback(() => {
     getCategories().then((cats) => {
-      setCategories(cats.filter((c) => (c.post_count || 0) > 0));
+      setCategories(
+        cats
+          .filter((c) => (c.post_count || 0) > 0)
+          .sort((a, b) => (b.post_count || 0) - (a.post_count || 0))
+      );
     });
   }, []);
 
@@ -130,15 +134,16 @@ export function SidebarContent() {
                   color: "var(--accent-blue)",
                   fontSize: "0.85rem",
                   cursor: "pointer",
-                  padding: "0.3rem",
+                  padding: "0.4rem",
                   marginTop: "0.2rem",
+                  width: "100%",
                   opacity: 0.8,
                   transition: "opacity 0.2s",
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
                 onMouseLeave={(e) => e.currentTarget.style.opacity = "0.8"}
               >
-                <span style={{ letterSpacing: "2px" }}>...</span> More
+                More
               </div>
             )}
             
@@ -152,8 +157,9 @@ export function SidebarContent() {
                   color: "var(--text-muted)",
                   fontSize: "0.85rem",
                   cursor: "pointer",
-                  padding: "0.3rem",
-                  marginTop: "0.2rem"
+                  padding: "0.4rem",
+                  marginTop: "0.2rem",
+                  width: "100%"
                 }}
               >
                 Less
