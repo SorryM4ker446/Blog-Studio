@@ -61,6 +61,12 @@ export default function EditorPage() {
   const [newCatName, setNewCatName] = useState("");
   const [creatingCat, setCreatingCat] = useState(false);
 
+  const notifyUpdate = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("blog:refresh-sidebar"));
+    }
+  };
+
   // 删除确认弹窗状态
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
@@ -175,6 +181,7 @@ export default function EditorPage() {
             setSaveMsg("✅ Saved successfully!");
             // Refresh current post page if editing, else go to first page
             editingPost ? await loadPosts(postPage) : await loadPosts(1);
+            notifyUpdate();
             // Auto-redirect back to list after a brief delay
             setTimeout(() => setViewMode("list"), 600);
         } else {
@@ -226,6 +233,7 @@ export default function EditorPage() {
       await loadFiles(filePage);
     }
     
+    notifyUpdate();
     setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false });
   }
 
@@ -234,8 +242,10 @@ export default function EditorPage() {
     setUploading(true);
     const file = e.target.files[0];
     const res = await uploadFile(file);
-    if (res) loadFiles(1);
-    else alert("Failed to upload file.");
+    if (res) {
+        loadFiles(1);
+        notifyUpdate();
+    } else alert("Failed to upload file.");
     setUploading(false);
     
     // reset input

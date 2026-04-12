@@ -5,6 +5,7 @@ interface Category {
   id: number;
   name: string;
   description: string;
+  post_count?: number;
   created_at: string;
 }
 
@@ -62,7 +63,7 @@ function getAuthHeaders(isFormData = false): HeadersInit {
 
 // ==================== Post API ====================
 
-export async function getPosts(page = 1, limit = 10, useAuth = false, sort = ""): Promise<PaginatedResponse<Post>> {
+export async function getPosts(page = 1, limit = 10, useAuth = false, sort = "", categoryId = ""): Promise<PaginatedResponse<Post>> {
   try {
     const options: RequestInit = { cache: "no-store" };
     if (useAuth) {
@@ -73,6 +74,7 @@ export async function getPosts(page = 1, limit = 10, useAuth = false, sort = "")
       limit: limit.toString() 
     });
     if (sort) query.append("sort", sort);
+    if (categoryId) query.append("category_id", categoryId);
     
     const res = await fetch(`${API_BASE}/posts?${query.toString()}`, options);
     if (!res.ok) throw new Error("Backend error");

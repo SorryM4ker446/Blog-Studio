@@ -1,35 +1,48 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { getPosts, searchResources } from "@/lib/api";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { getPosts, searchResources, getCategories } from "@/lib/api";
 import type { Post } from "@/lib/api";
 import Link from "next/link";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
 
-export default function AllPostsPage() {
+function PostsListContent() {
+  const searchParams = useSearchParams();
+  const categoryId = searchParams.get("category");
+
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [currentCategoryName, setCurrentCategoryName] = useState<string | null>(null);
 
   useEffect(() => {
-    loadPosts(1);
-  }, []);
+    loadPosts(1, categoryId || "");
+  }, [categoryId]);
 
-  async function loadPosts(pageToLoad: number) {
+  async function loadPosts(pageToLoad: number, catId: string = categoryId || "") {
     setLoading(true);
-    const result = await getPosts(pageToLoad, 10);
+    const result = await getPosts(pageToLoad, 10, false, "", catId);
     setPosts(result.data);
     setPage(result.page);
     setTotalPages(Math.ceil(result.total / result.limit));
+
+    if (catId) {
+      const cats = await getCategories();
+      const cat = cats.find((c) => c.id.toString() === catId);
+      setCurrentCategoryName(cat ? cat.name : null);
+    } else {
+      setCurrentCategoryName(null);
+    }
+
     setLoading(false);
   }
 
   async function handleSearch(query: string) {
     if (!query.trim()) {
-      setPage(1);
-      loadPosts(1);
+      loadPosts(1, categoryId || "");
       return;
     }
     const res = await searchResources(query, "posts");
@@ -41,9 +54,14 @@ export default function AllPostsPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
         <div>
-          <h1 className="page-title">📋 All Posts</h1>
+          <h1 className="page-title">
+            {currentCategoryName ? `📁 ${currentCategoryName}` : "📋 All Posts"}
+          </h1>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: 0 }}>
-            Browse all published articles across every category.
+            {currentCategoryName 
+              ? `Browsing articles in the ${currentCategoryName} category.` 
+              : "Browse all published articles across every category."
+            }
           </p>
         </div>
         <SearchInput placeholder="Search posts..." onSearch={handleSearch} style={{ width: "250px" }} />
@@ -146,10 +164,18 @@ export default function AllPostsPage() {
         <Pagination 
           currentPage={page} 
           totalPages={totalPages} 
-          onPageChange={(p) => loadPosts(p)} 
+          onPageChange={(p) => loadPosts(p, categoryId || "")} 
         />
       )}
 
     </div>
+  );
+}
+
+export default function AllPostsPage() {
+  return (
+    <Suspense fallback={<div className="skeleton-pulse" style={{ height: "400px", borderRadius: "16px" }} />}>
+      <PostsListContent />
+    </Suspense>
   );
 }
