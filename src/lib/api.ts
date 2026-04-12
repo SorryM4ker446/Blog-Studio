@@ -36,7 +36,14 @@ interface SearchResult {
   files: FileRecord[];
 }
 
-export type { Category, Post, FileRecord, SearchResult };
+interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export type { Category, Post, FileRecord, SearchResult, PaginatedResponse };
 
 // Helper get authorization headers
 function getAuthHeaders(isFormData = false): HeadersInit {
@@ -55,30 +62,23 @@ function getAuthHeaders(isFormData = false): HeadersInit {
 
 // ==================== Post API ====================
 
-export async function getPosts(useAuth = false): Promise<Post[]> {
+export async function getPosts(page = 1, limit = 10, useAuth = false, sort = ""): Promise<PaginatedResponse<Post>> {
   try {
     const options: RequestInit = { cache: "no-store" };
     if (useAuth) {
       options.headers = getAuthHeaders();
     }
-    const res = await fetch(`${API_BASE}/posts`, options);
+    const query = new URLSearchParams({ 
+      page: page.toString(), 
+      limit: limit.toString() 
+    });
+    if (sort) query.append("sort", sort);
+    
+    const res = await fetch(`${API_BASE}/posts?${query.toString()}`, options);
     if (!res.ok) throw new Error("Backend error");
     return await res.json();
   } catch {
-    return [
-      {
-        id: 101,
-        title: "Hello World: 博客的第一篇文章",
-        slug: "hello-world",
-        content: "这是一篇 Mock 数据，后端启动后会自动替换。",
-        category_id: 1,
-        category: { id: 1, name: "Life & Reading", description: "", created_at: "" },
-        status: "published",
-        published_at: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ];
+    return { data: [], total: 0, page: 1, limit: 10 };
   }
 }
 
@@ -163,13 +163,13 @@ export async function createCategory(name: string): Promise<Category | null> {
 
 // ==================== File API（云盘） ====================
 
-export async function getFiles(): Promise<FileRecord[]> {
+export async function getFiles(page = 1, limit = 10): Promise<PaginatedResponse<FileRecord>> {
   try {
-    const res = await fetch(`${API_BASE}/files`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE}/files?page=${page}&limit=${limit}`, { cache: "no-store" });
     if (!res.ok) throw new Error("Backend error");
     return await res.json();
   } catch {
-    return [];
+    return { data: [], total: 0, page: 1, limit: 10 };
   }
 }
 

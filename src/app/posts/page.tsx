@@ -3,30 +3,38 @@
 import { useState, useEffect } from "react";
 import { getPosts, searchResources } from "@/lib/api";
 import type { Post } from "@/lib/api";
+import Link from "next/link";
 import SearchInput from "@/components/SearchInput";
+import Pagination from "@/components/Pagination";
 
 export default function AllPostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    loadPosts();
+    loadPosts(1);
   }, []);
 
-  async function loadPosts() {
+  async function loadPosts(pageToLoad: number) {
     setLoading(true);
-    const data = await getPosts();
-    setPosts(data);
+    const result = await getPosts(pageToLoad, 10);
+    setPosts(result.data);
+    setPage(result.page);
+    setTotalPages(Math.ceil(result.total / result.limit));
     setLoading(false);
   }
 
   async function handleSearch(query: string) {
     if (!query.trim()) {
-      loadPosts();
+      setPage(1);
+      loadPosts(1);
       return;
     }
     const res = await searchResources(query, "posts");
     setPosts(res.posts || []);
+    setTotalPages(1); // Disable pagination during search
   }
 
   return (
@@ -66,7 +74,7 @@ export default function AllPostsPage() {
           style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}
         >
           {posts.map((post: Post) => (
-            <a key={post.id} href={`/posts/${post.id}`}>
+            <Link key={post.id} href={`/posts/${post.id}`} style={{ textDecoration: "none" }}>
               <div
                 className="ai-card"
                 style={{
@@ -93,6 +101,7 @@ export default function AllPostsPage() {
                       margin: 0,
                       fontWeight: 500,
                       fontSize: "1.05rem",
+                      color: "var(--text-primary)",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
@@ -127,10 +136,20 @@ export default function AllPostsPage() {
                   </div>
                 </div>
               </div>
-            </a>
+            </Link>
           ))}
         </div>
       )}
+
+      {/* Pagination component */}
+      {!loading && posts.length > 0 && (
+        <Pagination 
+          currentPage={page} 
+          totalPages={totalPages} 
+          onPageChange={(p) => loadPosts(p)} 
+        />
+      )}
+
     </div>
   );
 }

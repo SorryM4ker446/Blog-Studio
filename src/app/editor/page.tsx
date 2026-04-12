@@ -19,6 +19,7 @@ import {
   searchResources,
 } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
+import Pagination from "@/components/Pagination";
 import "react-markdown-editor-lite/lib/index.css";
 
 // Markdown editor 动态导入（不支持 SSR）
@@ -60,41 +61,66 @@ export default function EditorPage() {
   const [newCatName, setNewCatName] = useState("");
   const [creatingCat, setCreatingCat] = useState(false);
 
+  // 删除确认弹窗状态
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    type: "post" | "file";
+    id: number | null;
+    isDeleting: boolean;
+  }>({ isOpen: false, type: "post", id: null, isDeleting: false });
+
+
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login?redirect=/editor");
     }
   }, [user, isLoading, router]);
 
+  const [postPage, setPostPage] = useState(1);
+  const [postTotalPages, setPostTotalPages] = useState(1);
+  const [filePage, setFilePage] = useState(1);
+  const [fileTotalPages, setFileTotalPages] = useState(1);
+
   useEffect(() => {
     if (user) {
-      loadData();
+      loadCategories();
+      loadPosts(1);
+      loadFiles(1);
     }
   }, [user]);
 
-  async function loadData() {
-    const [p, f, c] = await Promise.all([getPosts(true), getFiles(), getCategories()]);
-    // Sort: drafts first, then by updated_at descending
-    const sorted = [...p].sort((a, b) => {
-      if (a.status === "draft" && b.status !== "draft") return -1;
-      if (a.status !== "draft" && b.status === "draft") return 1;
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-    });
-    setPosts(sorted);
-    setFiles(f);
+  async function loadCategories() {
+    const c = await getCategories();
     setCategories(c);
+  }
+
+  async function loadPosts(pageToLoad: number) {
+    const result = await getPosts(pageToLoad, 10, true, "admin");
+    setPosts(result.data);
+    setPostPage(result.page);
+    setPostTotalPages(Math.ceil(result.total / result.limit));
+  }
+
+  async function loadFiles(pageToLoad: number) {
+    const result = await getFiles(pageToLoad, 10);
+    setFiles(result.data);
+    setFilePage(result.page);
+    setFileTotalPages(Math.ceil(result.total / result.limit));
   }
 
   async function handleSearch(query: string) {
     if (!query.trim()) {
-      loadData();
+      if (activeTab === "posts") loadPosts(1);
+      else loadFiles(1);
       return;
     }
     const res = await searchResources(query, activeTab);
     if (activeTab === "posts") {
         setPosts(res.posts || []);
+        setPostTotalPages(1);
     } else {
         setFiles(res.files || []);
+        setFileTotalPages(1);
     }
   }
 
@@ -147,7 +173,8 @@ export default function EditorPage() {
 
         if (result) {
             setSaveMsg("✅ Saved successfully!");
-            await loadData();
+            // Refresh current post page if editing, else go to first page
+            editingPost ? await loadPosts(postPage) : await loadPosts(1);
             // Auto-redirect back to list after a brief delay
             setTimeout(() => setViewMode("list"), 600);
         } else {
@@ -175,20 +202,31 @@ export default function EditorPage() {
       }
   }
 
-  async function handleDeletePost(id: number) {
-    if (!confirm("Are you sure you want to delete this post?")) return;
-    await deletePost(id);
-    if (editingPost?.id === id) {
-      setEditingPost(null);
-      setViewMode("list");
-    }
-    loadData();
+  function handleDeletePost(id: number) {
+    setDeleteModal({ isOpen: true, type: "post", id, isDeleting: false });
   }
 
-  async function handleDeleteFile(id: number) {
-    if (!confirm("Are you sure you want to delete this file?")) return;
-    await deleteFile(id);
-    loadData();
+  function handleDeleteFile(id: number) {
+    setDeleteModal({ isOpen: true, type: "file", id, isDeleting: false });
+  }
+
+  async function executeDelete() {
+    if (!deleteModal.id) return;
+    setDeleteModal(prev => ({ ...prev, isDeleting: true }));
+    
+    if (deleteModal.type === "post") {
+      await deletePost(deleteModal.id);
+      if (editingPost?.id === deleteModal.id) {
+        setEditingPost(null);
+        setViewMode("list");
+      }
+      await loadPosts(postPage);
+    } else {
+      await deleteFile(deleteModal.id);
+      await loadFiles(filePage);
+    }
+    
+    setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false });
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -196,7 +234,7 @@ export default function EditorPage() {
     setUploading(true);
     const file = e.target.files[0];
     const res = await uploadFile(file);
-    if (res) loadData();
+    if (res) loadFiles(1);
     else alert("Failed to upload file.");
     setUploading(false);
     
@@ -632,6 +670,117 @@ export default function EditorPage() {
         >
           <p style={{ fontSize: "3rem" }}>📭</p>
           <p>No posts available. Start writing by creating one!</p>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {activeTab === "posts" && posts.length > 0 && (
+        <Pagination 
+          currentPage={postPage} 
+          totalPages={postTotalPages} 
+          onPageChange={(p) => loadPosts(p)} 
+        />
+      )}
+      {activeTab === "files" && files.length > 0 && (
+        <Pagination 
+          currentPage={filePage} 
+          totalPages={fileTotalPages} 
+          onPageChange={(p) => loadFiles(p)} 
+        />
+      )}
+
+      {/* 美化的删除确认弹窗 */}
+      {deleteModal.isOpen && (
+        <div
+          className="fade-in"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.4)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            className="ai-card"
+            style={{
+              background: "var(--bg-surface)",
+              padding: "2rem 2.5rem",
+              borderRadius: "20px",
+              maxWidth: "400px",
+              width: "100%",
+              height: "auto", // 强制高度自适应，防止拉伸
+              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+              border: "1px solid var(--border-color)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                width: "64px",
+                height: "64px",
+                background: "rgba(242, 139, 130, 0.15)",
+                color: "var(--accent-red)",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "2rem",
+                margin: "0 auto 1.5rem auto",
+              }}
+            >
+              🗑️
+            </div>
+            <h2 style={{ margin: "0 0 10px 0", fontSize: "1.25rem", color: "var(--text-primary)" }}>
+              Confirm Deletion
+            </h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.95rem", marginBottom: "2rem", lineHeight: 1.5 }}>
+              Are you sure you want to delete this {deleteModal.type}? This action cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: "1rem" }}>
+              <button
+                onClick={() => setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false })}
+                disabled={deleteModal.isDeleting}
+                style={{
+                  flex: 1,
+                  padding: "0.75rem",
+                  background: "transparent",
+                  border: "1px solid var(--border-color)",
+                  color: "var(--text-primary)",
+                  borderRadius: "10px",
+                  fontWeight: 600,
+                  cursor: deleteModal.isDeleting ? "not-allowed" : "pointer",
+                  opacity: deleteModal.isDeleting ? 0.6 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeDelete}
+                disabled={deleteModal.isDeleting}
+                style={{
+                  flex: 1,
+                  padding: "0.75rem",
+                  background: "var(--accent-red)",
+                  border: "none",
+                  color: "#fff",
+                  borderRadius: "10px",
+                  fontWeight: 600,
+                  cursor: deleteModal.isDeleting ? "not-allowed" : "pointer",
+                  opacity: deleteModal.isDeleting ? 0.6 : 1,
+                  boxShadow: "0 4px 12px rgba(242, 139, 130, 0.3)",
+                }}
+              >
+                {deleteModal.isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

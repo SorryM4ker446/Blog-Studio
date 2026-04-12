@@ -15,8 +15,9 @@ export default function Home() {
   }, []);
 
   async function loadPosts() {
-    const data = await getPosts();
-    setPosts(data.slice(0, 5)); // Just keeping a small number for recent list
+    // Only load the first 5 posts directly from the backend for the recent list
+    const result = await getPosts(1, 5);
+    setPosts(result.data);
   }
 
   function handleSearchKeyDown(e: React.KeyboardEvent) {

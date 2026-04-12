@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import type { FileRecord } from "@/lib/api";
 import { getFiles, getDownloadUrl, searchResources } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
+import Pagination from "@/components/Pagination";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
@@ -14,25 +15,30 @@ function formatSize(bytes: number): string {
 export default function DrivePage() {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    loadFiles();
+    loadFiles(1);
   }, []);
 
-  async function loadFiles() {
+  async function loadFiles(pageToLoad: number) {
     setLoading(true);
-    const data = await getFiles();
-    setFiles(data);
+    const result = await getFiles(pageToLoad, 10);
+    setFiles(result.data);
+    setPage(result.page);
+    setTotalPages(Math.ceil(result.total / result.limit));
     setLoading(false);
   }
 
   async function handleSearch(query: string) {
     if (!query.trim()) {
-      loadFiles();
+      loadFiles(1);
       return;
     }
     const res = await searchResources(query, "files");
     setFiles(res.files || []);
+    setTotalPages(1); // Disable pagination during search
   }
 
   return (
@@ -137,6 +143,16 @@ export default function DrivePage() {
           ))}
         </div>
       )}
+
+      {/* Pagination */}
+      {!loading && files.length > 0 && (
+        <Pagination 
+          currentPage={page} 
+          totalPages={totalPages} 
+          onPageChange={(p) => loadFiles(p)} 
+        />
+      )}
     </div>
   );
 }
+
