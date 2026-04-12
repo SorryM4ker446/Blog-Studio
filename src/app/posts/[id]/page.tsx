@@ -1,7 +1,7 @@
 import { getPost } from "@/lib/api";
 import type { Post } from "@/lib/api";
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import BackButton from "@/components/BackButton";
 
 interface PostPageProps {
   params: Promise<{ id: string }>;
@@ -47,22 +47,17 @@ export default async function PostPage({ params }: PostPageProps) {
       <article 
         className="post-body custom-html-style"
         dangerouslySetInnerHTML={{ 
-            __html: require("markdown-it")({ html: false }).render(post.content) 
+            __html: (() => {
+              const md = require("markdown-it")({ html: true });
+              const { imageSizePlugin } = require("@/lib/md-plugins");
+              return md.use(imageSizePlugin).render(post.content);
+            })()
         }}
       />
 
       {/* 返回按钮 */}
       <div style={{ marginTop: "4rem" }}>
-        <Link
-          href="/posts"
-          style={{
-            color: "var(--accent-blue)",
-            fontSize: "0.9rem",
-            fontWeight: 500,
-          }}
-        >
-          ← Back to all posts
-        </Link>
+        <BackButton text="← Back" />
       </div>
     </div>
   );

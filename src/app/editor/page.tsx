@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import type { Post, FileRecord, Category } from "@/lib/api";
@@ -31,7 +32,8 @@ let mdParser: { render: (text: string) => string } | null = null;
 if (typeof window !== "undefined") {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const MarkdownIt = require("markdown-it");
-  mdParser = new MarkdownIt({ html: false }); // 禁用 HTML 解析，防止冗余碎片代码干扰
+  const { imageSizePlugin } = require("@/lib/md-plugins");
+  mdParser = new MarkdownIt({ html: true }).use(imageSizePlugin);
 }
 
 type TabType = "posts" | "files";
@@ -537,9 +539,10 @@ export default function EditorPage() {
             <div
               key={post.id}
               className="ai-card"
+              onClick={() => router.push(`/posts/${post.id}`)}
               style={{
                 padding: "1.5rem",
-                cursor: "default",
+                cursor: "pointer",
                 display: "flex",
                 flexDirection: "column",
                 position: "relative",
@@ -561,12 +564,10 @@ export default function EditorPage() {
                       fontSize: "1.1rem",
                       color: "var(--text-primary)",
                       lineHeight: 1.4,
-                      cursor: "pointer",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                     }}
-                    onClick={() => openEditor(post)}
                   >
                     {post.title}
                   </h3>
@@ -590,7 +591,7 @@ export default function EditorPage() {
                   </span>
                 </div>
                 <button
-                  onClick={() => handleDeletePost(post.id)}
+                  onClick={(e) => { e.stopPropagation(); handleDeletePost(post.id); }}
                   style={{
                     background: "rgba(242, 139, 130, 0.1)",
                     color: "var(--accent-red)",
@@ -649,7 +650,7 @@ export default function EditorPage() {
                   </span>
                 </div>
                 <button
-                  onClick={() => openEditor(post)}
+                  onClick={(e) => { e.stopPropagation(); openEditor(post); }}
                   style={{
                     background: "var(--accent-blue)",
                     color: "#fff",
