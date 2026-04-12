@@ -1,10 +1,29 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getPosts } from "@/lib/api";
 import type { Post } from "@/lib/api";
 
-export const dynamic = "force-dynamic";
+export default function Home() {
+  const router = useRouter();
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
-export default async function Home() {
-  const posts: Post[] = await getPosts();
+  useEffect(() => {
+    loadPosts();
+  }, []);
+
+  async function loadPosts() {
+    const data = await getPosts();
+    setPosts(data.slice(0, 5)); // Just keeping a small number for recent list
+  }
+
+  function handleSearchKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  }
 
   return (
     <div>
@@ -158,7 +177,7 @@ export default async function Home() {
         </div>
       </div>
 
-      {/* 底部搜索条 */}
+      {/* 底部搜索栏 - 真实搜索功能 */}
       <div
         style={{
           marginTop: "6rem",
@@ -174,33 +193,49 @@ export default async function Home() {
             borderTopLeftRadius: "8px",
             borderBottomRightRadius: "24px",
             borderBottomLeftRadius: "24px",
-            padding: "1rem 1.5rem",
+            padding: "0.6rem 1.5rem",
             display: "flex",
             width: "100%",
             maxWidth: "800px",
-            color: "var(--text-muted)",
             alignItems: "center",
-            gap: "1rem",
+            gap: "0.8rem",
           }}
         >
-          Search articles or type a prompt to explore my writings...
-          <div
+          <span style={{ fontSize: "1.1rem", opacity: 0.5 }}>🔍</span>
+          <input
+            id="home-search-bar"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Search articles or type a prompt to explore my writings..."
             style={{
-              marginLeft: "auto",
-              display: "flex",
-              gap: "0.5rem",
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              color: "var(--text-primary)",
+              fontSize: "0.95rem",
+              outline: "none",
+              padding: "0.5rem 0",
+            }}
+          />
+          <div
+            onClick={() => {
+              if (searchQuery.trim()) {
+                router.push(
+                  `/search?q=${encodeURIComponent(searchQuery.trim())}`
+                );
+              }
+            }}
+            className="card-icon"
+            style={{
+              background: "rgba(255,255,255,0.08)",
+              borderRadius: "50%",
+              padding: "6px",
+              cursor: "pointer",
+              transition: "background 0.2s",
             }}
           >
-            <div
-              className="card-icon"
-              style={{
-                background: "rgba(255,255,255,0.08)",
-                borderRadius: "50%",
-                padding: "6px",
-              }}
-            >
-              ↩
-            </div>
+            ↩
           </div>
         </div>
       </div>

@@ -33,16 +33,17 @@ export default async function PostPage({ params }: PostPageProps) {
       <h1 className="post-title">{post.title}</h1>
 
       {/* 文章正文内容 */}
-      <article className="post-body">
-        {post.content.split("\n").map((paragraph: string, index: number) => (
-          <p key={index}>{paragraph}</p>
-        ))}
-      </article>
+      <article 
+        className="post-body custom-html-style"
+        dangerouslySetInnerHTML={{ 
+            __html: require("markdown-it")({ html: false }).render(post.content) 
+        }}
+      />
 
       {/* 返回按钮 */}
       <div style={{ marginTop: "4rem" }}>
         <a
-          href="/"
+          href="/posts"
           style={{
             color: "var(--accent-blue)",
             fontSize: "0.9rem",
