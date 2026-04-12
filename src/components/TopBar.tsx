@@ -1,39 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getSettings } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function TopBar() {
-  const [profile, setProfile] = useState<{
-    name: string;
-    description: string;
-    avatar: string;
-  }>({ name: "", description: "", avatar: "" });
+  const { profile, isProfileLoading } = useAuth();
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  async function loadProfile() {
-    const settings = await getSettings();
-    setProfile({
-      name: settings["profile_name"] || "",
-      description: settings["profile_description"] || "",
-      avatar: settings["profile_avatar"] || "",
-    });
-  }
-
+  // If globally loading for the first time, we can show a minimal placeholder
+  // but once loaded, it stays in sync without flickering on navigation.
   return (
     <header className="top-bar">
       <div className="top-bar-profile">
         <div className="top-bar-avatar">
-          {profile.avatar ? (
+          {profile?.avatar ? (
             <img src={profile.avatar} alt="avatar" />
+          ) : isProfileLoading ? (
+            <div className="skeleton-pulse" style={{ width: "100%", height: "100%", borderRadius: "50%" }} />
           ) : null}
         </div>
-        <div>
-          {profile.name && <div className="top-bar-name">{profile.name}</div>}
-          {profile.description && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+          {/* Only render if name exists and is not empty */}
+          {profile?.name && (
+            <div className="top-bar-name" style={{ marginBottom: profile.description ? "0" : "0" }}>
+              {profile.name}
+            </div>
+          )}
+          {/* Only render if description exists and is not empty */}
+          {profile?.description && (
             <div className="top-bar-desc">{profile.description}</div>
           )}
         </div>

@@ -7,7 +7,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { getSettings, updateSettings, updatePassword, uploadFile } from "@/lib/api";
 
 export default function SettingsPage() {
-  const { user, logout, isLoading } = useAuth();
+  const { user, logout, isLoading, refreshProfile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
@@ -53,6 +53,7 @@ export default function SettingsPage() {
     setSaving(false);
     if (success) {
       setSaveMsg("✅ Settings saved successfully!");
+      refreshProfile(); // Trigger global sync
     } else {
       setSaveMsg("❌ Failed to save settings.");
     }
@@ -69,6 +70,7 @@ export default function SettingsPage() {
       setProfileAvatar(avatarUrl);
       // Auto-save avatar setting
       await updateSettings({ profile_avatar: avatarUrl });
+      await refreshProfile(); // Trigger global sync
       setSaveMsg("✅ Avatar updated!");
     } else {
       setSaveMsg("❌ Failed to upload avatar.");

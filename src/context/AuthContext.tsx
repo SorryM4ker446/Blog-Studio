@@ -9,56 +9,99 @@ interface User {
   role: string;
 }
 
+interface Profile {
+  name: string;
+  description: string;
+  avatar: string;
+}
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
+  profile: Profile | null;
   login: (token: string, user: User) => void;
   logout: () => void;
+  refreshProfile: () => Promise<void>;
   isLoading: boolean;
+  isProfileLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem("blog_user");
+      if (storedUser) {
+        try { return JSON.parse(storedUser); } catch(e) { return null; }
+      }
+    }
+    return null;
+  });
+  const [token, setToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem("blog_token");
+    }
+    return null;
+  });
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
   const router = useRouter();
 
+  // Load auth state and profile on mount
   useEffect(() => {
-    // Component mounted, try to load auth state from local storage
-    const storedToken = localStorage.getItem("blog_token");
-    const storedUser = localStorage.getItem("blog_user");
-
-    if (storedToken && storedUser) {
-      try {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        localStorage.removeItem("blog_token");
-        localStorage.removeItem("blog_user");
-      }
+    if (token && user) {
+        fetchProfile();
     }
     setIsLoading(false);
   }, []);
+
+  async function fetchProfile() {
+    const { getSettings } = await import("@/lib/api");
+    setIsProfileLoading(true);
+    try {
+      const data = await getSettings();
+      setProfile({
+        name: data["profile_name"] || "",
+        description: data["profile_description"] || "",
+        avatar: data["profile_avatar"] || "",
+      });
+    } catch (e) {
+      console.error("Failed to fetch profile:", e);
+    } finally {
+      setIsProfileLoading(false);
+    }
+  }
 
   const login = (newToken: string, newUser: User) => {
     setToken(newToken);
     setUser(newUser);
     localStorage.setItem("blog_token", newToken);
     localStorage.setItem("blog_user", JSON.stringify(newUser));
+    fetchProfile(); // Fetch profile immediately after login
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
+    setProfile(null);
     localStorage.removeItem("blog_token");
     localStorage.removeItem("blog_user");
     router.push("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      token, 
+      profile, 
+      login, 
+      logout, 
+      refreshProfile: fetchProfile,
+      isLoading,
+      isProfileLoading
+    }}>
       {children}
     </AuthContext.Provider>
   );

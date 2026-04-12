@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Providers, SidebarContent, SidebarFooter } from "@/components/Providers";
 import TopBar from "@/components/TopBar";
+import Script from "next/script";
 
 export const metadata = {
   title: "Blog Studio",
@@ -14,7 +15,27 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <head>
+        <Script
+          id="theme-loader"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('blog_theme');
+                  var supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches === true;
+                  if (theme === 'light' || (!theme && !supportDarkMode)) {
+                    document.documentElement.classList.add('theme-light');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body suppressHydrationWarning>
+
         <Providers>
           <div className="app-container">
             {/* 左侧导航栏 */}

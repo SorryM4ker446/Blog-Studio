@@ -1,6 +1,7 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
+import Link from "next/link";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 
@@ -14,10 +15,16 @@ export function Providers({ children }: { children: ReactNode }) {
 
 export function SidebarContent() {
   const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   return (
     <nav className="nav-menu">
-      <a href="/" className="nav-item">
+
+      <Link href="/" className="nav-item">
         <span
           className="card-icon"
           style={{
@@ -28,52 +35,60 @@ export function SidebarContent() {
           ⊞
         </span>
         Posts Playground
-      </a>
+      </Link>
 
       <div className="nav-group-title">Features</div>
-      <a href="/posts" className="nav-item">
+      <Link href="/posts" className="nav-item">
         <span style={{ fontSize: "1.2rem", marginLeft: "-2px" }}>
           📋
         </span>
         All Posts
-      </a>
-      <a href="/drive" className="nav-item">
+      </Link>
+      <Link href="/drive" className="nav-item">
         <span style={{ fontSize: "1.2rem", marginLeft: "-2px" }}>
           ☁️
         </span>
         Cloud Drive
-      </a>
-      {user?.role === "admin" && (
-        <a href="/editor" className="nav-item">
+      </Link>
+      {mounted && user?.role === "admin" && (
+        <Link href="/editor" className="nav-item">
           <span style={{ fontSize: "1.2rem", marginLeft: "-2px" }}>
             ✏️
           </span>
           Content Editor
-        </a>
+        </Link>
       )}
+
     </nav>
   );
 }
 
 export function SidebarFooter() {
   const { user, isLoading } = useAuth();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   return (
+
     <div className="sidebar-footer">
-      <a href="/search" className="nav-item">
+      <Link href="/search" className="nav-item">
         <span style={{ fontSize: "1.1rem" }}>🔍</span>
         Advanced Search
-      </a>
-      <a href="/settings" className="nav-item">
+      </Link>
+      <Link href="/settings" className="nav-item">
         <span style={{ fontSize: "1.1rem" }}>⚙</span>
-        Settings {user && "(Admin)"}
-      </a>
-      {!isLoading && !user && (
-        <a href="/login" className="nav-item">
+        Settings {mounted && user && "(Admin)"}
+      </Link>
+      {mounted && !isLoading && !user && (
+        <Link href="/login" className="nav-item">
           <span style={{ fontSize: "1.1rem" }}>🔑</span>
           Login
-        </a>
+        </Link>
       )}
+
     </div>
   );
 }

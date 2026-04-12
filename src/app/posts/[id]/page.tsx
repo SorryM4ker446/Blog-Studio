@@ -1,6 +1,7 @@
 import { getPost } from "@/lib/api";
 import type { Post } from "@/lib/api";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 
 interface PostPageProps {
   params: Promise<{ id: string }>;
@@ -42,7 +43,7 @@ export default async function PostPage({ params }: PostPageProps) {
 
       {/* 返回按钮 */}
       <div style={{ marginTop: "4rem" }}>
-        <a
+        <Link
           href="/posts"
           style={{
             color: "var(--accent-blue)",
@@ -51,7 +52,7 @@ export default async function PostPage({ params }: PostPageProps) {
           }}
         >
           ← Back to all posts
-        </a>
+        </Link>
       </div>
     </div>
   );
