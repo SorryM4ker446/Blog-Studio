@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getSettings, updateSettings, updatePassword, uploadFile } from "@/lib/api";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function SettingsPage() {
   const { user, logout, isLoading, refreshProfile } = useAuth();
@@ -22,6 +23,8 @@ export default function SettingsPage() {
   const [newPass, setNewPass] = useState("");
   const [passMsg, setPassMsg] = useState("");
   const [passLoading, setPassLoading] = useState(false);
+
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -352,11 +355,7 @@ export default function SettingsPage() {
             Logging out will clear your current session token. You will need to re-authenticate to access the editor.
           </p>
           <button
-            onClick={() => {
-              if (confirm("Are you sure you want to log out?")) {
-                logout();
-              }
-            }}
+            onClick={() => setShowLogoutModal(true)}
             style={{
               background: "rgba(242, 139, 130, 0.1)",
               color: "var(--accent-red)",
@@ -372,6 +371,19 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showLogoutModal}
+        onConfirm={() => {
+          setShowLogoutModal(false);
+          logout();
+        }}
+        onCancel={() => setShowLogoutModal(false)}
+        title="Confirm Logout"
+        message="Are you sure you want to log out? You will need to sign in again to manage your blog."
+        confirmText="Log Out"
+        type="danger"
+      />
     </div>
   );
 }

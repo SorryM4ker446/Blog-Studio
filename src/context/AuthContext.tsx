@@ -84,7 +84,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setToken(null);
     setUser(null);
-    setProfile(null);
     localStorage.removeItem("blog_token");
     localStorage.removeItem("blog_user");
     router.push("/login");
