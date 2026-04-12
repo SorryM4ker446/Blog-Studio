@@ -37,7 +37,13 @@ export default function TopBar() {
           gap: "1rem",
         }}
       >
-        <span style={{ opacity: 0.5, cursor: "pointer" }}>⟳</span>
+        <span 
+          style={{ opacity: 0.5, cursor: "pointer" }} 
+          onClick={() => window.location.reload()}
+          title="Refresh page"
+        >
+          ⟳
+        </span>
         <span style={{ opacity: 0.5, cursor: "pointer" }}>⋮</span>
       </div>
     </header>
