@@ -1,49 +1,231 @@
+/* d:\blog\frontend\src\app\globals.css */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Google AI Studio 经典暗色色调 */
+  --bg-sidebar: #000000;    /* 增强左侧栏对比度的纯黑色 */
+  --bg-base: #131314;       /* 主内容区背景 */
+  --bg-surface: #1e1f20;    /* 卡片前景色 */
+  --bg-hover: #282a2c;      /* 卡片 hover */
+  --nav-active: #313336;    /* 显著的高对比灰色激活项目 */
+  
+  --text-primary: #e3e3e3;
+  --text-secondary: #c4c7c5;
+  --text-muted: #8e918f;
+  
+  /* 分割线颜色 */
+  --border-color: #313335;
+  
+  /* 品牌或点缀色 (取自参考图的 icon 颜色) */
+  --accent-blue: #a8c7fa;
+  --accent-green: #6dd68c;
+  --accent-yellow: #fbd284;
+  --accent-red: #f28b82;
+  
+  --sidebar-width: 260px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 99px;
+  
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-html {
-  height: 100%;
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  line-height: 1.5;
+  height: 100vh;
+  overflow: hidden; /* 防止原生滚动条毁坏布局，采用内层滚动 */
 }
 
 * {
   box-sizing: border-box;
-  padding: 0;
-  margin: 0;
 }
 
 a {
-  color: inherit;
+  color: var(--text-primary);
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+/* 整站横向排布架构：左侧栏 + 右边主内容区 */
+.app-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* --- 左侧边栏 --- */
+.sidebar {
+  width: var(--sidebar-width);
+  height: 100%;
+  background-color: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: 0.5rem 1.5rem 1rem 1.5rem;
+  font-size: 1.15rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #fff;
+}
+
+.nav-menu {
+  flex: 1;
+  padding: 0 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  gap: 0.75rem;
+}
+
+.nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background-color: var(--nav-active); /* 参考图中鲜明的灰色激活背景 */
+  color: var(--text-primary);
+}
+
+.nav-group-title {
+  margin: 1.5rem 0 0.5rem 1.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sidebar-footer {
+  padding: 1rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* --- 右侧主要内容区 --- */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-base);
+}
+
+.top-bar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 2rem;
+  font-size: 1rem;
+  font-weight: 500;
+  gap: 0.5rem;
+}
+
+.top-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+}
+
+.content-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 3rem 18% 4rem 18%; /* 两侧流白以贴近 Studio 中间展示区风格 */
+}
+
+/* --- UI 组件集 --- */
+.page-title {
+  font-size: 2rem;
+  font-weight: 400;
+  margin-bottom: 2rem;
+  color: var(--text-primary);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.ai-card {
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  border: 1px solid transparent; /* 没有边框，依靠背景色隔离 */
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ai-card:hover {
+  background-color: var(--bg-hover);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.card-desc {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+  flex: 1;
+}
+
+.btn-primary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.btn-primary:hover {
+  color: var(--text-primary);
 }
