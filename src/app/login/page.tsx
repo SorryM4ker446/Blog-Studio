@@ -28,8 +28,8 @@ export default function LoginPage() {
       }
 
       login(data.token, data.user);
-      // Auth context redirect or redirect here
-      window.location.href = "/editor";
+      // Redirect to home page instead of editor
+      window.location.href = "/";
     } catch (err: any) {
       setError(err.message);
     } finally {

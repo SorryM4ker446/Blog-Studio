@@ -51,9 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Load auth state and profile on mount
   useEffect(() => {
-    if (token && user) {
-        fetchProfile();
-    }
+    // Fetch profile (it's public) for both guests and admins
+    fetchProfile();
     setIsLoading(false);
   }, []);
 
