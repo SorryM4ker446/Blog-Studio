@@ -7,6 +7,7 @@ import type { Post } from "@/lib/api";
 import Link from "next/link";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
+import { FolderIcon, ClipboardIcon, InboxIcon, FileTextIcon } from "@/components/Icons";
 
 function PostsListContent() {
   const searchParams = useSearchParams();
@@ -54,8 +55,18 @@ function PostsListContent() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
         <div>
-          <h1 className="page-title">
-            {currentCategoryName ? `📁 ${currentCategoryName}` : "📋 All Posts"}
+          <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.8rem" }}>
+            {currentCategoryName ? (
+              <>
+                <FolderIcon size={28} />
+                {currentCategoryName}
+              </>
+            ) : (
+              <>
+                <ClipboardIcon size={28} style={{ color: "var(--text-primary)" }} />
+                All Posts
+              </>
+            )}
           </h1>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: 0 }}>
             {currentCategoryName 
@@ -84,7 +95,9 @@ function PostsListContent() {
             border: "1px solid var(--border-color)",
           }}
         >
-          <p style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📭</p>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "1rem", opacity: 0.5 }}>
+            <InboxIcon size={48} />
+          </div>
           No posts available yet.
         </div>
       ) : (
@@ -105,13 +118,13 @@ function PostsListContent() {
                 <div
                   className="card-icon"
                   style={{
-                    backgroundColor: "rgba(168, 199, 250, 0.12)",
-                    color: "var(--accent-blue)",
+                    backgroundColor: "rgba(255, 255, 255, 0.05)",
+                    color: "var(--text-secondary)",
                     marginRight: "1.2rem",
                     flexShrink: 0,
                   }}
                 >
-                  📄
+                  <FileTextIcon size={14} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h4

@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getSettings, updateSettings, updatePassword, uploadFile } from "@/lib/api";
 import ConfirmModal from "@/components/ConfirmModal";
+import { SettingsIcon, CameraIcon, MoonIcon, SunIcon } from "@/components/Icons";
 
 export default function SettingsPage() {
   const { user, logout, isLoading, refreshProfile } = useAuth();
@@ -113,7 +114,9 @@ export default function SettingsPage() {
   return (
     <div className="fade-in">
       <div style={{ marginBottom: "2rem" }}>
-        <h1 className="page-title">⚙️ Settings</h1>
+        <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.80rem" }}>
+          <SettingsIcon size={28} /> Settings
+        </h1>
         <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
           Manage your account and platform preferences.
         </p>
@@ -177,7 +180,7 @@ export default function SettingsPage() {
                   border: "2px solid var(--bg-surface)",
                 }}
               >
-                {avatarUploading ? "…" : "📷"}
+                {avatarUploading ? "…" : <CameraIcon size={14} />}
               </div>
               <input
                 type="file"
@@ -343,7 +346,15 @@ export default function SettingsPage() {
                 fontWeight: 500,
               }}
             >
-              {theme === "dark" ? "🌙 Dark Mode" : "☀️ Light Mode"}
+              {theme === "dark" ? (
+                <>
+                  <MoonIcon size={18} /> Dark Mode
+                </>
+              ) : (
+                <>
+                  <SunIcon size={18} /> Light Mode
+                </>
+              )}
             </button>
           </div>
         </div>

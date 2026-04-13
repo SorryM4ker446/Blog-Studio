@@ -21,6 +21,15 @@ import {
 } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
+import { 
+  EditIcon, 
+  FileTextIcon, 
+  FolderIcon, 
+  PaperclipIcon, 
+  TrashIcon, 
+  InboxIcon, 
+  UploadIcon 
+} from "@/components/Icons";
 import "react-markdown-editor-lite/lib/index.css";
 
 // Markdown editor 动态导入（不支持 SSR）
@@ -377,17 +386,12 @@ export default function EditorPage() {
                                     </span>
                                     {allowActions && opt.value !== 0 && (
                                         <div className="opt-actions" style={{ display: "none", gap: "5px" }} onClick={e => e.stopPropagation()}>
-                                            <span 
-                                                title="Rename"
-                                                onClick={() => { setEditingId(opt.value); setEditName(opt.label); }}
-                                                style={{ cursor: "pointer", fontSize: "0.9rem", color: "var(--text-muted)" }}>
-                                                ✏️
-                                            </span>
+                                                <EditIcon size={14} />
                                             <span 
                                                 title="Delete"
                                                 onClick={() => { onDelete && onDelete(opt.value); }}
-                                                style={{ cursor: "pointer", fontSize: "0.9rem", color: "var(--accent-red)" }}>
-                                                ❌
+                                                style={{ cursor: "pointer", display: "flex", alignItems: "center", color: "var(--accent-red)" }}>
+                                                <TrashIcon size={14} />
                                             </span>
                                         </div>
                                     )}
@@ -440,8 +444,8 @@ export default function EditorPage() {
         }}
       >
         <div>
-          <h1 className="page-title" style={{ marginBottom: "0.5rem" }}>
-            ✏️ Content Editor
+          <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "0.5rem" }}>
+            <EditIcon size={28} /> Content Editor
           </h1>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
             Manage and edit your posts and cloud drive files.
@@ -468,10 +472,14 @@ export default function EditorPage() {
             border: "1px solid var(--border-color)",
           }}>
             <button style={tabStyle("posts")} onClick={() => setActiveTab("posts")}>
-            📝 Posts ({posts.length})
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <FileTextIcon size={18} /> Posts ({posts.length})
+              </div>
             </button>
             <button style={tabStyle("files")} onClick={() => setActiveTab("files")}>
-            📁 Files ({files.length})
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <FolderIcon size={18} /> Files ({files.length})
+              </div>
             </button>
           </div>
 
@@ -520,7 +528,11 @@ export default function EditorPage() {
                       boxSizing: "border-box",
                     }}
                   >
-                      {uploading ? "Uploading..." : "⬆ Upload File"}
+                      {uploading ? "Uploading..." : (
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <UploadIcon size={16} /> Upload File
+                        </div>
+                      )}
                       <input type="file" style={{ display: "none" }} onChange={handleFileUpload} disabled={uploading}/>
                   </label>
               )}
@@ -687,7 +699,7 @@ export default function EditorPage() {
                   marginRight: "1.2rem",
                 }}
               >
-                📎
+                <PaperclipIcon size={18} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h4
@@ -758,7 +770,9 @@ export default function EditorPage() {
             border: "1px solid var(--border-color)",
           }}
         >
-          <p style={{ fontSize: "3rem" }}>📭</p>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "1.5rem", opacity: 0.5 }}>
+            <InboxIcon size={64} />
+          </div>
           <p>No posts available. Start writing by creating one!</p>
         </div>
       )}

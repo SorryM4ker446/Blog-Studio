@@ -5,6 +5,7 @@ import type { FileRecord } from "@/lib/api";
 import { getFiles, getDownloadUrl, searchResources } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
+import { CloudIcon, FolderIcon, PaperclipIcon, DownloadIcon } from "@/components/Icons";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
@@ -45,7 +46,9 @@ export default function DrivePage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
         <div>
-          <h1 className="page-title">☁️ Cloud Drive</h1>
+          <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.8rem" }}>
+            <CloudIcon size={28} /> Cloud Drive
+          </h1>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: 0 }}>
             Browse and download available resources. Admin operations are moved to Editor section.
           </p>
@@ -71,7 +74,9 @@ export default function DrivePage() {
             border: "1px solid var(--border-color)",
           }}
         >
-          <p style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📂</p>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "1rem", opacity: 0.5 }}>
+            <FolderIcon size={48} />
+          </div>
           No files uploaded yet.
         </div>
       ) : (
@@ -91,13 +96,13 @@ export default function DrivePage() {
               <div
                 className="card-icon"
                 style={{
-                  backgroundColor: "rgba(168, 199, 250, 0.12)",
-                  color: "var(--accent-blue)",
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  color: "var(--text-secondary)",
                   marginRight: "1.2rem",
                   flexShrink: 0,
                 }}
               >
-                📎
+                <PaperclipIcon size={18} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h4
@@ -136,7 +141,9 @@ export default function DrivePage() {
                     transition: "opacity 0.2s",
                   }}
                 >
-                  ⬇ Download
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <DownloadIcon size={14} /> Download
+                  </div>
                 </a>
               </div>
             </div>

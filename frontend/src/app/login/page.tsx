@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { KeyIcon, AlertIcon } from "@/components/Icons";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -75,7 +76,7 @@ export default function LoginPage() {
             marginBottom: "1.5rem",
           }}
         >
-          🔑
+          <KeyIcon size={32} />
         </div>
 
         <h1
@@ -158,7 +159,7 @@ export default function LoginPage() {
                 gap: "0.5rem",
               }}
             >
-              <span>⚠</span> {error}
+              <AlertIcon size={14} /> {error}
             </div>
           )}
 

@@ -5,6 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import type { Post, FileRecord } from "@/lib/api";
 import { searchResources, getDownloadUrl } from "@/lib/api";
+import { 
+  SearchIcon, 
+  FileTextIcon, 
+  FolderIcon, 
+  PaperclipIcon, 
+  DownloadIcon 
+} from "@/components/Icons";
 
 function SearchContent() {
   const searchParams = useSearchParams();
@@ -40,7 +47,9 @@ function SearchContent() {
 
   return (
     <div>
-      <h1 className="page-title">🔍 Search</h1>
+      <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.80rem" }}>
+        <SearchIcon size={28} /> Search
+      </h1>
       <p
         style={{
           color: "var(--text-secondary)",
@@ -115,7 +124,9 @@ function SearchContent() {
                 fontWeight: 500,
               }}
             >
-              📝 Posts ({posts.length} results)
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <FileTextIcon size={16} /> Posts ({posts.length} results)
+              </div>
             </p>
             {posts.length === 0 ? (
               <div
@@ -158,7 +169,7 @@ function SearchContent() {
                           flexShrink: 0,
                         }}
                       >
-                        📄
+                        <FileTextIcon size={16} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <h4
@@ -198,7 +209,9 @@ function SearchContent() {
                 fontWeight: 500,
               }}
             >
-              📁 Files ({files.length} results)
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <FolderIcon size={16} /> Files ({files.length} results)
+              </div>
             </p>
             {files.length === 0 ? (
               <div
@@ -241,7 +254,7 @@ function SearchContent() {
                         flexShrink: 0,
                       }}
                     >
-                      📎
+                      <PaperclipIcon size={16} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <h4
@@ -275,7 +288,9 @@ function SearchContent() {
                         flexShrink: 0,
                       }}
                     >
-                      ⬇ Download
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <DownloadIcon size={14} /> Download
+                      </div>
                     </a>
                   </div>
                 ))}
@@ -296,7 +311,9 @@ function SearchContent() {
           }}
         >
           <div style={{ textAlign: "center" }}>
-            <p style={{ fontSize: "3rem", margin: "0 0 0.5rem 0" }}>🔎</p>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "1rem", opacity: 0.3 }}>
+              <SearchIcon size={64} />
+            </div>
             <p>Enter a keyword to search across posts and files.</p>
           </div>
         </div>

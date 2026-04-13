@@ -4,6 +4,15 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getPosts } from "@/lib/api";
 import type { Post } from "@/lib/api";
+import { 
+  StarIcon, 
+  GridIcon, 
+  LayoutIcon, 
+  ZapIcon, 
+  FileTextIcon, 
+  SearchIcon, 
+  EnterIcon 
+} from "@/components/Icons";
 
 export default function Home() {
   const router = useRouter();
@@ -34,14 +43,8 @@ export default function Home() {
       <div className="card-grid">
         <div className="ai-card">
           <div className="card-header">
-            <div
-              className="card-icon"
-              style={{
-                backgroundColor: "rgba(251, 210, 132, 0.15)",
-                color: "var(--accent-yellow)",
-              }}
-            >
-              ☆
+            <div className="card-icon" style={{ backgroundColor: "rgba(251, 210, 132, 0.15)", color: "var(--accent-yellow)" }}>
+              <StarIcon size={18} />
             </div>
             Featured Post
           </div>
@@ -52,14 +55,8 @@ export default function Home() {
 
         <div className="ai-card">
           <div className="card-header">
-            <div
-              className="card-icon"
-              style={{
-                backgroundColor: "rgba(168, 199, 250, 0.15)",
-                color: "var(--accent-blue)",
-              }}
-            >
-              □
+            <div className="card-icon" style={{ backgroundColor: "rgba(168, 199, 250, 0.15)", color: "var(--accent-blue)" }}>
+              <GridIcon size={18} />
             </div>
             Code and Backend
           </div>
@@ -70,14 +67,8 @@ export default function Home() {
 
         <div className="ai-card">
           <div className="card-header">
-            <div
-              className="card-icon"
-              style={{
-                backgroundColor: "rgba(109, 214, 140, 0.15)",
-                color: "var(--accent-green)",
-              }}
-            >
-              ▣
+            <div className="card-icon" style={{ backgroundColor: "rgba(109, 214, 140, 0.15)", color: "var(--accent-green)" }}>
+              <LayoutIcon size={18} />
             </div>
             Frontend UI
           </div>
@@ -88,20 +79,13 @@ export default function Home() {
 
         <div className="ai-card">
           <div className="card-header">
-            <div
-              className="card-icon"
-              style={{
-                backgroundColor: "rgba(242, 139, 130, 0.15)",
-                color: "var(--accent-red)",
-              }}
-            >
-              ⚡
+            <div className="card-icon" style={{ backgroundColor: "rgba(242, 139, 130, 0.15)", color: "var(--accent-red)" }}>
+              <ZapIcon size={18} />
             </div>
             Real-time Thoughts
           </div>
           <p className="card-desc">
-            Read real-time insights, journals, and reflections on development
-            life.
+            Read real-time insights, journals, and reflections on development life.
           </p>
         </div>
       </div>
@@ -147,7 +131,7 @@ export default function Home() {
                       marginRight: "1.2rem",
                     }}
                   >
-                    📄
+                    <FileTextIcon size={16} />
                   </div>
                   <div style={{ flex: 1 }}>
                     <h4
@@ -202,7 +186,7 @@ export default function Home() {
             gap: "0.8rem",
           }}
         >
-          <span style={{ fontSize: "1.1rem", opacity: 0.5 }}>🔍</span>
+          <SearchIcon size={20} style={{ opacity: 0.5 }} />
           <input
             id="home-search-bar"
             value={searchQuery}
@@ -236,7 +220,7 @@ export default function Home() {
               transition: "background 0.2s",
             }}
           >
-            ↩
+            <EnterIcon size={18} />
           </div>
         </div>
       </div>
