@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import Link from "next/link";
 import type { Post, FileRecord } from "@/lib/api";
 import { searchResources, getDownloadUrl } from "@/lib/api";
 import { 
@@ -116,7 +117,7 @@ function SearchContent() {
         <div>
           {/* 文章结果 */}
           <div style={{ marginBottom: "2rem" }}>
-            <p
+            <div
               style={{
                 color: "var(--text-secondary)",
                 fontSize: "0.85rem",
@@ -127,7 +128,7 @@ function SearchContent() {
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <FileTextIcon size={16} /> Posts ({posts.length} results)
               </div>
-            </p>
+            </div>
             {posts.length === 0 ? (
               <div
                 style={{
@@ -151,7 +152,7 @@ function SearchContent() {
                 }}
               >
                 {posts.map((post) => (
-                  <a key={post.id} href={`/posts/${post.id}`}>
+                  <Link key={post.id} href={`/posts/${post.id}`} style={{ textDecoration: "none" }}>
                     <div
                       className="ai-card"
                       style={{
@@ -193,7 +194,7 @@ function SearchContent() {
                         </div>
                       </div>
                     </div>
-                  </a>
+                  </Link>
                 ))}
               </div>
             )}
@@ -201,7 +202,7 @@ function SearchContent() {
 
           {/* 文件结果 */}
           <div>
-            <p
+            <div
               style={{
                 color: "var(--text-secondary)",
                 fontSize: "0.85rem",
@@ -212,7 +213,7 @@ function SearchContent() {
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <FolderIcon size={16} /> Files ({files.length} results)
               </div>
-            </p>
+            </div>
             {files.length === 0 ? (
               <div
                 style={{

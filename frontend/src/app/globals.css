@@ -107,7 +107,8 @@ a {
   border-right: 1px solid var(--border-color);
 }
 
-.sidebar.collapsed {
+.sidebar.collapsed,
+html[data-sidebar-state="collapsed"] .sidebar {
   width: var(--sidebar-width-collapsed);
 }
 
@@ -123,7 +124,8 @@ a {
   transition: padding 0.42s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sidebar.collapsed .sidebar-header {
+.sidebar.collapsed .sidebar-header,
+html[data-sidebar-state="collapsed"] .sidebar .sidebar-header {
   padding: 0;
   justify-content: center;
 }
@@ -138,11 +140,8 @@ a {
   transition: opacity 0.15s ease, max-width 0.42s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sidebar.collapsed .sidebar-logo-container {
-  display: none;
-}
-
-.sidebar.collapsed .sidebar-logo-container {
+.sidebar.collapsed .sidebar-logo-container,
+html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-container {
   display: none;
 }
 
@@ -166,7 +165,8 @@ a {
     max-width 0.42s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sidebar.collapsed .sidebar-logo-text {
+.sidebar.collapsed .sidebar-logo-text,
+html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-text {
   opacity: 0;
   max-width: 0;
 }
@@ -195,7 +195,8 @@ a {
   color: var(--text-primary);
 }
 
-.sidebar.collapsed .sidebar-toggle {
+.sidebar.collapsed .sidebar-toggle,
+html[data-sidebar-state="collapsed"] .sidebar .sidebar-toggle {
   transform: rotate(180deg);
 }
 
@@ -211,7 +212,8 @@ a {
   transition: padding 0.42s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sidebar.collapsed .nav-menu {
+.sidebar.collapsed .nav-menu,
+html[data-sidebar-state="collapsed"] .sidebar .nav-menu {
   padding: 0.25rem 0;
 }
 
@@ -259,12 +261,19 @@ a {
 }
 
 /* Collapsed: center the icon within a 44px square */
-.sidebar.collapsed .nav-item {
+.sidebar.collapsed .nav-item,
+html[data-sidebar-state="collapsed"] .sidebar .nav-item {
   justify-content: center;
   padding: 0;
   width: 40px;
   margin: 0 auto;
   position: relative;
+}
+
+/* 像素级微调底部图标以视觉对齐上方的三角形 */
+.sidebar.collapsed .sidebar-footer .nav-item,
+html[data-sidebar-state="collapsed"] .sidebar .sidebar-footer .nav-item {
+  transform: translateX(1.5px);
 }
 
 /* Hide complete nav items instantly or smooth */
@@ -275,7 +284,8 @@ a {
   overflow: hidden;
 }
 
-.sidebar.collapsed .hide-on-collapse {
+.sidebar.collapsed .hide-on-collapse,
+html[data-sidebar-state="collapsed"] .sidebar .hide-on-collapse {
   opacity: 0;
   max-height: 0;
   margin: 0 auto;
@@ -283,11 +293,13 @@ a {
 }
 
 /* --- Tooltip (CSS-only, no JS) --- */
-.sidebar.collapsed [data-tooltip] {
+.sidebar.collapsed [data-tooltip],
+html[data-sidebar-state="collapsed"] .sidebar [data-tooltip] {
   position: relative;
 }
 
-.sidebar.collapsed [data-tooltip]::after {
+.sidebar.collapsed [data-tooltip]::after,
+html[data-sidebar-state="collapsed"] .sidebar [data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
   left: calc(100% + 10px);
@@ -308,7 +320,8 @@ a {
   z-index: 9999;
 }
 
-.sidebar.collapsed [data-tooltip]:hover::after {
+.sidebar.collapsed [data-tooltip]:hover::after,
+html[data-sidebar-state="collapsed"] .sidebar [data-tooltip]:hover::after {
   opacity: 1;
   transform: translateY(-50%) translateX(0);
 }
@@ -330,7 +343,8 @@ a {
     margin 0.38s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sidebar.collapsed .nav-group-title {
+.sidebar.collapsed .nav-group-title,
+html[data-sidebar-state="collapsed"] .sidebar .nav-group-title {
   opacity: 0;
   max-width: 0;
   margin-top: 0;
@@ -349,7 +363,8 @@ a {
     max-width 0.38s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sidebar.collapsed .nav-item-label {
+.sidebar.collapsed .nav-item-label,
+html[data-sidebar-state="collapsed"] .sidebar .nav-item-label {
   opacity: 0;
   max-width: 0;
 }
@@ -364,7 +379,8 @@ a {
   transition: padding 0.42s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sidebar.collapsed .sidebar-footer {
+.sidebar.collapsed .sidebar-footer,
+html[data-sidebar-state="collapsed"] .sidebar .sidebar-footer {
   padding: 0.5rem 0;
 }
 

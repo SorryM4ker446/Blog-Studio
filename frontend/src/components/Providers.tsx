@@ -39,6 +39,15 @@ export function Providers({ children }: { children: ReactNode }) {
     if (saved === "true") setIsCollapsed(true);
   }, []);
 
+  // Sync state to html class for CSS-only initial state (Fix FUS bug)
+  useEffect(() => {
+    if (isCollapsed) {
+      document.documentElement.setAttribute("data-sidebar-state", "collapsed");
+    } else {
+      document.documentElement.removeAttribute("data-sidebar-state");
+    }
+  }, [isCollapsed]);
+
   const toggleSidebar = () => {
     setIsCollapsed((prev) => {
       const next = !prev;

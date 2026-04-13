@@ -23,10 +23,16 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
+                  // 1. Theme loading logic
                   var theme = localStorage.getItem('blog_theme');
                   var supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches === true;
                   if (theme === 'light' || (!theme && !supportDarkMode)) {
                     document.documentElement.classList.add('theme-light');
+                  }
+                  // 2. Sidebar initial state logic (Fix FUS bug)
+                  var sidebarCollapsed = localStorage.getItem('sidebar_collapsed');
+                  if (sidebarCollapsed === 'true') {
+                    document.documentElement.setAttribute('data-sidebar-state', 'collapsed');
                   }
                 } catch (e) {}
               })();

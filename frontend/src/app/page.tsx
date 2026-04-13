@@ -13,6 +13,7 @@ import {
   SearchIcon, 
   EnterIcon 
 } from "@/components/Icons";
+import Link from "next/link";
 
 export default function Home() {
   const router = useRouter();
@@ -115,7 +116,7 @@ export default function Home() {
             </div>
           ) : (
             posts.map((post: Post) => (
-              <a key={post.id} href={`/posts/${post.id}`}>
+              <Link key={post.id} href={`/posts/${post.id}`} style={{ textDecoration: "none" }}>
                 <div
                   className="ai-card"
                   style={{
@@ -156,7 +157,7 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-              </a>
+              </Link>
             ))
           )}
         </div>
