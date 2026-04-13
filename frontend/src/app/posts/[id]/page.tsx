@@ -9,6 +9,11 @@ interface PostPageProps {
 
 export const dynamic = "force-dynamic";
 
+// Pre-initialize markdown-it to avoid repeated require calls during render
+const MarkdownIt = require("markdown-it");
+const { imageSizePlugin } = require("@/lib/md-plugins");
+const md = new MarkdownIt({ html: true }).use(imageSizePlugin);
+
 export default async function PostPage({ params }: PostPageProps) {
   const { id } = await params;
   const post: Post | null = await getPost(id);
@@ -47,11 +52,7 @@ export default async function PostPage({ params }: PostPageProps) {
       <article 
         className="post-body custom-html-style"
         dangerouslySetInnerHTML={{ 
-            __html: (() => {
-              const md = require("markdown-it")({ html: true });
-              const { imageSizePlugin } = require("@/lib/md-plugins");
-              return md.use(imageSizePlugin).render(post.content);
-            })()
+            __html: md.render(post.content || "")
         }}
       />
 
@@ -62,3 +63,4 @@ export default async function PostPage({ params }: PostPageProps) {
     </div>
   );
 }
+
