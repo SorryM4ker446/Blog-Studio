@@ -1,6 +1,6 @@
 import "./globals.css";
-import { Providers, SidebarContent, SidebarFooter } from "@/components/Providers";
-import TopBar from "@/components/TopBar";
+import { Providers } from "@/components/Providers";
+import ClientLayout from "@/components/ClientLayout";
 import Script from "next/script";
 
 export const metadata = {
@@ -37,33 +37,7 @@ export default function RootLayout({
       <body suppressHydrationWarning>
 
         <Providers>
-          <div className="app-container">
-            {/* 左侧导航栏 */}
-            <aside className="sidebar">
-              <div className="sidebar-header">
-                <span
-                  style={{
-                    fontWeight: 600,
-                    fontSize: "1.2rem",
-                    letterSpacing: "-0.5px",
-                  }}
-                >
-                  Blog Studio
-                </span>
-                <span style={{ marginLeft: "auto", opacity: 0.5 }}>◿</span>
-              </div>
-
-              <SidebarContent />
-              <SidebarFooter />
-            </aside>
-
-          {/* 右侧核心面板 */}
-          <main className="main-content">
-            <TopBar />
-
-            <div className="content-scroll">{children}</div>
-          </main>
-        </div>
+          <ClientLayout>{children}</ClientLayout>
         </Providers>
       </body>
     </html>
