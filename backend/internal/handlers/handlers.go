@@ -57,7 +57,7 @@ func respondWithPosts(c *gin.Context, includeDrafts bool) {
 		// PostgreSQL CASE WHEN for placing drafts first
 		db = db.Order("CASE WHEN status = 'draft' THEN 1 ELSE 2 END, updated_at desc")
 	} else {
-		db = db.Order("created_at desc")
+		db = db.Order("updated_at desc")
 	}
 
 	result := db.Preload("Category").Limit(limit).Offset(offset).Find(&posts)
@@ -103,6 +103,10 @@ func CreatePost(c *gin.Context) {
 		return
 	}
 
+	if post.Status == "" {
+		post.Status = "draft"
+	}
+
 	// 自动生成 Slug (如果缺失)
 	if post.Slug == "" {
 		slug := strings.ToLower(post.Title)
@@ -123,6 +127,13 @@ func CreatePost(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("业务错误：选择的分类 (ID: %d) 不存在，请重新选择或创建", post.CategoryID)})
 			return
 		}
+	}
+
+	now := time.Now()
+	if post.Status == "published" {
+		post.PublishedAt = &now
+	} else {
+		post.PublishedAt = nil
 	}
 
 	result := config.DB.Create(&post)
@@ -153,6 +164,10 @@ func UpdatePost(c *gin.Context) {
 		return
 	}
 
+	if input.Status == "" {
+		input.Status = post.Status
+	}
+
 	// Disable foreign key validation if CategoryID is 0 ("Uncategorized")
 	if input.CategoryID != 0 {
 		var cat models.Category
@@ -168,9 +183,25 @@ func UpdatePost(c *gin.Context) {
 		"content":     input.Content,
 		"category_id": input.CategoryID,
 		"status":      input.Status,
+		"updated_at":  time.Now(),
 	}
 
-	config.DB.Model(&post).Select("title", "summary", "content", "category_id", "status").Updates(updates)
+	if input.Status == "published" {
+		now := time.Now()
+		updates["published_at"] = now
+	} else {
+		updates["published_at"] = nil
+	}
+
+	config.DB.Model(&post).Select(
+		"title",
+		"summary",
+		"content",
+		"category_id",
+		"status",
+		"updated_at",
+		"published_at",
+	).Updates(updates)
 	// We need to re-fetch the post to get the category (if any)
 	config.DB.Preload("Category").First(&post, id)
 	c.JSON(http.StatusOK, post)

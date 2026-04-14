@@ -14,6 +14,7 @@ interface Profile {
   name: string;
   description: string;
   avatar: string;
+  tag: string;
 }
 
 interface AuthContextType {
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: data["profile_name"] || "",
         description: data["profile_description"] || "",
         avatar: normalizeFileViewUrl(data["profile_avatar"] || ""),
+        tag: data["profile_tag"] || "",
       });
     } catch (e) {
       if (isMountedRef.current) {

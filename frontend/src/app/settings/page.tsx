@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -15,6 +15,7 @@ export default function SettingsPage() {
 
   const [profileName, setProfileName] = useState("");
   const [profileDesc, setProfileDesc] = useState("");
+  const [profileTag, setProfileTag] = useState("");
   const [profileAvatar, setProfileAvatar] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
@@ -43,7 +44,7 @@ export default function SettingsPage() {
     };
   }, []);
 
-  async function loadSettings() {
+  const loadSettings = useCallback(async () => {
     const requestId = ++settingsRequestIdRef.current;
     const data = await getSettings();
     if (!isMountedRef.current || requestId !== settingsRequestIdRef.current) {
@@ -51,8 +52,9 @@ export default function SettingsPage() {
     }
     setProfileName(data["profile_name"] || "");
     setProfileDesc(data["profile_description"] || "");
+    setProfileTag(data["profile_tag"] || user?.role || "admin");
     setProfileAvatar(normalizeFileViewUrl(data["profile_avatar"] || ""));
-  }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -62,7 +64,7 @@ export default function SettingsPage() {
 
       return () => window.cancelAnimationFrame(frame);
     }
-  }, [user]);
+  }, [user, loadSettings]);
 
   async function handleSaveSettings() {
     setSaving(true);
@@ -70,6 +72,7 @@ export default function SettingsPage() {
     const success = await updateSettings({
       profile_name: profileName,
       profile_description: profileDesc,
+      profile_tag: profileTag,
       profile_avatar: profileAvatar,
     });
     setSaving(false);
@@ -181,7 +184,7 @@ export default function SettingsPage() {
                     onError={() => setFailedAvatarUrl(profileAvatar)}
                   />
                 ) : (
-                  user.username.charAt(0).toUpperCase()
+                  (profileName.trim() || user.username).charAt(0).toUpperCase()
                 )}
               </div>
               {/* Upload overlay */}
@@ -213,7 +216,9 @@ export default function SettingsPage() {
               />
             </label>
             <div>
-              <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.3rem" }}>Alter</h3>
+              <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.3rem" }}>
+                {profileName.trim() || user.username}
+              </h3>
               <span
                 style={{
                   background: "rgba(168, 199, 250, 0.15)",
@@ -222,10 +227,9 @@ export default function SettingsPage() {
                   borderRadius: "6px",
                   fontSize: "0.8rem",
                   fontWeight: 600,
-                  textTransform: "uppercase",
                 }}
               >
-                {user.role}
+                {(profileTag || user.role || "admin").trim()}
               </span>
             </div>
           </div>
@@ -271,6 +275,26 @@ export default function SettingsPage() {
                 borderRadius: "8px",
                 color: "var(--text-primary)",
                 resize: "vertical",
+                outline: "none",
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: "1.5rem" }}>
+            <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+              Profile Tag
+            </label>
+            <input
+              value={profileTag}
+              onChange={(e) => setProfileTag(e.target.value)}
+              placeholder="admin"
+              style={{
+                width: "100%",
+                padding: "0.8rem 1rem",
+                background: "var(--bg-base)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "8px",
+                color: "var(--text-primary)",
                 outline: "none",
               }}
             />

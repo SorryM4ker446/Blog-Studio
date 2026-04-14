@@ -219,7 +219,7 @@ function SearchContent() {
                             marginTop: "0.2rem",
                           }}
                         >
-                          {new Date(post.created_at).toLocaleDateString()} •{" "}
+                          {new Date(post.updated_at).toLocaleDateString()} •{" "}
                           {post.category?.name || "Uncategorized"}
                         </div>
                       </div>

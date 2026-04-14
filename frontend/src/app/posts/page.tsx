@@ -189,9 +189,9 @@ function PostsListContent() {
                       flexWrap: "wrap",
                       alignItems: "center"
                     }}
-                  >
-                    <span>
-                      {new Date(post.created_at).toLocaleDateString()}
+                    >
+                      <span>
+                      {new Date(post.updated_at).toLocaleDateString()}
                     </span>
                     <span
                       style={{

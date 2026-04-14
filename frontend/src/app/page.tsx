@@ -163,8 +163,8 @@ export default function Home() {
                         marginTop: "0.3rem",
                       }}
                     >
-                      Posted on{" "}
-                      {new Date(post.created_at).toLocaleDateString()} •{" "}
+                      Updated on{" "}
+                      {new Date(post.updated_at).toLocaleDateString()} •{" "}
                       {post.category ? post.category.name : "Uncategorized"}
                     </div>
                   </div>
