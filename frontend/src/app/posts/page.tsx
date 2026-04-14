@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useCallback, useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { getPosts, searchResources, getCategories } from "@/lib/api";
 import type { Post } from "@/lib/api";
@@ -18,20 +18,25 @@ function PostsListContent() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [currentCategoryName, setCurrentCategoryName] = useState<string | null>(null);
+  const postRequestIdRef = useRef(0);
+  const searchRequestIdRef = useRef(0);
 
-  useEffect(() => {
-    loadPosts(1, categoryId || "");
-  }, [categoryId]);
-
-  async function loadPosts(pageToLoad: number, catId: string = categoryId || "") {
+  const loadPosts = useCallback(async (pageToLoad: number, catId: string = categoryId || "") => {
+    const requestId = ++postRequestIdRef.current;
     setLoading(true);
     const result = await getPosts(pageToLoad, 10, false, "", catId);
+    if (requestId !== postRequestIdRef.current) {
+      return;
+    }
     setPosts(result.data);
     setPage(result.page);
     setTotalPages(Math.ceil(result.total / result.limit));
 
     if (catId) {
       const cats = await getCategories();
+      if (requestId !== postRequestIdRef.current) {
+        return;
+      }
       const cat = cats.find((c) => c.id.toString() === catId);
       setCurrentCategoryName(cat ? cat.name : null);
     } else {
@@ -39,17 +44,34 @@ function PostsListContent() {
     }
 
     setLoading(false);
-  }
+  }, [categoryId]);
 
   async function handleSearch(query: string) {
     if (!query.trim()) {
       loadPosts(1, categoryId || "");
       return;
     }
+
+    const requestId = ++searchRequestIdRef.current;
     const res = await searchResources(query, "posts");
+    if (requestId !== searchRequestIdRef.current) {
+      return;
+    }
     setPosts(res.posts || []);
     setTotalPages(1); // Disable pagination during search
   }
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      loadPosts(1, categoryId || "");
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      postRequestIdRef.current += 1;
+      searchRequestIdRef.current += 1;
+    };
+  }, [categoryId, loadPosts]);
 
   return (
     <div>

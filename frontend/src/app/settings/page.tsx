@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
-import { getSettings, updateSettings, updatePassword, uploadFile } from "@/lib/api";
+import { getSettings, getFileViewUrl, normalizeFileViewUrl, updateSettings, updatePassword, uploadFile } from "@/lib/api";
 import ConfirmModal from "@/components/ConfirmModal";
 import { SettingsIcon, CameraIcon, MoonIcon, SunIcon } from "@/components/Icons";
 
@@ -19,6 +19,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
 
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
@@ -26,6 +27,8 @@ export default function SettingsPage() {
   const [passLoading, setPassLoading] = useState(false);
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const settingsRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -34,17 +37,32 @@ export default function SettingsPage() {
   }, [user, isLoading, router]);
 
   useEffect(() => {
-    if (user) {
-      loadSettings();
-    }
-  }, [user]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   async function loadSettings() {
+    const requestId = ++settingsRequestIdRef.current;
     const data = await getSettings();
+    if (!isMountedRef.current || requestId !== settingsRequestIdRef.current) {
+      return;
+    }
     setProfileName(data["profile_name"] || "");
     setProfileDesc(data["profile_description"] || "");
-    setProfileAvatar(data["profile_avatar"] || "");
+    setProfileAvatar(normalizeFileViewUrl(data["profile_avatar"] || ""));
   }
+
+  useEffect(() => {
+    if (user) {
+      const frame = window.requestAnimationFrame(() => {
+        loadSettings();
+      });
+
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, [user]);
 
   async function handleSaveSettings() {
     setSaving(true);
@@ -69,8 +87,7 @@ export default function SettingsPage() {
     const file = e.target.files[0];
     const res = await uploadFile(file, true);
     if (res) {
-      // Build the download URL from the uploaded file
-      const avatarUrl = `http://localhost:8080/api/files/${res.id}/download`;
+      const avatarUrl = getFileViewUrl(res.id);
       setProfileAvatar(avatarUrl);
       // Auto-save avatar setting
       await updateSettings({ profile_avatar: avatarUrl });
@@ -101,6 +118,8 @@ export default function SettingsPage() {
       setPassMsg(`❌ ${res.error || "Failed to update."}`);
     }
   }
+
+  const avatarFailed = !!profileAvatar && failedAvatarUrl === profileAvatar;
 
   if (isLoading || !user) {
     return (
@@ -147,16 +166,19 @@ export default function SettingsPage() {
                   justifyContent: "center",
                   fontSize: "2rem",
                   fontWeight: 600,
+                  position: "relative",
                   overflow: "hidden",
                   border: "2px solid var(--border-color)",
                   transition: "opacity 0.2s",
                 }}
               >
-                {profileAvatar ? (
+                {profileAvatar && !avatarFailed ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={profileAvatar}
                     alt="avatar"
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={() => setFailedAvatarUrl(profileAvatar)}
                   />
                 ) : (
                   user.username.charAt(0).toUpperCase()

@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { getCurrentUser, normalizeFileViewUrl } from "@/lib/api";
 
 interface User {
   id: number;
@@ -29,47 +30,84 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem("blog_user");
-      if (storedUser) {
-        try { return JSON.parse(storedUser); } catch(e) { return null; }
-      }
-    }
-    return null;
-  });
-  const [token, setToken] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem("blog_token");
-    }
-    return null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const router = useRouter();
+  const isMountedRef = useRef(true);
+  const profileRequestIdRef = useRef(0);
+
+  const clearStoredAuth = () => {
+    localStorage.removeItem("blog_token");
+    localStorage.removeItem("blog_user");
+  };
 
   // Load auth state and profile on mount
   useEffect(() => {
-    // Fetch profile (it's public) for both guests and admins
-    fetchProfile();
-    setIsLoading(false);
+    isMountedRef.current = true;
+    const initializeAuth = async () => {
+      // Fetch profile (it's public) for both guests and admins
+      void fetchProfile();
+
+      const storedToken = typeof window !== "undefined" ? localStorage.getItem("blog_token") : null;
+      if (storedToken) {
+        const currentUser = await getCurrentUser();
+        if (isMountedRef.current) {
+          if (currentUser) {
+            setUser(currentUser);
+            setToken(storedToken);
+            localStorage.setItem("blog_user", JSON.stringify(currentUser));
+          } else {
+            setUser(null);
+            setToken(null);
+            clearStoredAuth();
+          }
+        }
+      } else if (isMountedRef.current) {
+        setUser(null);
+        setToken(null);
+      }
+
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
+    };
+
+    void initializeAuth();
+
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   async function fetchProfile() {
+    const requestId = ++profileRequestIdRef.current;
     const { getSettings } = await import("@/lib/api");
-    setIsProfileLoading(true);
+    if (isMountedRef.current) {
+      setIsProfileLoading(true);
+    }
+
     try {
       const data = await getSettings();
+      if (!isMountedRef.current || requestId !== profileRequestIdRef.current) {
+        return;
+      }
+
       setProfile({
         name: data["profile_name"] || "",
         description: data["profile_description"] || "",
-        avatar: data["profile_avatar"] || "",
+        avatar: normalizeFileViewUrl(data["profile_avatar"] || ""),
       });
     } catch (e) {
-      console.error("Failed to fetch profile:", e);
+      if (isMountedRef.current) {
+        console.error("Failed to fetch profile:", e);
+      }
     } finally {
-      setIsProfileLoading(false);
+      if (isMountedRef.current && requestId === profileRequestIdRef.current) {
+        setIsProfileLoading(false);
+      }
     }
   }
 
@@ -84,8 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem("blog_token");
-    localStorage.removeItem("blog_user");
+    clearStoredAuth();
     router.push("/login");
   };
 

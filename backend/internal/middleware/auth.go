@@ -61,6 +61,19 @@ func AuthMiddleware() gin.HandlerFunc {
 	}
 }
 
+func RequireAdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		roleName, ok := role.(string)
+		if !exists || !ok || roleName != "admin" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func OptionalAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -22,23 +22,53 @@ function SearchContent() {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const searchRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    if (initialQuery) {
-      doSearch(initialQuery);
+  const doSearch = async (q: string) => {
+    const normalizedQuery = q.trim();
+    if (!normalizedQuery) {
+      setPosts([]);
+      setFiles([]);
+      setSearched(false);
+      setLoading(false);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  async function doSearch(q: string) {
-    if (!q.trim()) return;
+    const requestId = ++searchRequestIdRef.current;
     setLoading(true);
-    const result = await searchResources(q.trim());
+    const result = await searchResources(normalizedQuery);
+    if (!isMountedRef.current || requestId !== searchRequestIdRef.current) {
+      return;
+    }
     setPosts(result.posts);
     setFiles(result.files);
     setSearched(true);
     setLoading(false);
-  }
+  };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      if (initialQuery) {
+        setQuery(initialQuery);
+        doSearch(initialQuery);
+      } else {
+        setQuery("");
+        setPosts([]);
+        setFiles([]);
+        setSearched(false);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialQuery]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") {

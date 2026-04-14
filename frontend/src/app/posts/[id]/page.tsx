@@ -1,4 +1,4 @@
-import { getPost } from "@/lib/api";
+import { getPost, normalizeMarkdownFileUrls } from "@/lib/api";
 import type { Post } from "@/lib/api";
 import { notFound } from "next/navigation";
 import BackButton from "@/components/BackButton";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // Pre-initialize markdown-it to avoid repeated require calls during render
 const MarkdownIt = require("markdown-it");
 const { imageSizePlugin } = require("@/lib/md-plugins");
-const md = new MarkdownIt({ html: true }).use(imageSizePlugin);
+const md = new MarkdownIt({ html: false }).use(imageSizePlugin);
 
 export default async function PostPage({ params }: PostPageProps) {
   const { id } = await params;
@@ -52,7 +52,7 @@ export default async function PostPage({ params }: PostPageProps) {
       <article 
         className="post-body custom-html-style"
         dangerouslySetInnerHTML={{ 
-            __html: md.render(post.content || "")
+            __html: md.render(normalizeMarkdownFileUrls(post.content || ""))
         }}
       />
 

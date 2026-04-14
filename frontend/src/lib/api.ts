@@ -1,5 +1,5 @@
 // lib/api.ts
-const API_BASE = "http://localhost:8080/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
 
 interface Category {
   id: number;
@@ -43,9 +43,38 @@ interface PaginatedResponse<T> {
   total: number;
   page: number;
   limit: number;
+  error?: string;
 }
 
 export type { Category, Post, FileRecord, SearchResult, PaginatedResponse };
+export { API_BASE };
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    return data?.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function getFileViewUrl(fileId: number): string {
+  return `${API_BASE}/files/${fileId}/view`;
+}
+
+export function normalizeFileViewUrl(url: string): string {
+  if (!url) {
+    return url;
+  }
+  return url.replace(/\/api\/files\/(\d+)\/download\b/g, "/api/files/$1/view");
+}
+
+export function normalizeMarkdownFileUrls(markdown: string): string {
+  if (!markdown) {
+    return markdown;
+  }
+  return markdown.replace(/\/api\/files\/(\d+)\/download\b/g, "/api/files/$1/view");
+}
 
 // Helper get authorization headers
 function getAuthHeaders(isFormData = false): HeadersInit {
@@ -78,10 +107,46 @@ export async function getPosts(page = 1, limit = 10, useAuth = false, sort = "",
     if (categoryId) query.append("category_id", categoryId);
     
     const res = await fetch(`${API_BASE}/posts?${query.toString()}`, options);
-    if (!res.ok) throw new Error("Backend error");
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Backend error"));
     return await res.json();
-  } catch {
-    return { data: [], total: 0, page: 1, limit: 10 };
+  } catch (error) {
+    return {
+      data: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      error: error instanceof Error ? error.message : "Failed to load posts",
+    };
+  }
+}
+
+export async function getAdminPosts(
+  page = 1,
+  limit = 10,
+  sort = "admin",
+  categoryId = ""
+): Promise<PaginatedResponse<Post>> {
+  try {
+    const query = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+    if (sort) query.append("sort", sort);
+    if (categoryId) query.append("category_id", categoryId);
+    const res = await fetch(`${API_BASE}/admin/posts?${query.toString()}`, {
+      cache: "no-store",
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin posts"));
+    return await res.json();
+  } catch (error) {
+    return {
+      data: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      error: error instanceof Error ? error.message : "Failed to load admin posts",
+    };
   }
 }
 
@@ -150,6 +215,19 @@ export async function getCategories(): Promise<Category[]> {
   }
 }
 
+export async function getAdminCategories(): Promise<Category[]> {
+  try {
+    const res = await fetch(`${API_BASE}/admin/categories`, {
+      cache: "no-store",
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin categories"));
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
 export async function createCategory(name: string): Promise<Category | null> {
     try {
         const res = await fetch(`${API_BASE}/admin/categories`, {
@@ -194,10 +272,40 @@ export async function deleteCategory(id: number): Promise<boolean> {
 export async function getFiles(page = 1, limit = 10): Promise<PaginatedResponse<FileRecord>> {
   try {
     const res = await fetch(`${API_BASE}/files?page=${page}&limit=${limit}`, { cache: "no-store" });
-    if (!res.ok) throw new Error("Backend error");
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Backend error"));
     return await res.json();
-  } catch {
-    return { data: [], total: 0, page: 1, limit: 10 };
+  } catch (error) {
+    return {
+      data: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      error: error instanceof Error ? error.message : "Failed to load files",
+    };
+  }
+}
+
+export async function getAdminFiles(page = 1, limit = 10, includeSystem = true): Promise<PaginatedResponse<FileRecord>> {
+  try {
+    const query = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      include_system: includeSystem ? "true" : "false",
+    });
+    const res = await fetch(`${API_BASE}/admin/files?${query.toString()}`, {
+      cache: "no-store",
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin files"));
+    return await res.json();
+  } catch (error) {
+    return {
+      data: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      error: error instanceof Error ? error.message : "Failed to load admin files",
+    };
   }
 }
 
@@ -248,6 +356,28 @@ export async function searchResources(query: string, scope: "posts" | "files" | 
   }
 }
 
+export async function searchAdminResources(
+  query: string,
+  scope: "posts" | "files" | "all" = "all",
+  includeSystem = true
+): Promise<SearchResult> {
+  try {
+    const searchParams = new URLSearchParams({
+      q: query,
+      scope,
+      include_system: includeSystem ? "true" : "false",
+    });
+    const res = await fetch(`${API_BASE}/admin/search?${searchParams.toString()}`, {
+      cache: "no-store",
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Search failed"));
+    return await res.json();
+  } catch {
+    return { posts: [], files: [] };
+  }
+}
+
 // ==================== Settings API ====================
 
 export async function getSettings(): Promise<Record<string, string>> {
@@ -258,6 +388,21 @@ export async function getSettings(): Promise<Record<string, string>> {
     } catch {
         return {};
     }
+}
+
+export async function getCurrentUser(): Promise<{ id: number; username: string; role: string } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/admin/me`, {
+      headers: getAuthHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error("Unauthorized");
+    }
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function updateSettings(data: Record<string, string>): Promise<boolean> {

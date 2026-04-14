@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getPosts } from "@/lib/api";
 import type { Post } from "@/lib/api";
@@ -19,16 +19,28 @@ export default function Home() {
   const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    loadPosts();
-  }, []);
+  const loadRequestIdRef = useRef(0);
 
   async function loadPosts() {
+    const requestId = ++loadRequestIdRef.current;
     // Only load the first 5 posts directly from the backend for the recent list
     const result = await getPosts(1, 5);
+    if (requestId !== loadRequestIdRef.current) {
+      return;
+    }
     setPosts(result.data);
   }
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      loadPosts();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      loadRequestIdRef.current += 1;
+    };
+  }, []);
 
   function handleSearchKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && searchQuery.trim()) {

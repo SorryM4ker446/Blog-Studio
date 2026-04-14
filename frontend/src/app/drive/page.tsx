@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { FileRecord } from "@/lib/api";
 import { getFiles, getDownloadUrl, searchResources } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
@@ -18,14 +18,16 @@ export default function DrivePage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-
-  useEffect(() => {
-    loadFiles(1);
-  }, []);
+  const fileRequestIdRef = useRef(0);
+  const searchRequestIdRef = useRef(0);
 
   async function loadFiles(pageToLoad: number) {
+    const requestId = ++fileRequestIdRef.current;
     setLoading(true);
     const result = await getFiles(pageToLoad, 10);
+    if (requestId !== fileRequestIdRef.current) {
+      return;
+    }
     setFiles(result.data);
     setPage(result.page);
     setTotalPages(Math.ceil(result.total / result.limit));
@@ -37,10 +39,27 @@ export default function DrivePage() {
       loadFiles(1);
       return;
     }
+
+    const requestId = ++searchRequestIdRef.current;
     const res = await searchResources(query, "files");
+    if (requestId !== searchRequestIdRef.current) {
+      return;
+    }
     setFiles(res.files || []);
     setTotalPages(1); // Disable pagination during search
   }
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      loadFiles(1);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      fileRequestIdRef.current += 1;
+      searchRequestIdRef.current += 1;
+    };
+  }, []);
 
   return (
     <div>

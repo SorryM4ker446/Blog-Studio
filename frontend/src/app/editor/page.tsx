@@ -2,22 +2,23 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import type { Post, FileRecord, Category } from "@/lib/api";
 import {
-  getPosts,
+  getAdminPosts,
   createPost,
   updatePost,
   deletePost,
-  getFiles,
+  getAdminFiles,
   uploadFile,
   deleteFile,
   getDownloadUrl,
-  getCategories,
+  getFileViewUrl,
+  getAdminCategories,
   createCategory,
-  searchResources,
+  normalizeMarkdownFileUrls,
+  searchAdminResources,
 } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
@@ -39,10 +40,9 @@ const MdEditor = dynamic(() => import("react-markdown-editor-lite"), {
 
 let mdParser: { render: (text: string) => string } | null = null;
 if (typeof window !== "undefined") {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const MarkdownIt = require("markdown-it");
   const { imageSizePlugin } = require("@/lib/md-plugins");
-  mdParser = new MarkdownIt({ html: true }).use(imageSizePlugin);
+  mdParser = new MarkdownIt({ html: false }).use(imageSizePlugin);
 }
 
 type TabType = "posts" | "files";
@@ -51,6 +51,12 @@ type ViewMode = "list" | "edit";
 export default function EditorPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const isMountedRef = useRef(true);
+  const categoryRequestIdRef = useRef(0);
+  const postRequestIdRef = useRef(0);
+  const fileRequestIdRef = useRef(0);
+  const searchRequestIdRef = useRef(0);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabType>("posts");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -72,6 +78,9 @@ export default function EditorPage() {
   const [showNewCat, setShowNewCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [creatingCat, setCreatingCat] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [filesLoading, setFilesLoading] = useState(false);
 
   const notifyUpdate = () => {
     if (typeof window !== "undefined") {
@@ -94,6 +103,16 @@ export default function EditorPage() {
     }
   }, [user, isLoading, router]);
 
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const [postPage, setPostPage] = useState(1);
   const [postTotalPages, setPostTotalPages] = useState(1);
   const [filePage, setFilePage] = useState(1);
@@ -108,22 +127,40 @@ export default function EditorPage() {
   }, [user]);
 
   async function loadCategories() {
-    const c = await getCategories();
+    const requestId = ++categoryRequestIdRef.current;
+    const c = await getAdminCategories();
+    if (!isMountedRef.current || requestId !== categoryRequestIdRef.current) {
+      return;
+    }
     setCategories(c);
   }
 
   async function loadPosts(pageToLoad: number) {
-    const result = await getPosts(pageToLoad, 10, true, "admin");
+    const requestId = ++postRequestIdRef.current;
+    setPostsLoading(true);
+    const result = await getAdminPosts(pageToLoad, 10, "admin");
+    if (!isMountedRef.current || requestId !== postRequestIdRef.current) {
+      return;
+    }
+    setLoadError(result.error || "");
     setPosts(result.data);
     setPostPage(result.page);
     setPostTotalPages(Math.ceil(result.total / result.limit));
+    setPostsLoading(false);
   }
 
   async function loadFiles(pageToLoad: number) {
-    const result = await getFiles(pageToLoad, 10);
+    const requestId = ++fileRequestIdRef.current;
+    setFilesLoading(true);
+    const result = await getAdminFiles(pageToLoad, 10, false);
+    if (!isMountedRef.current || requestId !== fileRequestIdRef.current) {
+      return;
+    }
+    setLoadError(result.error || "");
     setFiles(result.data);
     setFilePage(result.page);
     setFileTotalPages(Math.ceil(result.total / result.limit));
+    setFilesLoading(false);
   }
 
   async function handleSearch(query: string) {
@@ -132,7 +169,13 @@ export default function EditorPage() {
       else loadFiles(1);
       return;
     }
-    const res = await searchResources(query, activeTab);
+
+    const requestId = ++searchRequestIdRef.current;
+    const res = await searchAdminResources(query, activeTab, false);
+    if (!isMountedRef.current || requestId !== searchRequestIdRef.current) {
+      return;
+    }
+
     if (activeTab === "posts") {
         setPosts(res.posts || []);
         setPostTotalPages(1);
@@ -146,7 +189,7 @@ export default function EditorPage() {
     setEditingPost(post);
     setEditTitle(post.title);
     setEditSummary(post.summary || "");
-    setEditContent(post.content);
+    setEditContent(normalizeMarkdownFileUrls(post.content));
     setEditCategoryId(post.category_id);
     setEditStatus(post.status || "draft");
     setSaveMsg("");
@@ -200,7 +243,14 @@ export default function EditorPage() {
             notifyUpdate();
             router.refresh(); // Invalidate Next.js router cache
             // Auto-redirect back to list after a brief delay
-            setTimeout(() => setViewMode("list"), 600);
+            if (saveTimeoutRef.current) {
+              clearTimeout(saveTimeoutRef.current);
+            }
+            saveTimeoutRef.current = setTimeout(() => {
+              if (isMountedRef.current) {
+                setViewMode("list");
+              }
+            }, 600);
         } else {
             setSaveMsg("❌ Failed to save.");
         }
@@ -278,7 +328,7 @@ export default function EditorPage() {
   async function handleImageUpload(file: File): Promise<string> {
     const res = await uploadFile(file, true); // 使用 system=true 进行隔离上传
     if (res) {
-      return `http://localhost:8080/api/files/${res.id}/download`;
+      return getFileViewUrl(res.id);
     }
     return "";
   }
@@ -453,6 +503,23 @@ export default function EditorPage() {
         </div>
       </div>
 
+      {loadError && (
+        <div
+          className="fade-in"
+          style={{
+            marginBottom: "1rem",
+            padding: "0.9rem 1rem",
+            background: "rgba(242, 139, 130, 0.12)",
+            border: "1px solid rgba(242, 139, 130, 0.24)",
+            borderRadius: "12px",
+            color: "var(--accent-red)",
+            fontSize: "0.9rem",
+          }}
+        >
+          Failed to sync editor data: {loadError}
+        </div>
+      )}
+
       {/* Tabs */}
       <div
         style={{
@@ -473,12 +540,12 @@ export default function EditorPage() {
           }}>
             <button style={tabStyle("posts")} onClick={() => setActiveTab("posts")}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <FileTextIcon size={18} /> Posts ({posts.length})
+                <FileTextIcon size={18} /> Posts ({postsLoading ? "..." : posts.length})
               </div>
             </button>
             <button style={tabStyle("files")} onClick={() => setActiveTab("files")}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <FolderIcon size={18} /> Files ({files.length})
+                <FolderIcon size={18} /> Files ({filesLoading ? "..." : files.length})
               </div>
             </button>
           </div>
@@ -546,12 +613,28 @@ export default function EditorPage() {
           gap: "1rem",
         }}
       >
+        {activeTab === "posts" && postsLoading && posts.length === 0 &&
+          [1, 2, 3].map((index) => (
+            <div key={`post-skeleton-${index}`} className="skeleton-pulse" style={{ height: "220px", borderRadius: "16px" }} />
+          ))}
+
+        {activeTab === "files" && filesLoading && files.length === 0 &&
+          [1, 2, 3].map((index) => (
+            <div key={`file-skeleton-${index}`} className="skeleton-pulse" style={{ height: "84px", borderRadius: "16px" }} />
+          ))}
+
         {activeTab === "posts" &&
           posts.map((post) => (
             <div
               key={post.id}
               className="ai-card"
-              onClick={() => router.push(`/posts/${post.id}`)}
+              onClick={() => {
+                if (post.status === "published") {
+                  router.push(`/posts/${post.id}`);
+                  return;
+                }
+                openEditor(post);
+              }}
               style={{
                 padding: "1.5rem",
                 cursor: "pointer",
@@ -759,7 +842,7 @@ export default function EditorPage() {
           ))}
       </div>
 
-      {activeTab === "posts" && posts.length === 0 && (
+      {activeTab === "posts" && !postsLoading && posts.length === 0 && (
         <div
           style={{
             textAlign: "center",
@@ -773,7 +856,7 @@ export default function EditorPage() {
           <div style={{ display: "flex", justifyContent: "center", marginBottom: "1.5rem", opacity: 0.5 }}>
             <InboxIcon size={64} />
           </div>
-          <p>No posts available. Start writing by creating one!</p>
+          <p>{loadError ? `Failed to load posts: ${loadError}` : "No posts available in the admin workspace yet."}</p>
         </div>
       )}
 
@@ -1057,7 +1140,7 @@ export default function EditorPage() {
                     borderRadius: "12px",
                     border: "1px solid var(--border-color)",
                 }}
-                renderHTML={(text: string) => mdParser!.render(text)}
+                renderHTML={(text: string) => mdParser!.render(normalizeMarkdownFileUrls(text))}
                 onChange={({ text }: { text: string }) => setEditContent(text)}
                 onImageUpload={handleImageUpload}
                 onPaste={handlePaste}

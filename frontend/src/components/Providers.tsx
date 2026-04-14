@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState, useCallback, createContext, useContext } from "react";
 import Link from "next/link";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { ThemeProvider, useTheme } from "@/context/ThemeContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { getCategories, Category } from "@/lib/api";
 import {
   GridIcon,
@@ -31,13 +31,14 @@ export function useSidebar() {
 }
 
 // ─── Root Provider ────────────────────────────────────────────────────────────
-export function Providers({ children }: { children: ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("sidebar_collapsed");
-    if (saved === "true") setIsCollapsed(true);
-  }, []);
+export function Providers({
+  children,
+  initialSidebarCollapsed = false,
+}: {
+  children: ReactNode;
+  initialSidebarCollapsed?: boolean;
+}) {
+  const [isCollapsed, setIsCollapsed] = useState(initialSidebarCollapsed);
 
   // Sync state to html class for CSS-only initial state (Fix FUS bug)
   useEffect(() => {
@@ -46,14 +47,13 @@ export function Providers({ children }: { children: ReactNode }) {
     } else {
       document.documentElement.removeAttribute("data-sidebar-state");
     }
+
+    localStorage.setItem("sidebar_collapsed", String(isCollapsed));
+    document.cookie = `sidebar_collapsed=${isCollapsed ? "true" : "false"}; path=/; max-age=31536000; samesite=lax`;
   }, [isCollapsed]);
 
   const toggleSidebar = () => {
-    setIsCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem("sidebar_collapsed", String(next));
-      return next;
-    });
+    setIsCollapsed((prev) => !prev);
   };
 
   return (
@@ -87,10 +87,15 @@ export function SidebarContent() {
   }, []);
 
   useEffect(() => {
-    setMounted(true);
+    const frame = window.requestAnimationFrame(() => {
+      setMounted(true);
+    });
     refreshCategories();
     window.addEventListener("blog:refresh-sidebar", refreshCategories);
-    return () => window.removeEventListener("blog:refresh-sidebar", refreshCategories);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("blog:refresh-sidebar", refreshCategories);
+    };
   }, [refreshCategories]);
 
   return (
@@ -206,7 +211,13 @@ export function SidebarFooter() {
   const { isCollapsed } = useSidebar();
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setMounted(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   return (
     <div className="sidebar-footer">

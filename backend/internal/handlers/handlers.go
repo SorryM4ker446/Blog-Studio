@@ -20,21 +20,24 @@ import (
 
 // ==================== Post 处理器 ====================
 
-func GetPosts(c *gin.Context) {
+func respondWithPosts(c *gin.Context, includeDrafts bool) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	if page < 1 { page = 1 }
-	if limit < 1 || limit > 100 { limit = 10 }
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
 	offset := (page - 1) * limit
 	sort := c.Query("sort")
 	categoryID := c.Query("category_id")
 
 	var posts []models.Post
 	var total int64
-	
+
 	db := config.DB.Model(&models.Post{})
-	_, isAdmin := c.Get("username")
-	if !isAdmin {
+	if !includeDrafts {
 		db = db.Where("status = ?", "published")
 	}
 
@@ -56,25 +59,28 @@ func GetPosts(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
-		"data": posts,
+		"data":  posts,
 		"total": total,
-		"page": page,
+		"page":  page,
 		"limit": limit,
 	})
 }
 
+func GetPosts(c *gin.Context) {
+	respondWithPosts(c, false)
+}
+
+func AdminGetPosts(c *gin.Context) {
+	respondWithPosts(c, true)
+}
 
 func GetPost(c *gin.Context) {
 	id := c.Param("id")
 	var post models.Post
-	
-	db := config.DB.Preload("Category")
-	_, isAdmin := c.Get("username")
-	if !isAdmin {
-		db = db.Where("status = ?", "published")
-	}
+
+	db := config.DB.Preload("Category").Where("status = ?", "published")
 
 	result := db.First(&post, id)
 	if result.Error != nil {
@@ -97,7 +103,7 @@ func CreatePost(c *gin.Context) {
 		reg := regexp.MustCompile(`[^a-z0-9\x{4e00}-\x{9fa5}]+`)
 		slug = reg.ReplaceAllString(slug, "-")
 		slug = strings.Trim(slug, "-")
-		
+
 		// 增加随机后缀防止标题重复导致的 unique constraint 错误
 		post.Slug = fmt.Sprintf("%s-%d", slug, time.Now().Unix()%10000)
 		if slug == "" {
@@ -180,7 +186,7 @@ func DeletePost(c *gin.Context) {
 
 // ==================== Category 处理器 ====================
 
-func GetCategories(c *gin.Context) {
+func respondWithCategories(c *gin.Context, includeDrafts bool) {
 	var categories []models.Category
 	result := config.DB.Find(&categories)
 	if result.Error != nil {
@@ -188,12 +194,10 @@ func GetCategories(c *gin.Context) {
 		return
 	}
 
-	_, isAdmin := c.Get("username")
-
 	for i := range categories {
 		var count int64
 		dbCount := config.DB.Model(&models.Post{}).Where("category_id = ?", categories[i].ID)
-		if !isAdmin {
+		if !includeDrafts {
 			dbCount = dbCount.Where("status = ?", "published")
 		}
 		dbCount.Count(&count)
@@ -201,6 +205,14 @@ func GetCategories(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, categories)
+}
+
+func GetCategories(c *gin.Context) {
+	respondWithCategories(c, false)
+}
+
+func AdminGetCategories(c *gin.Context) {
+	respondWithCategories(c, true)
 }
 
 func CreateCategory(c *gin.Context) {
@@ -241,7 +253,7 @@ func UpdateCategory(c *gin.Context) {
 
 func DeleteCategory(c *gin.Context) {
 	id := c.Param("id")
-	
+
 	// Fallback logic: Set all related posts' CategoryID to 0
 	config.DB.Model(&models.Post{}).Where("category_id = ?", id).Update("category_id", 0)
 
@@ -259,7 +271,7 @@ func DeleteCategory(c *gin.Context) {
 
 // ==================== File 处理器（云盘） ====================
 
-const uploadDir = "./uploads"
+var uploadDir = resolveUploadDir()
 
 func init() {
 	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
@@ -267,17 +279,24 @@ func init() {
 	}
 }
 
-func GetFiles(c *gin.Context) {
+func respondWithFiles(c *gin.Context, includeSystem bool) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	if page < 1 { page = 1 }
-	if limit < 1 || limit > 100 { limit = 10 }
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
 	offset := (page - 1) * limit
 
 	var files []models.File
 	var total int64
 
-	db := config.DB.Model(&models.File{}).Where("is_system IS NOT TRUE")
+	db := config.DB.Model(&models.File{})
+	if !includeSystem {
+		db = db.Where("is_system IS NOT TRUE")
+	}
 	db.Count(&total)
 
 	result := db.Order("created_at desc").Limit(limit).Offset(offset).Find(&files)
@@ -285,13 +304,22 @@ func GetFiles(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
-		"data": files,
+		"data":  files,
 		"total": total,
-		"page": page,
+		"page":  page,
 		"limit": limit,
 	})
+}
+
+func GetFiles(c *gin.Context) {
+	respondWithFiles(c, false)
+}
+
+func AdminGetFiles(c *gin.Context) {
+	includeSystem := c.DefaultQuery("include_system", "true") == "true"
+	respondWithFiles(c, includeSystem)
 }
 
 func UploadFile(c *gin.Context) {
@@ -306,6 +334,10 @@ func UploadFile(c *gin.Context) {
 	ext := filepath.Ext(header.Filename)
 	storedName := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
 	savePath := filepath.Join(uploadDir, storedName)
+	absSavePath, absErr := filepath.Abs(savePath)
+	if absErr == nil {
+		savePath = absSavePath
+	}
 
 	dst, err := os.Create(savePath)
 	if err != nil {
@@ -327,7 +359,7 @@ func UploadFile(c *gin.Context) {
 		MimeType: header.Header.Get("Content-Type"),
 		IsSystem: c.Query("system") == "true",
 	}
-	
+
 	if record.IsSystem {
 		fmt.Printf("[DEBUG] Uploading system file: %s\n", header.Filename)
 	}
@@ -343,7 +375,38 @@ func DownloadFile(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
-	c.FileAttachment(file.Path, file.OrigName)
+	resolvedPath, resolveErr := resolveStoredFilePath(file.Path, file.Name)
+	if resolveErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+	if resolvedPath != file.Path {
+		config.DB.Model(&file).Update("path", resolvedPath)
+	}
+	c.FileAttachment(resolvedPath, file.OrigName)
+}
+
+func ViewFile(c *gin.Context) {
+	id := c.Param("id")
+	var file models.File
+	if err := config.DB.First(&file, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+	resolvedPath, resolveErr := resolveStoredFilePath(file.Path, file.Name)
+	if resolveErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+	if resolvedPath != file.Path {
+		config.DB.Model(&file).Update("path", resolvedPath)
+	}
+
+	if file.MimeType != "" {
+		c.Header("Content-Type", file.MimeType)
+	}
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", file.OrigName))
+	c.File(resolvedPath)
 }
 
 func DeleteFile(c *gin.Context) {
@@ -354,14 +417,18 @@ func DeleteFile(c *gin.Context) {
 		return
 	}
 	// 删除磁盘文件
-	os.Remove(file.Path)
+	if resolvedPath, resolveErr := resolveStoredFilePath(file.Path, file.Name); resolveErr == nil {
+		os.Remove(resolvedPath)
+	} else {
+		os.Remove(file.Path)
+	}
 	config.DB.Delete(&file)
 	c.JSON(http.StatusOK, gin.H{"message": "File deleted"})
 }
 
 // ==================== 搜索处理器 ====================
 
-func SearchResources(c *gin.Context) {
+func respondWithSearchResults(c *gin.Context, includeDrafts bool, includeSystem bool) {
 	q := c.Query("q")
 	scope := c.Query("scope") // optional: "posts", "files", "all"
 	if q == "" {
@@ -374,11 +441,9 @@ func SearchResources(c *gin.Context) {
 	var posts []models.Post
 	var files []models.File
 
-	_, isAdmin := c.Get("username")
-
 	if scope == "" || scope == "all" || scope == "posts" {
 		db := config.DB.Joins("LEFT JOIN categories ON categories.id = posts.category_id").Preload("Category")
-		if !isAdmin {
+		if !includeDrafts {
 			db = db.Where("posts.status = ?", "published")
 		}
 		db.Where("(posts.title ILIKE ? OR posts.content ILIKE ? OR categories.name ILIKE ?)", likeQ, likeQ, likeQ).
@@ -386,11 +451,23 @@ func SearchResources(c *gin.Context) {
 	}
 
 	if scope == "" || scope == "all" || scope == "files" {
-		config.DB.Where("orig_name ILIKE ? AND is_system IS NOT TRUE", likeQ).Find(&files)
+		db := config.DB.Where("orig_name ILIKE ?", likeQ)
+		if !includeSystem {
+			db = db.Where("is_system IS NOT TRUE")
+		}
+		db.Find(&files)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"posts": posts,
 		"files": files,
 	})
+}
+
+func SearchResources(c *gin.Context) {
+	respondWithSearchResults(c, false, false)
+}
+
+func AdminSearchResources(c *gin.Context) {
+	respondWithSearchResults(c, true, c.DefaultQuery("include_system", "true") == "true")
 }

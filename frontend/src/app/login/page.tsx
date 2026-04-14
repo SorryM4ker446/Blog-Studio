@@ -1,15 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { API_BASE } from "@/lib/api";
 import { KeyIcon, AlertIcon } from "@/components/Icons";
 
-export default function LoginPage() {
+function LoginPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const redirectTarget = searchParams.get("redirect");
+  const safeRedirect = redirectTarget && redirectTarget.startsWith("/") ? redirectTarget : "/";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,7 +24,7 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:8080/api/login", {
+      const res = await fetch(`${API_BASE}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -29,8 +36,7 @@ export default function LoginPage() {
       }
 
       login(data.token, data.user);
-      // Redirect to home page instead of editor
-      window.location.href = "/";
+      router.replace(safeRedirect);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -171,7 +177,7 @@ export default function LoginPage() {
               marginTop: "2rem",
             }}
           >
-            <a
+            <Link
               href="/"
               style={{
                 color: "var(--accent-blue)",
@@ -181,7 +187,7 @@ export default function LoginPage() {
               }}
             >
               Return Home
-            </a>
+            </Link>
 
             <button
               type="submit"
@@ -204,5 +210,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="skeleton-pulse" style={{ height: "60vh", borderRadius: "24px" }} />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

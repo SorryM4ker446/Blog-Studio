@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -23,22 +23,16 @@ export default function ConfirmModal({
   cancelText = "Cancel",
   type = "info",
 }: ConfirmModalProps) {
-  const [mounted, setMounted] = useState(false);
-
   useEffect(() => {
-    if (isOpen) {
-      setMounted(true);
-      document.body.style.overflow = "hidden";
-    } else {
-      const timer = setTimeout(() => {
-        setMounted(false);
-        document.body.style.overflow = "unset";
-      }, 300);
-      return () => clearTimeout(timer);
-    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = isOpen ? "hidden" : previousOverflow;
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
   }, [isOpen]);
 
-  if (!mounted && !isOpen) return null;
+  if (!isOpen) return null;
 
   return (
     <div
@@ -58,7 +52,7 @@ export default function ConfirmModal({
         justifyContent: "center",
         zIndex: 2000,
         transition: "opacity 0.3s ease",
-        opacity: isOpen ? 1 : 0,
+        opacity: 1,
       }}
     >
       <div
@@ -72,7 +66,7 @@ export default function ConfirmModal({
           borderRadius: "20px",
           padding: "2rem",
           boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)",
-          transform: isOpen ? "scale(1)" : "scale(0.95)",
+          transform: "scale(1)",
           transition: "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}
       >

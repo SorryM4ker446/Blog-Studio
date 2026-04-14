@@ -25,14 +25,16 @@ func SetupRouter() *gin.Engine {
 	{
 		// 公开接口
 		public := api.Group("/")
-		public.Use(middleware.OptionalAuthMiddleware())
 		{
 			public.GET("/posts", handlers.GetPosts)
 			public.GET("/posts/:id", handlers.GetPost)
 			public.GET("/categories", handlers.GetCategories)
 			public.GET("/search", handlers.SearchResources)
 			public.GET("/files", handlers.GetFiles)
+			public.GET("/files/:id/view", handlers.ViewFile)
+			public.HEAD("/files/:id/view", handlers.ViewFile)
 			public.GET("/files/:id/download", handlers.DownloadFile)
+			public.HEAD("/files/:id/download", handlers.DownloadFile)
 		}
 
 		// Auth & Settings (Public reading)
@@ -41,20 +43,24 @@ func SetupRouter() *gin.Engine {
 
 		// 受保护接口
 		auth := api.Group("/admin")
-		auth.Use(middleware.AuthMiddleware()) // Apply JWT auth here
+		auth.Use(middleware.AuthMiddleware(), middleware.RequireAdminMiddleware())
 		{
 			auth.GET("/me", handlers.Me)
+			auth.GET("/posts", handlers.AdminGetPosts)
+			auth.GET("/categories", handlers.AdminGetCategories)
+			auth.GET("/files", handlers.AdminGetFiles)
+			auth.GET("/search", handlers.AdminSearchResources)
 			auth.PUT("/password", handlers.UpdatePassword)
 			auth.PUT("/settings", handlers.UpdateSettings)
 
 			auth.POST("/posts", handlers.CreatePost)
 			auth.PUT("/posts/:id", handlers.UpdatePost)
 			auth.DELETE("/posts/:id", handlers.DeletePost)
-			
+
 			auth.POST("/categories", handlers.CreateCategory)
 			auth.PUT("/categories/:id", handlers.UpdateCategory)
 			auth.DELETE("/categories/:id", handlers.DeleteCategory)
-			
+
 			auth.POST("/files", handlers.UploadFile)
 			auth.DELETE("/files/:id", handlers.DeleteFile)
 		}

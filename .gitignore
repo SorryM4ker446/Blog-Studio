@@ -1,10 +1,10 @@
-# [Component Name]
 # Frontend (Next.js)
 frontend/node_modules/
 frontend/.next/
 frontend/out/
 frontend/build/
 frontend/.env*
+!frontend/.env.example
 frontend/.DS_Store
 frontend/*.pem
 frontend/npm-debug.log*
@@ -22,11 +22,18 @@ backend/uploads/
 backend/bin/
 backend/dist/
 backend/vendor/
+backend/.env*
+!backend/.env.example
 backend/*.log
 
 # Global
+.codex-runtime/
 .DS_Store
 *.log
+*.out.log
+*.err.log
+.vscode/
+.idea/
 implementation_plan.md
 instructions.md
 task.md

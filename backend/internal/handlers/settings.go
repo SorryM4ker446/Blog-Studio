@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"regexp"
+	"strconv"
 
 	"blog-backend/internal/config"
 	"blog-backend/internal/models"
@@ -17,6 +19,23 @@ func GetSettings(c *gin.Context) {
 	settingsMap := make(map[string]string)
 	for _, s := range settings {
 		settingsMap[s.Key] = s.Value
+	}
+
+	if avatar := settingsMap["profile_avatar"]; avatar != "" {
+		re := regexp.MustCompile(`/api/files/(\d+)/(?:download|view)\b`)
+		matches := re.FindStringSubmatch(avatar)
+		if len(matches) == 2 {
+			if fileID, err := strconv.Atoi(matches[1]); err == nil {
+				var file models.File
+				if dbErr := config.DB.First(&file, fileID).Error; dbErr != nil {
+					settingsMap["profile_avatar"] = ""
+				} else if resolvedPath, resolveErr := resolveStoredFilePath(file.Path, file.Name); resolveErr != nil {
+					settingsMap["profile_avatar"] = ""
+				} else if resolvedPath != file.Path {
+					config.DB.Model(&file).Update("path", resolvedPath)
+				}
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, settingsMap)
