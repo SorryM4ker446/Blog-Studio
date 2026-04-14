@@ -37,3 +37,8 @@ backend/*.log
 implementation_plan.md
 instructions.md
 task.md
+
+# Local-only tests (do not commit)
+**/*_local_test.go
+backend/.local-tests/
+frontend/.local-tests/

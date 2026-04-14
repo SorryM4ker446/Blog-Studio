@@ -19,6 +19,7 @@ import {
   createCategory,
   normalizeMarkdownFileUrls,
   searchAdminResources,
+  filterPostsByVisibleText,
 } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
@@ -177,7 +178,7 @@ export default function EditorPage() {
     }
 
     if (activeTab === "posts") {
-        setPosts(res.posts || []);
+        setPosts(filterPostsByVisibleText(res.posts || [], query));
         setPostTotalPages(1);
     } else {
         setFiles(res.files || []);

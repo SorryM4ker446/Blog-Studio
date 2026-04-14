@@ -18,6 +18,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var (
+	markdownImageRegex = regexp.MustCompile(`!\[[^\]]*\]\([^)]+\)`)
+	markdownLinkRegex  = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
+	urlRegex           = regexp.MustCompile(`https?://[^\s)]+`)
+)
+
 // ==================== Post 处理器 ====================
 
 func respondWithPosts(c *gin.Context, includeDrafts bool) {
@@ -436,6 +442,7 @@ func respondWithSearchResults(c *gin.Context, includeDrafts bool, includeSystem 
 		return
 	}
 
+	normalizedQ := strings.ToLower(strings.TrimSpace(q))
 	likeQ := "%" + q + "%"
 
 	var posts []models.Post
@@ -446,8 +453,9 @@ func respondWithSearchResults(c *gin.Context, includeDrafts bool, includeSystem 
 		if !includeDrafts {
 			db = db.Where("posts.status = ?", "published")
 		}
-		db.Where("(posts.title ILIKE ? OR posts.content ILIKE ? OR categories.name ILIKE ?)", likeQ, likeQ, likeQ).
+		db.Where("(posts.title ILIKE ? OR posts.summary ILIKE ? OR posts.content ILIKE ? OR categories.name ILIKE ?)", likeQ, likeQ, likeQ, likeQ).
 			Find(&posts)
+		posts = filterPostsByVisibleText(posts, normalizedQ)
 	}
 
 	if scope == "" || scope == "all" || scope == "files" {
@@ -462,6 +470,37 @@ func respondWithSearchResults(c *gin.Context, includeDrafts bool, includeSystem 
 		"posts": posts,
 		"files": files,
 	})
+}
+
+func filterPostsByVisibleText(posts []models.Post, normalizedQ string) []models.Post {
+	if normalizedQ == "" {
+		return posts
+	}
+
+	filtered := make([]models.Post, 0, len(posts))
+	for _, post := range posts {
+		if strings.Contains(strings.ToLower(post.Title), normalizedQ) ||
+			strings.Contains(strings.ToLower(post.Summary), normalizedQ) ||
+			strings.Contains(strings.ToLower(post.Category.Name), normalizedQ) ||
+			strings.Contains(strings.ToLower(extractSearchableContent(post.Content)), normalizedQ) {
+			filtered = append(filtered, post)
+		}
+	}
+	return filtered
+}
+
+func extractSearchableContent(markdown string) string {
+	if markdown == "" {
+		return ""
+	}
+
+	// Remove image markdown completely so file names/URLs do not participate in post text search.
+	content := markdownImageRegex.ReplaceAllString(markdown, " ")
+	// Keep visible link text while removing target URL.
+	content = markdownLinkRegex.ReplaceAllString(content, "$1")
+	// Remove remaining bare URLs.
+	content = urlRegex.ReplaceAllString(content, " ")
+	return content
 }
 
 func SearchResources(c *gin.Context) {

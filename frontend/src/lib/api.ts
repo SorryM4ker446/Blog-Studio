@@ -76,6 +76,38 @@ export function normalizeMarkdownFileUrls(markdown: string): string {
   return markdown.replace(/\/api\/files\/(\d+)\/download\b/g, "/api/files/$1/view");
 }
 
+export function extractSearchablePostContent(markdown: string): string {
+  if (!markdown) {
+    return "";
+  }
+  // Remove markdown image blocks completely so file names/URLs don't affect post-text search.
+  let content = markdown.replace(/!\[[^\]]*\]\([^)]+\)/g, " ");
+  // Keep link text and remove URL target.
+  content = content.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  // Remove bare URLs.
+  content = content.replace(/https?:\/\/[^\s)]+/g, " ");
+  return content;
+}
+
+export function filterPostsByVisibleText(posts: Post[], query: string): Post[] {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return posts;
+  }
+  return posts.filter((post) => {
+    const title = (post.title || "").toLowerCase();
+    const summary = (post.summary || "").toLowerCase();
+    const categoryName = (post.category?.name || "").toLowerCase();
+    const content = extractSearchablePostContent(post.content || "").toLowerCase();
+    return (
+      title.includes(q) ||
+      summary.includes(q) ||
+      categoryName.includes(q) ||
+      content.includes(q)
+    );
+  });
+}
+
 // Helper get authorization headers
 function getAuthHeaders(isFormData = false): HeadersInit {
   const headers: HeadersInit = {};

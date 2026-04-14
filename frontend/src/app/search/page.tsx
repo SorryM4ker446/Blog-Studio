@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import type { Post, FileRecord } from "@/lib/api";
-import { searchResources, getDownloadUrl } from "@/lib/api";
+import { searchResources, getDownloadUrl, filterPostsByVisibleText } from "@/lib/api";
 import { 
   SearchIcon, 
   FileTextIcon, 
@@ -41,7 +41,7 @@ function SearchContent() {
     if (!isMountedRef.current || requestId !== searchRequestIdRef.current) {
       return;
     }
-    setPosts(result.posts);
+    setPosts(filterPostsByVisibleText(result.posts, normalizedQuery));
     setFiles(result.files);
     setSearched(true);
     setLoading(false);
