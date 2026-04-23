@@ -13,6 +13,8 @@ frontend/yarn-error.log*
 frontend/.pnpm-debug.log*
 frontend/.vercel
 frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
 
 
 # Backend (Go and server files)
