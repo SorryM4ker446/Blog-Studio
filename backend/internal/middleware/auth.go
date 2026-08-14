@@ -2,22 +2,12 @@ package middleware
 
 import (
 	"net/http"
-	"os"
 	"strings"
 
+	"blog-backend/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
-
-var jwtKey = []byte(getJWTSecret())
-
-func getJWTSecret() string {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		return "development_secret_key"
-	}
-	return secret
-}
 
 type Claims struct {
 	Username string `json:"username"`
@@ -44,7 +34,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		claims := &Claims{}
 
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			return jwtKey, nil
+			return config.Current().JWTSecret, nil
 		})
 
 		if err != nil || !token.Valid {
@@ -83,7 +73,7 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 				tokenString := parts[1]
 				claims := &Claims{}
 				token, _ := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-					return jwtKey, nil
+					return config.Current().JWTSecret, nil
 				})
 				if token != nil && token.Valid {
 					c.Set("username", claims.Username)
