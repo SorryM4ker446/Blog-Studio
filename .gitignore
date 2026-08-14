@@ -14,6 +14,9 @@ frontend/.pnpm-debug.log*
 frontend/.vercel
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 
 
 
@@ -21,6 +24,7 @@ frontend/next-env.d.ts
 backend/server.exe
 backend/server.exe~
 backend/uploads/
+backend/.test-uploads/
 backend/bin/
 backend/dist/
 backend/vendor/
