@@ -191,7 +191,7 @@ export default function EditorPage() {
     setEditTitle(post.title);
     setEditSummary(post.summary || "");
     setEditContent(normalizeMarkdownFileUrls(post.content));
-    setEditCategoryId(post.category_id);
+    setEditCategoryId(post.category_id ?? 0);
     setEditStatus(post.status || "draft");
     setSaveMsg("");
     setViewMode("edit");
@@ -735,14 +735,14 @@ export default function EditorPage() {
                 <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px" }}>
                   <span>{new Date(post.updated_at).toLocaleDateString()}</span>
                   <span style={{ 
-                      background: post.category_id === 0 ? "rgba(128,128,128,0.15)" : "rgba(168, 199, 250, 0.1)",
-                      color: post.category_id === 0 ? "var(--text-muted)" : "var(--accent-blue)",
+                      background: post.category_id == null ? "rgba(128,128,128,0.15)" : "rgba(168, 199, 250, 0.1)",
+                      color: post.category_id == null ? "var(--text-muted)" : "var(--accent-blue)",
                       padding: "2px 8px",
                       borderRadius: "6px",
                       fontSize: "0.75rem",
                       fontWeight: 600,
                   }}>
-                    {post.category_id === 0 ? "无标签" : post.category?.name || "Uncategorized"}
+                    {post.category_id == null ? "无标签" : post.category?.name || "Uncategorized"}
                   </span>
                 </div>
                 <button

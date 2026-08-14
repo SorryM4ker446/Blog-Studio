@@ -59,3 +59,5 @@ npx playwright show-trace test-results/<result-directory>/trace.zip
 GitHub Actions creates a disposable `blog_db_test` PostgreSQL service. The backend job runs the Go integration tests, while the E2E job installs Chromium and runs the Playwright workflow. Failure screenshots, video, trace, and HTML reports are retained as workflow artifacts for seven days.
 
 The backend integration suite additionally verifies login throttling, password policy, CSRF rejection, session invalidation, JWT signature/algorithm checks, and the production CORS allowlist.
+
+Stage 3 integration coverage verifies pagination and search boundaries, stable API error codes, post validation, slug conflict handling, immutable first-publication timestamps, post-publication edit timestamps and effective timeline ordering, category deletion with `ON DELETE SET NULL`, database check/foreign-key constraints, case-insensitive category uniqueness, missing-resource deletes, and atomic settings validation.

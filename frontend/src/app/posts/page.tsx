@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { getPosts, searchResources, getCategories } from "@/lib/api";
+import { getPostTimeline, getPosts, searchResources, getCategories } from "@/lib/api";
 import type { Post } from "@/lib/api";
 import Link from "next/link";
 import SearchInput from "@/components/SearchInput";
@@ -191,18 +191,19 @@ function PostsListContent() {
                     }}
                     >
                       <span>
-                      {new Date(post.updated_at).toLocaleDateString()}
+                      {getPostTimeline(post).label} on{" "}
+                      {new Date(getPostTimeline(post).timestamp).toLocaleDateString()}
                     </span>
                     <span
                       style={{
-                        background: post.category_id === 0 ? "rgba(128,128,128,0.15)" : "rgba(109, 214, 140, 0.12)",
-                        color: post.category_id === 0 ? "var(--text-muted)" : "var(--accent-green)",
+                        background: post.category_id == null ? "rgba(128,128,128,0.15)" : "rgba(109, 214, 140, 0.12)",
+                        color: post.category_id == null ? "var(--text-muted)" : "var(--accent-green)",
                         padding: "2px 8px",
                         borderRadius: "4px",
                         fontSize: "0.75rem",
                       }}
                     >
-                      {post.category_id === 0 ? "无标签" : (post.category ? post.category.name : "Uncategorized")}
+                      {post.category_id == null ? "无标签" : (post.category ? post.category.name : "Uncategorized")}
                     </span>
                   </div>
                 </div>

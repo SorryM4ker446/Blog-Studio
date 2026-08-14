@@ -3,6 +3,7 @@ package routes
 import (
 	"net/http"
 
+	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
 	"blog-backend/internal/handlers"
 	"blog-backend/internal/middleware"
@@ -74,7 +75,7 @@ func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 		origin := c.GetHeader("Origin")
 		if origin != "" {
 			if _, ok := allowed[origin]; !ok {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Origin not allowed"})
+				apiresponse.AbortError(c, http.StatusForbidden, "origin_not_allowed", "Origin not allowed")
 				return
 			}
 			c.Header("Access-Control-Allow-Origin", origin)
