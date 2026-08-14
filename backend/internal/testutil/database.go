@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"blog-backend/internal/config"
-	"blog-backend/internal/models"
 	"github.com/jackc/pgx/v5"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -58,13 +57,7 @@ func OpenDatabase() (*gorm.DB, error) {
 		return nil, fmt.Errorf("connect to test database: %w", err)
 	}
 
-	if err := db.AutoMigrate(
-		&models.User{},
-		&models.Category{},
-		&models.Post{},
-		&models.File{},
-		&models.Setting{},
-	); err != nil {
+	if err := config.Migrate(db); err != nil {
 		return nil, fmt.Errorf("migrate test database: %w", err)
 	}
 

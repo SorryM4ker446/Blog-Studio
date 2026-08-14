@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getPosts } from "@/lib/api";
+import { getPostTimeline, getPosts } from "@/lib/api";
 import type { Post } from "@/lib/api";
 import { 
   StarIcon, 
@@ -163,8 +163,8 @@ export default function Home() {
                         marginTop: "0.3rem",
                       }}
                     >
-                      Updated on{" "}
-                      {new Date(post.updated_at).toLocaleDateString()} •{" "}
+                      {getPostTimeline(post).label} on{" "}
+                      {new Date(getPostTimeline(post).timestamp).toLocaleDateString()} •{" "}
                       {post.category ? post.category.name : "Uncategorized"}
                     </div>
                   </div>

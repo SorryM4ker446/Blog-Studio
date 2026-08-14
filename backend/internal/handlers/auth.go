@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
 	"blog-backend/internal/models"
 	"blog-backend/internal/security"
@@ -30,13 +31,12 @@ var (
 
 func Login(c *gin.Context) {
 	var creds Credentials
-	if err := c.ShouldBindJSON(&creds); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+	if !bindJSON(c, &creds) {
 		return
 	}
 	creds.Username = strings.TrimSpace(creds.Username)
 	if creds.Username == "" || creds.Password == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username and password are required"})
+		apiresponse.Error(c, http.StatusBadRequest, "missing_credentials", "Username and password are required")
 		return
 	}
 
@@ -44,7 +44,7 @@ func Login(c *gin.Context) {
 	if allowed, retryAfter := loginLimiter.Allow(ip, creds.Username); !allowed {
 		seconds := int(retryAfter.Seconds()) + 1
 		c.Header("Retry-After", strconv.Itoa(seconds))
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many login attempts; try again later"})
+		apiresponse.Error(c, http.StatusTooManyRequests, "login_rate_limited", "Too many login attempts; try again later")
 		return
 	}
 
@@ -56,23 +56,23 @@ func Login(c *gin.Context) {
 	}
 	passwordMatches := bcrypt.CompareHashAndPassword(hash, []byte(creds.Password)) == nil
 	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not verify credentials"})
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not verify credentials")
 		return
 	}
 	if result.Error != nil || !passwordMatches {
 		loginLimiter.RecordFailure(ip, creds.Username)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+		apiresponse.Error(c, http.StatusUnauthorized, "invalid_credentials", "Invalid username or password")
 		return
 	}
 
 	tokenString, err := session.Issue(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create session"})
+		apiresponse.Error(c, http.StatusInternalServerError, "session_error", "Could not create session")
 		return
 	}
 	csrfToken, err := session.NewCSRFToken(c.Writer)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create session"})
+		apiresponse.Error(c, http.StatusInternalServerError, "session_error", "Could not create session")
 		return
 	}
 	loginLimiter.Reset(ip, creds.Username)
@@ -91,7 +91,7 @@ func Login(c *gin.Context) {
 func CSRFToken(c *gin.Context) {
 	token, err := session.NewCSRFToken(c.Writer)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create CSRF token"})
+		apiresponse.Error(c, http.StatusInternalServerError, "session_error", "Could not create CSRF token")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"csrf_token": token})
@@ -100,17 +100,18 @@ func CSRFToken(c *gin.Context) {
 func Logout(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		apiresponse.Error(c, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	if err := config.DB.Model(&models.User{}).Where("id = ?", userID).
-		UpdateColumn("session_version", gorm.Expr("session_version + 1")).Error; err != nil {
+	result := config.DB.Model(&models.User{}).Where("id = ?", userID).
+		UpdateColumn("session_version", gorm.Expr("session_version + 1"))
+	if result.Error != nil || result.RowsAffected == 0 {
 		session.ClearCookies(c.Writer)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to invalidate session"})
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Failed to invalidate session")
 		return
 	}
 	session.ClearCookies(c.Writer)
-	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+	apiresponse.Message(c, http.StatusOK, "Logged out successfully")
 }
 
 func Me(c *gin.Context) {
@@ -123,7 +124,7 @@ func Me(c *gin.Context) {
 func UpdatePassword(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		apiresponse.Error(c, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 
@@ -131,44 +132,49 @@ func UpdatePassword(c *gin.Context) {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
 	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+	if !bindJSON(c, &input) {
 		return
 	}
 
 	var user models.User
-	if err := config.DB.First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+	err := config.DB.First(&user, userID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		apiresponse.Error(c, http.StatusNotFound, "user_not_found", "User not found")
+		return
+	}
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load user")
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.CurrentPassword)); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Incorrect current password"})
+		apiresponse.Error(c, http.StatusForbidden, "incorrect_password", "Incorrect current password")
 		return
 	}
 	if input.CurrentPassword == input.NewPassword {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "New password must be different from the current password"})
+		apiresponse.Error(c, http.StatusBadRequest, "password_reused", "New password must be different from the current password")
 		return
 	}
 	if err := security.ValidatePassword(input.NewPassword, user.Username); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_password", err.Error())
 		return
 	}
 
 	newHash, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
 		log.Println("Error hashing password:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		apiresponse.Error(c, http.StatusInternalServerError, "password_error", "Failed to hash password")
 		return
 	}
-	if err := config.DB.Model(&user).Updates(map[string]interface{}{
+	result := config.DB.Model(&user).Updates(map[string]interface{}{
 		"password_hash":   string(newHash),
 		"session_version": gorm.Expr("session_version + 1"),
-	}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
+	})
+	if result.Error != nil || result.RowsAffected == 0 {
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Failed to update password")
 		return
 	}
 	session.ClearCookies(c.Writer)
-	c.JSON(http.StatusOK, gin.H{"message": "Password updated; please sign in again"})
+	apiresponse.Message(c, http.StatusOK, "Password updated; please sign in again")
 }
 
 func requestIP(remoteAddress string) string {

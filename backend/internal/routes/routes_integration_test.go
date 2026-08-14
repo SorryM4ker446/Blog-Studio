@@ -340,8 +340,8 @@ func TestDraftVisibilityIsSeparatedFromPublicPosts(t *testing.T) {
 	}
 	now := time.Now()
 	posts := []models.Post{
-		{Title: "Published post", Slug: "published-post", Content: "Visible", CategoryID: category.ID, Status: "published", PublishedAt: &now},
-		{Title: "Draft post", Slug: "draft-post", Content: "Hidden", CategoryID: category.ID, Status: "draft"},
+		{Title: "Published post", Slug: "published-post", Content: "Visible", CategoryID: &category.ID, Status: "published", PublishedAt: &now},
+		{Title: "Draft post", Slug: "draft-post", Content: "Hidden", CategoryID: &category.ID, Status: "draft"},
 	}
 	if err := db.Create(&posts).Error; err != nil {
 		t.Fatalf("create posts: %v", err)

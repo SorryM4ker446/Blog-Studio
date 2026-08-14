@@ -1,5 +1,6 @@
 import {
   getPost,
+  getPostTimeline,
   getSettings,
   normalizeFileViewUrl,
   normalizeMarkdownFileUrls,
@@ -28,11 +29,12 @@ export default async function PostPage({ params }: PostPageProps) {
     notFound();
   }
 
-  const updatedDate = new Date(post.updated_at);
-  const yyyy = updatedDate.getFullYear();
-  const mm = String(updatedDate.getMonth() + 1).padStart(2, "0");
-  const dd = String(updatedDate.getDate()).padStart(2, "0");
-  const postDateLabel = `Updated : ${yyyy}/${mm}/${dd}`;
+  const timeline = getPostTimeline(post);
+  const displayDate = new Date(timeline.timestamp);
+  const yyyy = displayDate.getFullYear();
+  const mm = String(displayDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(displayDate.getDate()).padStart(2, "0");
+  const postDateLabel = `${timeline.label} : ${yyyy}/${mm}/${dd}`;
   const authorName = settings["profile_name"]?.trim() || "admin";
   const authorTag = settings["profile_tag"]?.trim() || "admin";
   const authorAvatar = normalizeFileViewUrl(settings["profile_avatar"] || "");
@@ -50,7 +52,7 @@ export default async function PostPage({ params }: PostPageProps) {
         </header>
 
         <div className="post-meta post-meta-rail">
-          <time className="post-date" dateTime={post.updated_at}>
+          <time className="post-date" dateTime={timeline.timestamp}>
             {postDateLabel}
           </time>
         </div>

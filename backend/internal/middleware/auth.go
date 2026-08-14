@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 
+	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
 	"blog-backend/internal/models"
 	"blog-backend/internal/session"
@@ -15,7 +16,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		claims, ok := authenticatedClaims(c)
 		if !ok {
 			session.ClearCookies(c.Writer)
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired session"})
+			apiresponse.AbortError(c, http.StatusUnauthorized, "invalid_session", "Invalid or expired session")
 			return
 		}
 
@@ -31,7 +32,7 @@ func RequireAdminMiddleware() gin.HandlerFunc {
 		role, exists := c.Get("role")
 		roleName, ok := role.(string)
 		if !exists || !ok || roleName != "admin" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
+			apiresponse.AbortError(c, http.StatusForbidden, "admin_required", "Admin access required")
 			return
 		}
 		c.Next()
@@ -49,7 +50,7 @@ func CSRFMiddleware() gin.HandlerFunc {
 		cookie, err := c.Cookie(session.CSRFCookieName)
 		header := c.GetHeader("X-CSRF-Token")
 		if err != nil || cookie == "" || header == "" || len(cookie) != len(header) || subtle.ConstantTimeCompare([]byte(cookie), []byte(header)) != 1 {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid CSRF token"})
+			apiresponse.AbortError(c, http.StatusForbidden, "invalid_csrf", "Invalid CSRF token")
 			return
 		}
 		c.Next()

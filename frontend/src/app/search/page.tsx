@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import type { Post, FileRecord } from "@/lib/api";
-import { searchResources, getDownloadUrl, filterPostsByVisibleText } from "@/lib/api";
+import { searchResources, getDownloadUrl, filterPostsByVisibleText, getPostTimeline } from "@/lib/api";
 import { 
   SearchIcon, 
   FileTextIcon, 
@@ -219,7 +219,8 @@ function SearchContent() {
                             marginTop: "0.2rem",
                           }}
                         >
-                          {new Date(post.updated_at).toLocaleDateString()} •{" "}
+                          {getPostTimeline(post).label} on{" "}
+                          {new Date(getPostTimeline(post).timestamp).toLocaleDateString()} •{" "}
                           {post.category?.name || "Uncategorized"}
                         </div>
                       </div>

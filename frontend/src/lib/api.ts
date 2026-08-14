@@ -15,10 +15,11 @@ interface Post {
   slug: string;
   summary: string;
   content: string;
-  category_id: number;
-  category: Category;
+  category_id: number | null;
+  category: Category | null;
   status: string;
   published_at: string | null;
+  last_edited_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +115,19 @@ export function filterPostsByVisibleText(posts: Post[], query: string): Post[] {
       content.includes(q)
     );
   });
+}
+
+export function getPostTimeline(post: Pick<Post, "published_at" | "last_edited_at" | "updated_at">): {
+  label: "Published" | "Updated";
+  timestamp: string;
+} {
+  if (post.last_edited_at) {
+    return { label: "Updated", timestamp: post.last_edited_at };
+  }
+  return {
+    label: "Published",
+    timestamp: post.published_at || post.updated_at,
+  };
 }
 
 async function ensureCSRFToken(forceRefresh = false): Promise<string> {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func main() {
@@ -34,52 +36,49 @@ func main() {
 		log.Fatalf("ADMIN_PASS is invalid: %v", err)
 	}
 
-	// Check if admin exists
-	var existing models.User
-	result := config.DB.Where("username = ?", username).First(&existing)
-
-	if result.Error == nil {
-		log.Fatalf("User '%s' already exists; refusing to overwrite its password", username)
-	} else if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		// Create new admin
-		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			log.Fatalf("Error hashing password: %v", err)
-		}
-
-		admin := models.User{
-			Username:     username,
-			PasswordHash: string(hash),
-			Role:         "admin",
-		}
-
-		if err := config.DB.Create(&admin).Error; err != nil {
-			log.Fatalf("Error creating user: %v", err)
-		}
-	} else {
-		log.Fatalf("Error checking whether user exists: %v", result.Error)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatalf("Error hashing password: %v", err)
 	}
-
-	// Create default configurations
-	settings := []models.Setting{
-		{Key: "site_title", Value: "Blog Studio"},
-		{Key: "site_description", Value: "Welcome to my personal studio!"},
-	}
-	for _, s := range settings {
-		var check models.Setting
-		if config.DB.Where("key = ?", s.Key).First(&check).Error != nil {
-			config.DB.Create(&s)
+	createdDefaultCategory := false
+	err = config.DB.Transaction(func(tx *gorm.DB) error {
+		var existing models.User
+		result := tx.Where("username = ?", username).First(&existing)
+		if result.Error == nil {
+			return fmt.Errorf("user %q already exists; refusing to overwrite its password", username)
 		}
-	}
+		if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("check whether user exists: %w", result.Error)
+		}
+		admin := models.User{Username: username, PasswordHash: string(hash), Role: "admin"}
+		if err := tx.Create(&admin).Error; err != nil {
+			return fmt.Errorf("create user: %w", err)
+		}
 
-	// Create default category (ID: 1)
-	var catCount int64
-	config.DB.Model(&models.Category{}).Count(&catCount)
-	if catCount == 0 {
-		config.DB.Create(&models.Category{
-			Name:        "General",
-			Description: "Default category for all posts.",
-		})
+		settings := []models.Setting{
+			{Key: "site_title", Value: "Blog Studio"},
+			{Key: "site_description", Value: "Welcome to my personal studio!"},
+		}
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "key"}}, DoNothing: true}).Create(&settings).Error; err != nil {
+			return fmt.Errorf("create default settings: %w", err)
+		}
+		var categoryCount int64
+		if err := tx.Model(&models.Category{}).Count(&categoryCount).Error; err != nil {
+			return fmt.Errorf("count categories: %w", err)
+		}
+		if categoryCount == 0 {
+			category := models.Category{Name: "General", Description: "Default category for all posts."}
+			if err := tx.Create(&category).Error; err != nil {
+				return fmt.Errorf("create default category: %w", err)
+			}
+			createdDefaultCategory = true
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatalf("Seed transaction failed: %v", err)
+	}
+	if createdDefaultCategory {
 		log.Println("Created default category 'General'.")
 	}
 
