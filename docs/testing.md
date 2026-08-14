@@ -60,4 +60,4 @@ GitHub Actions creates a disposable `blog_db_test` PostgreSQL service. The backe
 
 The backend integration suite additionally verifies login throttling, password policy, CSRF rejection, session invalidation, JWT signature/algorithm checks, and the production CORS allowlist.
 
-Stage 3 integration coverage verifies pagination and search boundaries, stable API error codes, post validation, slug conflict handling, immutable first-publication timestamps, post-publication edit timestamps and effective timeline ordering, category deletion with `ON DELETE SET NULL`, database check/foreign-key constraints, case-insensitive category uniqueness, missing-resource deletes, and atomic settings validation.
+Data integrity integration coverage verifies pagination and search boundaries, stable API error codes, post validation, slug conflict handling, immutable first-publication timestamps, post-publication edit timestamps and effective timeline ordering, category deletion with `ON DELETE SET NULL`, database check/foreign-key constraints, case-insensitive category uniqueness, missing-resource deletes, and atomic settings validation.

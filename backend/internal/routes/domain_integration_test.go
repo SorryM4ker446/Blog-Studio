@@ -18,7 +18,7 @@ type apiErrorResponse struct {
 	Code  string `json:"code"`
 }
 
-func TestStage3LegacyMigrationBackfill(t *testing.T) {
+func TestLegacyMigrationBackfill(t *testing.T) {
 	db := requireTestDatabase(t)
 	for _, constraint := range []struct {
 		table string
@@ -83,7 +83,7 @@ func requireAPIError(t *testing.T, responseCode int, body []byte, expectedStatus
 	}
 }
 
-func TestStage3QueryParameterValidation(t *testing.T) {
+func TestQueryParameterValidation(t *testing.T) {
 	requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)
 	router := SetupRouter()
@@ -109,7 +109,7 @@ func TestStage3QueryParameterValidation(t *testing.T) {
 	}
 }
 
-func TestStage3PostRulesAndSlugConflicts(t *testing.T) {
+func TestPostRulesAndSlugConflicts(t *testing.T) {
 	db := requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)
 	createTestUser(t, db, "domain-admin", "correct-password-123", "admin")
@@ -218,7 +218,7 @@ func TestStage3PostRulesAndSlugConflicts(t *testing.T) {
 	requireAPIError(t, missingDelete.Code, missingDelete.Body.Bytes(), http.StatusNotFound, "post_not_found")
 }
 
-func TestStage3PublicPostsUseEffectiveTimelineOrder(t *testing.T) {
+func TestPublicPostsUseEffectiveTimelineOrder(t *testing.T) {
 	db := requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)
 
@@ -258,7 +258,7 @@ func TestStage3PublicPostsUseEffectiveTimelineOrder(t *testing.T) {
 	}
 }
 
-func TestStage3CategoryDeletionAndDatabaseConstraints(t *testing.T) {
+func TestCategoryDeletionAndDatabaseConstraints(t *testing.T) {
 	db := requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)
 	createTestUser(t, db, "category-admin", "correct-password-123", "admin")
@@ -322,7 +322,7 @@ func TestStage3CategoryDeletionAndDatabaseConstraints(t *testing.T) {
 	}
 }
 
-func TestStage3SettingsValidationIsAtomic(t *testing.T) {
+func TestSettingsValidationIsAtomic(t *testing.T) {
 	db := requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)
 	createTestUser(t, db, "settings-admin", "correct-password-123", "admin")
