@@ -38,6 +38,15 @@ func OpenDatabase() (*gorm.DB, error) {
 	if err := os.Setenv("JWT_SECRET", TestJWTSecret); err != nil {
 		return nil, fmt.Errorf("set test JWT_SECRET: %w", err)
 	}
+	if err := os.Setenv("APP_ENV", "test"); err != nil {
+		return nil, fmt.Errorf("set test APP_ENV: %w", err)
+	}
+	if err := os.Setenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3100"); err != nil {
+		return nil, fmt.Errorf("set test ALLOWED_ORIGINS: %w", err)
+	}
+	if err := os.Setenv("COOKIE_SECURE", "false"); err != nil {
+		return nil, fmt.Errorf("set test COOKIE_SECURE: %w", err)
+	}
 	if _, err := config.LoadFromEnv(); err != nil {
 		return nil, fmt.Errorf("load test configuration: %w", err)
 	}

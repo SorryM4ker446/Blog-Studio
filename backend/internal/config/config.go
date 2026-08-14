@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -14,9 +16,12 @@ const minimumJWTSecretLength = 32
 // Secrets must be supplied through the environment and never fall back to
 // source-controlled development values.
 type AppConfig struct {
-	DatabaseDSN   string
-	JWTSecret     []byte
-	ServerAddress string
+	DatabaseDSN    string
+	JWTSecret      []byte
+	ServerAddress  string
+	Environment    string
+	AllowedOrigins []string
+	CookieSecure   bool
 }
 
 var (
@@ -47,10 +52,38 @@ func LoadFromEnv() (AppConfig, error) {
 		serverAddress = ":8080"
 	}
 
+	environment := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+	if environment == "" {
+		environment = "development"
+	}
+	if environment != "development" && environment != "test" && environment != "production" {
+		return AppConfig{}, errors.New("APP_ENV must be development, test, or production")
+	}
+
+	allowedOrigins, err := parseAllowedOrigins(os.Getenv("ALLOWED_ORIGINS"), environment)
+	if err != nil {
+		return AppConfig{}, err
+	}
+
+	cookieSecure := environment == "production"
+	if raw := strings.TrimSpace(os.Getenv("COOKIE_SECURE")); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return AppConfig{}, errors.New("COOKIE_SECURE must be true or false")
+		}
+		cookieSecure = parsed
+	}
+	if environment == "production" && !cookieSecure {
+		return AppConfig{}, errors.New("COOKIE_SECURE must be true in production")
+	}
+
 	cfg := AppConfig{
-		DatabaseDSN:   databaseDSN,
-		JWTSecret:     []byte(jwtSecret),
-		ServerAddress: serverAddress,
+		DatabaseDSN:    databaseDSN,
+		JWTSecret:      []byte(jwtSecret),
+		ServerAddress:  serverAddress,
+		Environment:    environment,
+		AllowedOrigins: allowedOrigins,
+		CookieSecure:   cookieSecure,
 	}
 
 	configMu.Lock()
@@ -59,6 +92,34 @@ func LoadFromEnv() (AppConfig, error) {
 	configMu.Unlock()
 
 	return cfg, nil
+}
+
+func parseAllowedOrigins(raw, environment string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		if environment == "production" {
+			return nil, errors.New("ALLOWED_ORIGINS is required in production")
+		}
+		return []string{"http://localhost:3000", "http://127.0.0.1:3000"}, nil
+	}
+
+	seen := make(map[string]struct{})
+	origins := make([]string, 0)
+	for _, value := range strings.Split(raw, ",") {
+		origin := strings.TrimRight(strings.TrimSpace(value), "/")
+		parsed, err := url.Parse(origin)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return nil, fmt.Errorf("invalid allowed origin %q", value)
+		}
+		if _, exists := seen[origin]; exists {
+			continue
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+	}
+	if len(origins) == 0 {
+		return nil, errors.New("ALLOWED_ORIGINS must contain at least one origin")
+	}
+	return origins, nil
 }
 
 // Current returns the validated process configuration. Calling it before

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser, normalizeFileViewUrl } from "@/lib/api";
+import { getCurrentUser, logoutUser, normalizeFileViewUrl } from "@/lib/api";
 
 interface User {
   id: number;
@@ -19,10 +19,9 @@ interface Profile {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   profile: Profile | null;
-  login: (token: string, user: User) => void;
-  logout: () => void;
+  login: (user: User) => void;
+  logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isLoading: boolean;
   isProfileLoading: boolean;
@@ -32,18 +31,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const router = useRouter();
   const isMountedRef = useRef(true);
   const profileRequestIdRef = useRef(0);
-
-  const clearStoredAuth = () => {
-    localStorage.removeItem("blog_token");
-    localStorage.removeItem("blog_user");
-  };
 
   // Load auth state and profile on mount
   useEffect(() => {
@@ -52,23 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Fetch profile (it's public) for both guests and admins
       void fetchProfile();
 
-      const storedToken = typeof window !== "undefined" ? localStorage.getItem("blog_token") : null;
-      if (storedToken) {
-        const currentUser = await getCurrentUser();
-        if (isMountedRef.current) {
-          if (currentUser) {
-            setUser(currentUser);
-            setToken(storedToken);
-            localStorage.setItem("blog_user", JSON.stringify(currentUser));
-          } else {
-            setUser(null);
-            setToken(null);
-            clearStoredAuth();
-          }
-        }
-      } else if (isMountedRef.current) {
-        setUser(null);
-        setToken(null);
+      // Remove credentials written by pre-cookie versions of the app.
+      localStorage.removeItem("blog_token");
+      localStorage.removeItem("blog_user");
+      const currentUser = await getCurrentUser();
+      if (isMountedRef.current) {
+        setUser(currentUser);
       }
 
       if (isMountedRef.current) {
@@ -113,25 +95,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const login = (newToken: string, newUser: User) => {
-    setToken(newToken);
+  const login = (newUser: User) => {
     setUser(newUser);
-    localStorage.setItem("blog_token", newToken);
-    localStorage.setItem("blog_user", JSON.stringify(newUser));
     fetchProfile(); // Fetch profile immediately after login
   };
 
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    clearStoredAuth();
-    router.push("/login");
+  const logout = async () => {
+    try {
+      await logoutUser();
+    } finally {
+      setUser(null);
+      router.push("/login");
+    }
   };
 
   return (
     <AuthContext.Provider value={{ 
       user, 
-      token, 
       profile, 
       login, 
       logout, 

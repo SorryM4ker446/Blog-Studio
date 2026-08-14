@@ -114,9 +114,10 @@ export default function SettingsPage() {
     const res = await updatePassword(currentPass, newPass);
     setPassLoading(false);
     if (res.success) {
-      setPassMsg("✅ Password updated successfully!");
+      setPassMsg("✅ Password updated. Please sign in again.");
       setCurrentPass("");
       setNewPass("");
+      await logout();
     } else {
       setPassMsg(`❌ ${res.error || "Failed to update."}`);
     }
@@ -346,6 +347,9 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+            <p style={{ margin: "-0.75rem 0 1.5rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              Use 12–128 characters (up to 72 UTF-8 bytes). Avoid common passwords and do not include your username.
+            </p>
             <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
               <button
                 type="submit"
@@ -409,7 +413,7 @@ export default function SettingsPage() {
         <div className="ai-card" style={{ padding: "2rem", border: "1px solid rgba(242, 139, 130, 0.3)" }}>
           <h2 style={{ margin: "0 0 1.5rem 0", fontSize: "1.2rem", fontWeight: 600, color: "var(--accent-red)" }}>Danger Zone</h2>
           <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
-            Logging out will clear your current session token. You will need to re-authenticate to access the editor.
+            Logging out invalidates your current server session. You will need to re-authenticate to access the editor.
           </p>
           <button
             onClick={() => setShowLogoutModal(true)}
@@ -433,7 +437,7 @@ export default function SettingsPage() {
         isOpen={showLogoutModal}
         onConfirm={() => {
           setShowLogoutModal(false);
-          logout();
+          void logout();
         }}
         onCancel={() => setShowLogoutModal(false)}
         title="Confirm Logout"

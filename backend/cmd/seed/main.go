@@ -5,10 +5,10 @@ import (
 	"log"
 	"os"
 	"strings"
-	"unicode/utf8"
 
 	"blog-backend/internal/config"
 	"blog-backend/internal/models"
+	"blog-backend/internal/security"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -30,8 +30,8 @@ func main() {
 	if password == "" {
 		log.Fatal("ADMIN_PASS is required")
 	}
-	if utf8.RuneCountInString(password) < 12 {
-		log.Fatal("ADMIN_PASS must be at least 12 characters")
+	if err := security.ValidatePassword(password, username); err != nil {
+		log.Fatalf("ADMIN_PASS is invalid: %v", err)
 	}
 
 	// Check if admin exists

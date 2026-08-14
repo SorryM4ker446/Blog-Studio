@@ -1,6 +1,9 @@
 package routes
 
 import (
+	"net/http"
+
+	"blog-backend/internal/config"
 	"blog-backend/internal/handlers"
 	"blog-backend/internal/middleware"
 	"github.com/gin-gonic/gin"
@@ -9,17 +12,7 @@ import (
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 
-	// 跨域简易处理 (本地开发)
-	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-		c.Next()
-	})
+	r.Use(corsMiddleware(config.Current().AllowedOrigins))
 
 	api := r.Group("/api")
 	{
@@ -38,14 +31,16 @@ func SetupRouter() *gin.Engine {
 		}
 
 		// Auth & Settings (Public reading)
-		api.POST("/login", handlers.Login)
+		api.GET("/csrf", handlers.CSRFToken)
+		api.POST("/login", middleware.CSRFMiddleware(), handlers.Login)
 		api.GET("/settings", handlers.GetSettings)
 
 		// 受保护接口
 		auth := api.Group("/admin")
-		auth.Use(middleware.AuthMiddleware(), middleware.RequireAdminMiddleware())
+		auth.Use(middleware.AuthMiddleware(), middleware.RequireAdminMiddleware(), middleware.CSRFMiddleware())
 		{
 			auth.GET("/me", handlers.Me)
+			auth.POST("/logout", handlers.Logout)
 			auth.GET("/posts", handlers.AdminGetPosts)
 			auth.GET("/categories", handlers.AdminGetCategories)
 			auth.GET("/files", handlers.AdminGetFiles)
@@ -67,4 +62,31 @@ func SetupRouter() *gin.Engine {
 	}
 
 	return r
+}
+
+func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		allowed[origin] = struct{}{}
+	}
+
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			if _, ok := allowed[origin]; !ok {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Origin not allowed"})
+				return
+			}
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Vary", "Origin")
+		}
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
 }
