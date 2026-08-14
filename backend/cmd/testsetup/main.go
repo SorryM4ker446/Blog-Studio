@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"blog-backend/internal/models"
+	"blog-backend/internal/security"
 	"blog-backend/internal/testutil"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -21,8 +22,11 @@ func main() {
 
 	username := strings.TrimSpace(os.Getenv("E2E_ADMIN_USER"))
 	password := os.Getenv("E2E_ADMIN_PASS")
-	if username == "" || len(password) < 12 {
-		log.Fatal("E2E_ADMIN_USER and an E2E_ADMIN_PASS of at least 12 characters are required")
+	if username == "" {
+		log.Fatal("E2E_ADMIN_USER is required")
+	}
+	if err := security.ValidatePassword(password, username); err != nil {
+		log.Fatalf("E2E_ADMIN_PASS is invalid: %v", err)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)

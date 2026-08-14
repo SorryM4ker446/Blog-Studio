@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { API_BASE } from "@/lib/api";
+import { loginUser } from "@/lib/api";
 import { KeyIcon, AlertIcon } from "@/components/Icons";
 
 function LoginPageContent() {
@@ -24,21 +24,11 @@ function LoginPageContent() {
     setError("");
 
     try {
-      const res = await fetch(`${API_BASE}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Login failed");
-      }
-
-      login(data.token, data.user);
+      const user = await loginUser(username, password);
+      login(user);
       router.replace(safeRedirect);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setLoading(false);
     }

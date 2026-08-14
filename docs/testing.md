@@ -46,7 +46,7 @@ Run the E2E workflow:
 npm run test:e2e
 ```
 
-Playwright starts isolated backend and frontend servers on ports `18080` and `3100`. The test covers login, draft creation, public draft isolation, publishing, public visibility, logout, and protected-editor redirection.
+Playwright starts isolated backend and frontend servers on ports `18080` and `3100`. The test covers the HttpOnly Cookie login flow, CSRF-protected mutations, draft creation, public draft isolation, publishing, public visibility, server-side logout invalidation, and protected-editor redirection.
 
 On failure, inspect `frontend/test-results` or open the saved trace:
 
@@ -57,3 +57,5 @@ npx playwright show-trace test-results/<result-directory>/trace.zip
 ## Continuous integration
 
 GitHub Actions creates a disposable `blog_db_test` PostgreSQL service. The backend job runs the Go integration tests, while the E2E job installs Chromium and runs the Playwright workflow. Failure screenshots, video, trace, and HTML reports are retained as workflow artifacts for seven days.
+
+The backend integration suite additionally verifies login throttling, password policy, CSRF rejection, session invalidation, JWT signature/algorithm checks, and the production CORS allowlist.

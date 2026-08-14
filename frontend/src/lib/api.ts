@@ -49,6 +49,14 @@ interface PaginatedResponse<T> {
 export type { Category, Post, FileRecord, SearchResult, PaginatedResponse };
 export { API_BASE };
 
+export interface AuthUser {
+  id: number;
+  username: string;
+  role: string;
+}
+
+let csrfToken = "";
+
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const data = await res.json();
@@ -108,29 +116,64 @@ export function filterPostsByVisibleText(posts: Post[], query: string): Post[] {
   });
 }
 
-// Helper get authorization headers
-function getAuthHeaders(isFormData = false): HeadersInit {
+async function ensureCSRFToken(forceRefresh = false): Promise<string> {
+  if (csrfToken && !forceRefresh) {
+    return csrfToken;
+  }
+  const res = await fetch(`${API_BASE}/csrf`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, "Failed to initialize secure session"));
+  }
+  const data = await res.json();
+  csrfToken = data.csrf_token;
+  return csrfToken;
+}
+
+async function getMutationHeaders(isFormData = false): Promise<HeadersInit> {
   const headers: HeadersInit = {};
   if (!isFormData) {
     headers["Content-Type"] = "application/json";
   }
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("blog_token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-  }
+  headers["X-CSRF-Token"] = await ensureCSRFToken();
   return headers;
+}
+
+export async function loginUser(username: string, password: string): Promise<AuthUser> {
+  csrfToken = await ensureCSRFToken(true);
+  const res = await fetch(`${API_BASE}/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: await getMutationHeaders(),
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Login failed");
+  }
+  csrfToken = data.csrf_token;
+  return data.user;
+}
+
+export async function logoutUser(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/admin/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: await getMutationHeaders(),
+    });
+  } finally {
+    csrfToken = "";
+  }
 }
 
 // ==================== Post API ====================
 
-export async function getPosts(page = 1, limit = 10, useAuth = false, sort = "", categoryId = ""): Promise<PaginatedResponse<Post>> {
+export async function getPosts(page = 1, limit = 10, _useAuth = false, sort = "", categoryId = ""): Promise<PaginatedResponse<Post>> {
   try {
-    const options: RequestInit = { cache: "no-store" };
-    if (useAuth) {
-      options.headers = getAuthHeaders();
-    }
+    const options: RequestInit = { cache: "no-store", credentials: "include" };
     const query = new URLSearchParams({ 
       page: page.toString(), 
       limit: limit.toString() 
@@ -167,7 +210,7 @@ export async function getAdminPosts(
     if (categoryId) query.append("category_id", categoryId);
     const res = await fetch(`${API_BASE}/admin/posts?${query.toString()}`, {
       cache: "no-store",
-      headers: getAuthHeaders(),
+      credentials: "include",
     });
     if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin posts"));
     return await res.json();
@@ -197,7 +240,8 @@ export async function createPost(
 ): Promise<Post | null> {
     const res = await fetch(`${API_BASE}/admin/posts`, {
         method: "POST",
-        headers: getAuthHeaders(),
+        credentials: "include",
+        headers: await getMutationHeaders(),
         body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -213,7 +257,8 @@ export async function updatePost(
 ): Promise<Post | null> {
     const res = await fetch(`${API_BASE}/admin/posts/${id}`, {
         method: "PUT",
-        headers: getAuthHeaders(),
+        credentials: "include",
+        headers: await getMutationHeaders(),
         body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -227,7 +272,8 @@ export async function deletePost(id: number): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/admin/posts/${id}`, { 
       method: "DELETE",
-      headers: getAuthHeaders(), 
+      credentials: "include",
+      headers: await getMutationHeaders(),
     });
     return res.ok;
   } catch {
@@ -251,7 +297,7 @@ export async function getAdminCategories(): Promise<Category[]> {
   try {
     const res = await fetch(`${API_BASE}/admin/categories`, {
       cache: "no-store",
-      headers: getAuthHeaders(),
+      credentials: "include",
     });
     if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin categories"));
     return await res.json();
@@ -264,7 +310,8 @@ export async function createCategory(name: string): Promise<Category | null> {
     try {
         const res = await fetch(`${API_BASE}/admin/categories`, {
             method: "POST",
-            headers: getAuthHeaders(),
+            credentials: "include",
+            headers: await getMutationHeaders(),
             body: JSON.stringify({ name }),
         });
         if (!res.ok) throw new Error("Create failed");
@@ -278,7 +325,8 @@ export async function updateCategory(id: number, name: string): Promise<boolean>
   try {
     const res = await fetch(`${API_BASE}/admin/categories/${id}`, {
       method: "PUT",
-      headers: getAuthHeaders(),
+      credentials: "include",
+      headers: await getMutationHeaders(),
       body: JSON.stringify({ name })
     });
     return res.ok;
@@ -291,7 +339,8 @@ export async function deleteCategory(id: number): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/admin/categories/${id}`, {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      credentials: "include",
+      headers: await getMutationHeaders(),
     });
     return res.ok;
   } catch (error) {
@@ -326,7 +375,7 @@ export async function getAdminFiles(page = 1, limit = 10, includeSystem = true):
     });
     const res = await fetch(`${API_BASE}/admin/files?${query.toString()}`, {
       cache: "no-store",
-      headers: getAuthHeaders(),
+      credentials: "include",
     });
     if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin files"));
     return await res.json();
@@ -348,7 +397,8 @@ export async function uploadFile(file: File, isSystem = false): Promise<FileReco
     const url = isSystem ? `${API_BASE}/admin/files?system=true` : `${API_BASE}/admin/files`;
     const res = await fetch(url, {
       method: "POST",
-      headers: getAuthHeaders(true),
+      credentials: "include",
+      headers: await getMutationHeaders(true),
       body: formData,
     });
     if (!res.ok) throw new Error("Upload failed");
@@ -366,7 +416,8 @@ export async function deleteFile(id: number): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/admin/files/${id}`, { 
         method: "DELETE",
-        headers: getAuthHeaders(),
+        credentials: "include",
+        headers: await getMutationHeaders(),
     });
     return res.ok;
   } catch {
@@ -401,7 +452,7 @@ export async function searchAdminResources(
     });
     const res = await fetch(`${API_BASE}/admin/search?${searchParams.toString()}`, {
       cache: "no-store",
-      headers: getAuthHeaders(),
+      credentials: "include",
     });
     if (!res.ok) throw new Error(await readErrorMessage(res, "Search failed"));
     return await res.json();
@@ -425,10 +476,11 @@ export async function getSettings(): Promise<Record<string, string>> {
 export async function getCurrentUser(): Promise<{ id: number; username: string; role: string } | null> {
   try {
     const res = await fetch(`${API_BASE}/admin/me`, {
-      headers: getAuthHeaders(),
+      credentials: "include",
       cache: "no-store",
     });
     if (!res.ok) {
+      csrfToken = "";
       throw new Error("Unauthorized");
     }
     return await res.json();
@@ -441,7 +493,8 @@ export async function updateSettings(data: Record<string, string>): Promise<bool
     try {
         const res = await fetch(`${API_BASE}/admin/settings`, {
             method: "PUT",
-            headers: getAuthHeaders(),
+            credentials: "include",
+            headers: await getMutationHeaders(),
             body: JSON.stringify(data),
         });
         return res.ok;
@@ -454,7 +507,8 @@ export async function updatePassword(currentPassword: string, newPassword: strin
     try {
         const res = await fetch(`${API_BASE}/admin/password`, {
             method: "PUT",
-            headers: getAuthHeaders(),
+            credentials: "include",
+            headers: await getMutationHeaders(),
             body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
         });
         const data = await res.json();

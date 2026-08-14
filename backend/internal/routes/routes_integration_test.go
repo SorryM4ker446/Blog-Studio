@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
 	"blog-backend/internal/models"
+	"blog-backend/internal/session"
 	"blog-backend/internal/testutil"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -18,8 +20,14 @@ import (
 	"gorm.io/gorm"
 )
 
+type requestAuth struct {
+	cookies   []*http.Cookie
+	csrfToken string
+	remoteIP  string
+}
+
 type loginResponse struct {
-	Token string `json:"token"`
+	CSRFToken string `json:"csrf_token"`
 }
 
 func requireTestDatabase(t *testing.T) *gorm.DB {
@@ -53,10 +61,13 @@ func createTestUser(t *testing.T, db *gorm.DB, username, password, role string) 
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create test user: %v", err)
 	}
+	if err := db.First(&user, user.ID).Error; err != nil {
+		t.Fatalf("reload test user: %v", err)
+	}
 	return user
 }
 
-func performJSONRequest(t *testing.T, router http.Handler, method, path string, body any, token string) *httptest.ResponseRecorder {
+func performJSONRequest(t *testing.T, router http.Handler, method, path string, body any, auth *requestAuth, includeCSRF bool) *httptest.ResponseRecorder {
 	t.Helper()
 	var payload bytes.Buffer
 	if body != nil {
@@ -69,20 +80,42 @@ func performJSONRequest(t *testing.T, router http.Handler, method, path string, 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if auth != nil {
+		for _, cookie := range auth.cookies {
+			req.AddCookie(cookie)
+		}
+		if includeCSRF {
+			req.Header.Set("X-CSRF-Token", auth.csrfToken)
+		}
+		if auth.remoteIP != "" {
+			req.RemoteAddr = auth.remoteIP + ":1234"
+		}
 	}
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, req)
 	return recorder
 }
 
-func loginAs(t *testing.T, router http.Handler, username, password string) string {
+func csrfAuth(t *testing.T, router http.Handler, remoteIP string) *requestAuth {
 	t.Helper()
+	response := performJSONRequest(t, router, http.MethodGet, "/api/csrf", nil, &requestAuth{remoteIP: remoteIP}, false)
+	if response.Code != http.StatusOK {
+		t.Fatalf("csrf status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var result loginResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode csrf response: %v", err)
+	}
+	return &requestAuth{cookies: response.Result().Cookies(), csrfToken: result.CSRFToken, remoteIP: remoteIP}
+}
+
+func loginAs(t *testing.T, router http.Handler, username, password string) *requestAuth {
+	t.Helper()
+	auth := csrfAuth(t, router, "192.0.2.1")
 	response := performJSONRequest(t, router, http.MethodPost, "/api/login", map[string]string{
 		"username": username,
 		"password": password,
-	}, "")
+	}, auth, true)
 	if response.Code != http.StatusOK {
 		t.Fatalf("login status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
@@ -90,21 +123,28 @@ func loginAs(t *testing.T, router http.Handler, username, password string) strin
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode login response: %v", err)
 	}
-	if result.Token == "" {
-		t.Fatal("login response did not include a token")
+	if result.CSRFToken == "" {
+		t.Fatal("login response did not include a CSRF token")
 	}
-	return result.Token
+	return &requestAuth{cookies: response.Result().Cookies(), csrfToken: result.CSRFToken, remoteIP: auth.remoteIP}
 }
 
-func signedToken(t *testing.T, secret string, expiresAt time.Time, role string) string {
+func signedToken(t *testing.T, user models.User, secret string, expiresAt time.Time, method jwt.SigningMethod) string {
 	t.Helper()
+	now := time.Now().Add(-time.Minute)
 	claims := jwt.MapClaims{
-		"username": "admin",
-		"role":     role,
-		"user_id":  1,
-		"exp":      expiresAt.Unix(),
+		"username":        user.Username,
+		"role":            user.Role,
+		"user_id":         user.ID,
+		"session_version": user.SessionVersion,
+		"iss":             "blog-studio",
+		"sub":             strconv.FormatUint(uint64(user.ID), 10),
+		"iat":             now.Unix(),
+		"nbf":             now.Unix(),
+		"exp":             expiresAt.Unix(),
+		"jti":             "integration-test-token",
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(method, claims)
 	signed, err := token.SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
@@ -112,61 +152,181 @@ func signedToken(t *testing.T, secret string, expiresAt time.Time, role string) 
 	return signed
 }
 
+func cookieAuth(token string) *requestAuth {
+	return &requestAuth{cookies: []*http.Cookie{{Name: session.CookieName, Value: token, Path: "/api"}}}
+}
+
 func TestAuthenticationAndAdminAuthorization(t *testing.T) {
 	db := requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)
-	createTestUser(t, db, "admin", "correct-password", "admin")
+	admin := createTestUser(t, db, "admin", "correct-password", "admin")
 	createTestUser(t, db, "writer", "writer-password", "writer")
 	router := SetupRouter()
 
 	t.Run("valid administrator login", func(t *testing.T) {
-		token := loginAs(t, router, "admin", "correct-password")
-		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, token)
+		auth := loginAs(t, router, "admin", "correct-password")
+		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, auth, false)
 		if response.Code != http.StatusOK {
 			t.Fatalf("admin /me status = %d, want %d", response.Code, http.StatusOK)
 		}
 	})
 
 	t.Run("wrong password", func(t *testing.T) {
+		auth := csrfAuth(t, router, "192.0.2.10")
 		response := performJSONRequest(t, router, http.MethodPost, "/api/login", map[string]string{
 			"username": "admin",
 			"password": "wrong-password",
-		}, "")
+		}, auth, true)
 		if response.Code != http.StatusUnauthorized {
 			t.Fatalf("login status = %d, want %d", response.Code, http.StatusUnauthorized)
 		}
 	})
 
-	t.Run("missing credentials", func(t *testing.T) {
-		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, "")
+	t.Run("missing session", func(t *testing.T) {
+		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, nil, false)
 		if response.Code != http.StatusUnauthorized {
 			t.Fatalf("admin /me status = %d, want %d", response.Code, http.StatusUnauthorized)
 		}
 	})
 
 	t.Run("non-admin user", func(t *testing.T) {
-		token := loginAs(t, router, "writer", "writer-password")
-		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, token)
+		auth := loginAs(t, router, "writer", "writer-password")
+		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, auth, false)
 		if response.Code != http.StatusForbidden {
 			t.Fatalf("admin /me status = %d, want %d", response.Code, http.StatusForbidden)
 		}
 	})
 
 	t.Run("expired token", func(t *testing.T) {
-		token := signedToken(t, testutil.TestJWTSecret, time.Now().Add(-time.Hour), "admin")
-		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, token)
+		token := signedToken(t, admin, testutil.TestJWTSecret, time.Now().Add(-time.Hour), jwt.SigningMethodHS256)
+		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, cookieAuth(token), false)
 		if response.Code != http.StatusUnauthorized {
 			t.Fatalf("admin /me status = %d, want %d", response.Code, http.StatusUnauthorized)
 		}
 	})
 
 	t.Run("wrong signature", func(t *testing.T) {
-		token := signedToken(t, "a-different-test-secret-with-at-least-32-bytes", time.Now().Add(time.Hour), "admin")
-		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, token)
+		token := signedToken(t, admin, "a-different-test-secret-with-at-least-32-bytes", time.Now().Add(time.Hour), jwt.SigningMethodHS256)
+		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, cookieAuth(token), false)
 		if response.Code != http.StatusUnauthorized {
 			t.Fatalf("admin /me status = %d, want %d", response.Code, http.StatusUnauthorized)
 		}
 	})
+
+	t.Run("unexpected signing algorithm", func(t *testing.T) {
+		token := signedToken(t, admin, testutil.TestJWTSecret, time.Now().Add(time.Hour), jwt.SigningMethodHS384)
+		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, cookieAuth(token), false)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("admin /me status = %d, want %d", response.Code, http.StatusUnauthorized)
+		}
+	})
+}
+
+func TestSessionCSRFAndPasswordSecurity(t *testing.T) {
+	db := requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+	createTestUser(t, db, "admin", "correct-password", "admin")
+	router := SetupRouter()
+
+	t.Run("write without csrf is rejected", func(t *testing.T) {
+		auth := loginAs(t, router, "admin", "correct-password")
+		response := performJSONRequest(t, router, http.MethodPost, "/api/admin/categories", map[string]string{"name": "Blocked"}, auth, false)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("category status = %d, want %d", response.Code, http.StatusForbidden)
+		}
+	})
+
+	t.Run("weak password is rejected", func(t *testing.T) {
+		auth := loginAs(t, router, "admin", "correct-password")
+		response := performJSONRequest(t, router, http.MethodPut, "/api/admin/password", map[string]string{
+			"current_password": "correct-password",
+			"new_password":     "short",
+		}, auth, true)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("password status = %d, want %d", response.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("logout invalidates copied session", func(t *testing.T) {
+		auth := loginAs(t, router, "admin", "correct-password")
+		response := performJSONRequest(t, router, http.MethodPost, "/api/admin/logout", nil, auth, true)
+		if response.Code != http.StatusOK {
+			t.Fatalf("logout status = %d, want %d", response.Code, http.StatusOK)
+		}
+		response = performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, auth, false)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("copied session status = %d, want %d", response.Code, http.StatusUnauthorized)
+		}
+	})
+}
+
+func TestLoginRateLimit(t *testing.T) {
+	db := requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+	createTestUser(t, db, "rate-user", "correct-password", "admin")
+	router := SetupRouter()
+	auth := csrfAuth(t, router, "198.51.100.25")
+
+	for attempt := 1; attempt <= 5; attempt++ {
+		response := performJSONRequest(t, router, http.MethodPost, "/api/login", map[string]string{
+			"username": "rate-user",
+			"password": "wrong-password",
+		}, auth, true)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d, want %d", attempt, response.Code, http.StatusUnauthorized)
+		}
+	}
+	response := performJSONRequest(t, router, http.MethodPost, "/api/login", map[string]string{
+		"username": "rate-user",
+		"password": "correct-password",
+	}, auth, true)
+	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") == "" {
+		t.Fatalf("limited status = %d, Retry-After = %q", response.Code, response.Header().Get("Retry-After"))
+	}
+}
+
+func TestPasswordChangeInvalidatesCopiedSession(t *testing.T) {
+	db := requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+	createTestUser(t, db, "password-user", "current-password-123", "admin")
+	router := SetupRouter()
+	auth := loginAs(t, router, "password-user", "current-password-123")
+
+	response := performJSONRequest(t, router, http.MethodPut, "/api/admin/password", map[string]string{
+		"current_password": "current-password-123",
+		"new_password":     "new-secure-passphrase-456",
+	}, auth, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("password status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+
+	response = performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, auth, false)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("copied session status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+	loginAs(t, router, "password-user", "new-secure-passphrase-456")
+}
+
+func TestCORSAllowsOnlyConfiguredOrigins(t *testing.T) {
+	requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+	router := SetupRouter()
+
+	allowed := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	allowed.Header.Set("Origin", "http://localhost:3000")
+	allowedResponse := httptest.NewRecorder()
+	router.ServeHTTP(allowedResponse, allowed)
+	if allowedResponse.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" || allowedResponse.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Fatalf("allowed CORS headers = %v", allowedResponse.Header())
+	}
+
+	blocked := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	blocked.Header.Set("Origin", "https://evil.example")
+	blockedResponse := httptest.NewRecorder()
+	router.ServeHTTP(blockedResponse, blocked)
+	if blockedResponse.Code != http.StatusForbidden {
+		t.Fatalf("blocked origin status = %d, want %d", blockedResponse.Code, http.StatusForbidden)
+	}
 }
 
 func TestDraftVisibilityIsSeparatedFromPublicPosts(t *testing.T) {
@@ -188,7 +348,7 @@ func TestDraftVisibilityIsSeparatedFromPublicPosts(t *testing.T) {
 	}
 
 	router := SetupRouter()
-	publicResponse := performJSONRequest(t, router, http.MethodGet, "/api/posts", nil, "")
+	publicResponse := performJSONRequest(t, router, http.MethodGet, "/api/posts", nil, nil, false)
 	if publicResponse.Code != http.StatusOK {
 		t.Fatalf("public posts status = %d, want %d", publicResponse.Code, http.StatusOK)
 	}
@@ -204,13 +364,13 @@ func TestDraftVisibilityIsSeparatedFromPublicPosts(t *testing.T) {
 	}
 
 	draftPath := fmt.Sprintf("/api/posts/%d", posts[1].ID)
-	draftResponse := performJSONRequest(t, router, http.MethodGet, draftPath, nil, "")
+	draftResponse := performJSONRequest(t, router, http.MethodGet, draftPath, nil, nil, false)
 	if draftResponse.Code != http.StatusNotFound {
 		t.Fatalf("public draft detail status = %d, want %d", draftResponse.Code, http.StatusNotFound)
 	}
 
-	adminToken := loginAs(t, router, "admin", "correct-password")
-	adminResponse := performJSONRequest(t, router, http.MethodGet, "/api/admin/posts", nil, adminToken)
+	auth := loginAs(t, router, "admin", "correct-password")
+	adminResponse := performJSONRequest(t, router, http.MethodGet, "/api/admin/posts", nil, auth, false)
 	if adminResponse.Code != http.StatusOK {
 		t.Fatalf("admin posts status = %d, want %d", adminResponse.Code, http.StatusOK)
 	}
