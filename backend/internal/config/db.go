@@ -89,7 +89,7 @@ func Migrate(db *gorm.DB) error {
 			}
 		}
 
-		// The Stage 3 draft constraint cleared publication history. Replace it
+		// The previous draft constraint cleared publication history. Replace it
 		// with constraints that preserve the first publication timestamp.
 		if tx.Migrator().HasConstraint("posts", "chk_posts_published_at") {
 			if err := tx.Migrator().DropConstraint("posts", "chk_posts_published_at"); err != nil {
