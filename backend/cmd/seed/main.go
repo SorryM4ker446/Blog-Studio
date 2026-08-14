@@ -1,41 +1,46 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"os"
+	"strings"
+	"unicode/utf8"
 
 	"blog-backend/internal/config"
 	"blog-backend/internal/models"
-	
+
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func main() {
+	if _, err := config.LoadFromEnv(); err != nil {
+		log.Fatalf("Invalid application configuration: %v", err)
+	}
+
 	// Initialize database
 	config.InitDB()
 
-	// Default admin info
-	username := "admin"
-	password := "123456"
-
-	// Allow overrides via env
-	if u := os.Getenv("ADMIN_USER"); u != "" {
-		username = u
+	username := strings.TrimSpace(os.Getenv("ADMIN_USER"))
+	if username == "" {
+		log.Fatal("ADMIN_USER is required")
 	}
-	if p := os.Getenv("ADMIN_PASS"); p != "" {
-		password = p
+	password := os.Getenv("ADMIN_PASS")
+	if password == "" {
+		log.Fatal("ADMIN_PASS is required")
+	}
+	if utf8.RuneCountInString(password) < 12 {
+		log.Fatal("ADMIN_PASS must be at least 12 characters")
 	}
 
 	// Check if admin exists
 	var existing models.User
 	result := config.DB.Where("username = ?", username).First(&existing)
-	
+
 	if result.Error == nil {
-		log.Printf("User '%s' already exists. Updating password...\n", username)
-		hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		config.DB.Model(&existing).Update("PasswordHash", string(hash))
-		log.Println("Password updated successfully.")
-	} else {
+		log.Fatalf("User '%s' already exists; refusing to overwrite its password", username)
+	} else if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		// Create new admin
 		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {
@@ -51,6 +56,8 @@ func main() {
 		if err := config.DB.Create(&admin).Error; err != nil {
 			log.Fatalf("Error creating user: %v", err)
 		}
+	} else {
+		log.Fatalf("Error checking whether user exists: %v", result.Error)
 	}
 
 	// Create default configurations

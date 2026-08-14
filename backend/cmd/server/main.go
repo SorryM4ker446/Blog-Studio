@@ -9,16 +9,21 @@ import (
 
 func main() {
 	log.Println("Starting Blog Backend System...")
-	
+
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Invalid application configuration: %v", err)
+	}
+
 	// 初始化数据库
 	config.InitDB()
 
 	// 配置路由
 	r := routes.SetupRouter()
 
-	// 启动 HTTP 服务，侦听 8080 端口
-	log.Println("Server is running at http://localhost:8080")
-	if err := r.Run(":8080"); err != nil {
+	// 启动 HTTP 服务
+	log.Printf("Server is listening on %s", cfg.ServerAddress)
+	if err := r.Run(cfg.ServerAddress); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 }
