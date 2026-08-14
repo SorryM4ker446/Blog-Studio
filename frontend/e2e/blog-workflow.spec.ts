@@ -8,7 +8,7 @@ import {
 test("administrator can draft, publish, and log out", async ({ page, request }) => {
   const postTitle = `E2E workflow ${Date.now()}`;
 
-  await page.goto("/login");
+  await page.goto("/login?redirect=/settings");
   await page.getByPlaceholder("Username").fill(E2E_ADMIN_USER);
   await page.getByPlaceholder("Password").fill(E2E_ADMIN_PASS);
   await page.getByRole("button", { name: "Next" }).click();
@@ -43,7 +43,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   await page.goto("/settings");
   await page.getByRole("button", { name: "Log Out Securely" }).click();
   await page.getByRole("button", { name: "Log Out", exact: true }).click();
-  await expect(page).toHaveURL(/\/login(?:\?redirect=(?:%2F|\/)settings)?$/);
+  await expect(page).toHaveURL("/");
 
   await page.goto("/editor");
   await expect(page).toHaveURL(/\/login\?redirect=%2Feditor|\/login\?redirect=\/editor/);

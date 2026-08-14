@@ -46,7 +46,7 @@ Run the E2E workflow:
 npm run test:e2e
 ```
 
-Playwright starts isolated backend and frontend servers on ports `18080` and `3100`. The test covers the HttpOnly Cookie login flow, CSRF-protected mutations, draft creation, public draft isolation, publishing, public visibility, server-side logout invalidation, and protected-editor redirection.
+Playwright starts isolated backend and frontend servers on ports `18080` and `3100`. The test covers the HttpOnly Cookie login flow, login-to-home navigation, CSRF-protected mutations, draft creation, public draft isolation, publishing, public visibility, logout-to-home navigation, server-side logout invalidation, and protected-editor redirection.
 
 On failure, inspect `frontend/test-results` or open the saved trace:
 

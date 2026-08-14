@@ -1,22 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { loginUser } from "@/lib/api";
 import { KeyIcon, AlertIcon } from "@/components/Icons";
 
 function LoginPageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
-  const redirectTarget = searchParams.get("redirect");
-  const safeRedirect = redirectTarget && redirectTarget.startsWith("/") ? redirectTarget : "/";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +23,7 @@ function LoginPageContent() {
     try {
       const user = await loginUser(username, password);
       login(user);
-      router.replace(safeRedirect);
+      router.replace("/");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -204,9 +201,5 @@ function LoginPageContent() {
 }
 
 export default function LoginPage() {
-  return (
-    <Suspense fallback={<div className="skeleton-pulse" style={{ height: "60vh", borderRadius: "24px" }} />}>
-      <LoginPageContent />
-    </Suspense>
-  );
+  return <LoginPageContent />;
 }

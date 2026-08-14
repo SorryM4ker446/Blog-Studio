@@ -29,10 +29,11 @@ export default function SettingsPage() {
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const settingsRequestIdRef = useRef(0);
+  const logoutInProgressRef = useRef(false);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isLoading && !user && !logoutInProgressRef.current) {
       router.push("/login?redirect=/settings");
     }
   }, [user, isLoading, router]);
@@ -117,10 +118,16 @@ export default function SettingsPage() {
       setPassMsg("✅ Password updated. Please sign in again.");
       setCurrentPass("");
       setNewPass("");
-      await logout();
+      await handleLogout();
     } else {
       setPassMsg(`❌ ${res.error || "Failed to update."}`);
     }
+  }
+
+  async function handleLogout() {
+    logoutInProgressRef.current = true;
+    setShowLogoutModal(false);
+    await logout();
   }
 
   const avatarFailed = !!profileAvatar && failedAvatarUrl === profileAvatar;
@@ -436,8 +443,7 @@ export default function SettingsPage() {
       <ConfirmModal
         isOpen={showLogoutModal}
         onConfirm={() => {
-          setShowLogoutModal(false);
-          void logout();
+          void handleLogout();
         }}
         onCancel={() => setShowLogoutModal(false)}
         title="Confirm Logout"
