@@ -21,9 +21,23 @@ import (
 const routeTestPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
 func performFileUpload(t *testing.T, router http.Handler, filename string, content []byte, auth *requestAuth, system bool) *httptest.ResponseRecorder {
+	return performFileUploadWithMetadata(t, router, filename, content, "", "", auth, system)
+}
+
+func performFileUploadWithMetadata(t *testing.T, router http.Handler, filename string, content []byte, displayName, description string, auth *requestAuth, system bool) *httptest.ResponseRecorder {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
+	if displayName != "" {
+		if err := writer.WriteField("display_name", displayName); err != nil {
+			t.Fatalf("write display name: %v", err)
+		}
+	}
+	if description != "" {
+		if err := writer.WriteField("description", description); err != nil {
+			t.Fatalf("write description: %v", err)
+		}
+	}
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
 		t.Fatalf("create multipart file: %v", err)
@@ -77,6 +91,9 @@ func TestFileUploadStorageAndServingSecurity(t *testing.T) {
 	if _, exposed := response["name"]; exposed {
 		t.Fatal("upload response exposed the storage key")
 	}
+	if response["display_name"] != "avatar.png" || response["description"] != "" {
+		t.Fatalf("default upload metadata = %#v", response)
+	}
 	fileID := uint(response["id"].(float64))
 	var record models.File
 	if err := db.First(&record, fileID).Error; err != nil {
@@ -101,13 +118,68 @@ func TestFileUploadStorageAndServingSecurity(t *testing.T) {
 		t.Fatalf("download response status=%d headers=%v", download.Code, download.Header())
 	}
 
-	textUpload := performFileUpload(t, router, "notes.txt", []byte("safe notes"), auth, false)
+	textUpload := performFileUploadWithMetadata(t, router, "notes.txt", []byte("safe notes"), "Release notes", "Public launch documentation", auth, false)
 	if textUpload.Code != http.StatusCreated {
 		t.Fatalf("text upload status = %d; body=%s", textUpload.Code, textUpload.Body.String())
 	}
 	var textRecord models.File
 	if err := json.Unmarshal(textUpload.Body.Bytes(), &textRecord); err != nil {
 		t.Fatalf("decode text upload: %v", err)
+	}
+	if textRecord.DisplayName != "Release notes" || textRecord.Description != "Public launch documentation" || textRecord.OrigName != "notes.txt" {
+		t.Fatalf("uploaded metadata = %#v", textRecord)
+	}
+	publicDisplayNameSearch := performJSONRequest(t, router, http.MethodGet, "/api/search?q=release%20notes&scope=files", nil, nil, false)
+	if publicDisplayNameSearch.Code != http.StatusOK || !strings.Contains(publicDisplayNameSearch.Body.String(), `"display_name":"Release notes"`) {
+		t.Fatalf("public display-name search status=%d body=%s", publicDisplayNameSearch.Code, publicDisplayNameSearch.Body.String())
+	}
+	for _, path := range []string{
+		"/api/search?q=launch%20documentation&scope=files",
+		"/api/search?q=notes.txt&scope=files",
+	} {
+		search := performJSONRequest(t, router, http.MethodGet, path, nil, nil, false)
+		if search.Code != http.StatusOK || strings.Contains(search.Body.String(), `"display_name":"Release notes"`) {
+			t.Fatalf("public file search leaked description or superseded original name: path=%s status=%d body=%s", path, search.Code, search.Body.String())
+		}
+	}
+	adminDescriptionSearch := performJSONRequest(t, router, http.MethodGet, "/api/admin/search?q=launch%20documentation&scope=files&include_system=false", nil, auth, false)
+	if adminDescriptionSearch.Code != http.StatusOK || !strings.Contains(adminDescriptionSearch.Body.String(), `"display_name":"Release notes"`) {
+		t.Fatalf("admin description search status=%d body=%s", adminDescriptionSearch.Code, adminDescriptionSearch.Body.String())
+	}
+	adminOriginalNameSearch := performJSONRequest(t, router, http.MethodGet, "/api/admin/search?q=notes.txt&scope=files&include_system=false", nil, auth, false)
+	if adminOriginalNameSearch.Code != http.StatusOK || strings.Contains(adminOriginalNameSearch.Body.String(), `"display_name":"Release notes"`) {
+		t.Fatalf("admin search matched superseded original name: status=%d body=%s", adminOriginalNameSearch.Code, adminOriginalNameSearch.Body.String())
+	}
+	fallbackNameUpload := performFileUpload(t, router, "fallback-search.txt", []byte("plain fallback content"), auth, false)
+	if fallbackNameUpload.Code != http.StatusCreated {
+		t.Fatalf("fallback-name upload status=%d body=%s", fallbackNameUpload.Code, fallbackNameUpload.Body.String())
+	}
+	fallbackNameSearch := performJSONRequest(t, router, http.MethodGet, "/api/search?q=fallback-search&scope=files", nil, nil, false)
+	if fallbackNameSearch.Code != http.StatusOK || !strings.Contains(fallbackNameSearch.Body.String(), `"display_name":"fallback-search.txt"`) {
+		t.Fatalf("default original-name search status=%d body=%s", fallbackNameSearch.Code, fallbackNameSearch.Body.String())
+	}
+	invalidUpdate := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/files/%d", textRecord.ID), map[string]any{
+		"display_name": "   ",
+		"description":  "invalid",
+	}, auth, true)
+	requireAPIError(t, invalidUpdate.Code, invalidUpdate.Body.Bytes(), http.StatusBadRequest, "invalid_display_name")
+	longDescription := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/files/%d", textRecord.ID), map[string]any{
+		"display_name": "Valid name",
+		"description":  strings.Repeat("x", 501),
+	}, auth, true)
+	requireAPIError(t, longDescription.Code, longDescription.Body.Bytes(), http.StatusBadRequest, "invalid_description")
+	updated := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/files/%d", textRecord.ID), map[string]any{
+		"display_name": "Updated release notes",
+		"description":  "A concise public description",
+	}, auth, true)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("update metadata status=%d body=%s", updated.Code, updated.Body.String())
+	}
+	if err := json.Unmarshal(updated.Body.Bytes(), &textRecord); err != nil {
+		t.Fatalf("decode updated file: %v", err)
+	}
+	if textRecord.DisplayName != "Updated release notes" || textRecord.Description != "A concise public description" || textRecord.OrigName != "notes.txt" {
+		t.Fatalf("updated metadata = %#v", textRecord)
 	}
 	textView := performJSONRequest(t, router, http.MethodGet, fmt.Sprintf("/api/files/%d/view", textRecord.ID), nil, nil, false)
 	if !strings.HasPrefix(textView.Header().Get("Content-Disposition"), "attachment") {
@@ -173,7 +245,7 @@ func TestFileStorageHealthAndPathConfinement(t *testing.T) {
 	if err := os.WriteFile(outsidePath, []byte("must remain private"), 0o600); err != nil {
 		t.Fatalf("write outside content: %v", err)
 	}
-	missing := models.File{Name: "../outside.txt", OrigName: "outside.txt", Path: outsidePath, Size: 19, MimeType: "text/plain"}
+	missing := models.File{Name: "../outside.txt", OrigName: "outside.txt", DisplayName: "Outside file", Path: outsidePath, Size: 19, MimeType: "text/plain"}
 	if err := db.Create(&missing).Error; err != nil {
 		t.Fatalf("create unsafe legacy record: %v", err)
 	}

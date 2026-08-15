@@ -37,14 +37,16 @@ type Post struct {
 }
 
 type File struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	Name      string    `gorm:"not null;size:255;uniqueIndex:ux_files_name" json:"-"`
-	OrigName  string    `gorm:"not null;size:255" json:"orig_name"`
-	Path      string    `gorm:"not null;size:500" json:"-"`
-	Size      int64     `gorm:"not null;default:0" json:"size"`
-	MimeType  string    `gorm:"size:100" json:"mime_type"`
-	IsSystem  bool      `gorm:"not null;default:false;index:idx_files_system_created_at,priority:1" json:"is_system"`
-	CreatedAt time.Time `gorm:"index:idx_files_system_created_at,priority:2,sort:desc" json:"created_at"`
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	Name        string    `gorm:"not null;size:255;uniqueIndex:ux_files_name" json:"-"`
+	OrigName    string    `gorm:"not null;size:255" json:"orig_name"`
+	DisplayName string    `gorm:"not null;size:255;default:''" json:"display_name"`
+	Description string    `gorm:"not null;size:500;default:''" json:"description"`
+	Path        string    `gorm:"not null;size:500" json:"-"`
+	Size        int64     `gorm:"not null;default:0" json:"size"`
+	MimeType    string    `gorm:"size:100" json:"mime_type"`
+	IsSystem    bool      `gorm:"not null;default:false;index:idx_files_system_created_at,priority:1" json:"is_system"`
+	CreatedAt   time.Time `gorm:"index:idx_files_system_created_at,priority:2,sort:desc" json:"created_at"`
 }
 
 type Setting struct {

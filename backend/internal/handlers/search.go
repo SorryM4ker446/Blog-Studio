@@ -18,7 +18,9 @@ var (
 	urlRegex           = regexp.MustCompile(`https?://[^\s)]+`)
 )
 
-func respondWithSearchResults(c *gin.Context, includeDrafts bool, includeSystem bool) {
+const effectiveFileNameSearch = `COALESCE(NULLIF(BTRIM(display_name), ''), orig_name) ILIKE ? ESCAPE E'\\'`
+
+func respondWithSearchResults(c *gin.Context, adminAccess bool, includeSystem bool) {
 	query, ok := validateSearchQuery(c)
 	if !ok {
 		return
@@ -38,11 +40,11 @@ func respondWithSearchResults(c *gin.Context, includeDrafts bool, includeSystem 
 	var files []models.File
 	if scope == "all" || scope == "posts" {
 		db := config.DB.Joins("LEFT JOIN categories ON categories.id = posts.category_id").Preload("Category")
-		if !includeDrafts {
+		if !adminAccess {
 			db = db.Where("posts.status = ?", "published")
 		}
 		db = db.Where(`(posts.title ILIKE ? ESCAPE E'\\' OR posts.summary ILIKE ? ESCAPE E'\\' OR posts.content ILIKE ? ESCAPE E'\\' OR categories.name ILIKE ? ESCAPE E'\\')`, likeQuery, likeQuery, likeQuery, likeQuery)
-		if includeDrafts {
+		if adminAccess {
 			db = db.Order("posts.updated_at DESC, posts.id DESC")
 		} else {
 			db = db.Order("COALESCE(posts.last_edited_at, posts.published_at) DESC, posts.id DESC")
@@ -55,7 +57,10 @@ func respondWithSearchResults(c *gin.Context, includeDrafts bool, includeSystem 
 		posts = filterPostsByVisibleText(posts, normalizedQuery)
 	}
 	if scope == "all" || scope == "files" {
-		db := config.DB.Where(`orig_name ILIKE ? ESCAPE E'\\'`, likeQuery)
+		db := config.DB.Where(effectiveFileNameSearch, likeQuery)
+		if adminAccess {
+			db = config.DB.Where(`(`+effectiveFileNameSearch+` OR description ILIKE ? ESCAPE E'\\')`, likeQuery, likeQuery)
+		}
 		if !includeSystem {
 			db = db.Where("is_system IS NOT TRUE")
 		}

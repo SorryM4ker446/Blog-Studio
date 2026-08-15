@@ -25,6 +25,17 @@
   --accent-green: #6dd68c;
   --accent-yellow: #fbd284;
   --accent-red: #f28b82;
+  --file-card-bg: #1e1f20;
+  --file-card-hover: #26282a;
+  --file-muted-bg: #282a2c;
+  --file-dialog-bg: #1d1e1f;
+  --file-field-bg: #141516;
+  --file-preview-bg: #111213;
+  --file-preview-grid: rgba(255, 255, 255, 0.025);
+  --file-dialog-overlay: rgba(0, 0, 0, 0.68);
+  --file-dialog-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+  --file-primary-text: #101114;
+  --file-primary-hover: #b8d2fb;
   --post-meta-rail-inset: 0.6rem;
   --post-updated-right-offset: 5rem;
 
@@ -58,6 +69,17 @@
   --accent-green: #1e8e3e;
   --accent-yellow: #f9ab00;
   --accent-red: #d93025;
+  --file-card-bg: #ffffff;
+  --file-card-hover: #f7f8f9;
+  --file-muted-bg: #f3f4f5;
+  --file-dialog-bg: #ffffff;
+  --file-field-bg: #ffffff;
+  --file-preview-bg: #f6f7f8;
+  --file-preview-grid: rgba(0, 0, 0, 0.035);
+  --file-dialog-overlay: rgba(20, 20, 20, 0.44);
+  --file-dialog-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
+  --file-primary-text: #ffffff;
+  --file-primary-hover: #155fc0;
   --nav-item-hover: rgba(0, 0, 0, 0.05);
 }
 

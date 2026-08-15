@@ -27,6 +27,8 @@ interface Post {
 interface FileRecord {
   id: number;
   orig_name: string;
+  display_name: string;
+  description: string;
   size: number;
   mime_type: string;
   is_system: boolean;
@@ -48,6 +50,13 @@ interface PaginatedResponse<T> {
 
 export type { Category, Post, FileRecord, SearchResult, PaginatedResponse };
 export { API_BASE };
+
+export interface FileMutationResult {
+  ok: boolean;
+  file?: FileRecord;
+  error?: string;
+  code?: string;
+}
 
 export interface AuthUser {
   id: number;
@@ -415,10 +424,16 @@ export async function getAdminFiles(page = 1, limit = 10, includeSystem = true):
   }
 }
 
-export async function uploadFile(file: File, isSystem = false): Promise<FileRecord | null> {
+export async function uploadFileWithMetadata(
+  file: File,
+  metadata: { displayName?: string; description?: string } = {},
+  isSystem = false,
+): Promise<FileMutationResult> {
   try {
     const formData = new FormData();
     formData.append("file", file);
+    if (metadata.displayName) formData.append("display_name", metadata.displayName);
+    if (metadata.description) formData.append("description", metadata.description);
     const url = isSystem ? `${API_BASE}/admin/files?system=true` : `${API_BASE}/admin/files`;
     const res = await fetch(url, {
       method: "POST",
@@ -426,10 +441,48 @@ export async function uploadFile(file: File, isSystem = false): Promise<FileReco
       headers: await getMutationHeaders(true),
       body: formData,
     });
-    if (!res.ok) throw new Error("Upload failed");
-    return await res.json();
+    if (!res.ok) {
+      return { ok: false, ...(await readErrorDetails(res, "Failed to upload file")) };
+    }
+    return { ok: true, file: await res.json() };
   } catch {
-    return null;
+    return { ok: false, error: "Failed to upload file" };
+  }
+}
+
+export async function uploadFile(file: File, isSystem = false): Promise<FileRecord | null> {
+  const result = await uploadFileWithMetadata(file, {}, isSystem);
+  return result.file || null;
+}
+
+export async function updateFileMetadata(
+  id: number,
+  displayName: string,
+  description: string,
+): Promise<FileMutationResult> {
+  try {
+    const res = await fetch(`${API_BASE}/admin/files/${id}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: await getMutationHeaders(),
+      body: JSON.stringify({ display_name: displayName, description }),
+    });
+    if (!res.ok) {
+      if (
+        (res.status === 404 || res.status === 405)
+        && !res.headers.get("content-type")?.includes("application/json")
+      ) {
+        return {
+          ok: false,
+          code: "file_metadata_endpoint_unavailable",
+          error: "File details cannot be updated because the running backend is out of date. Restart the backend and try again.",
+        };
+      }
+      return { ok: false, ...(await readErrorDetails(res, "Failed to update file details")) };
+    }
+    return { ok: true, file: await res.json() };
+  } catch {
+    return { ok: false, error: "Failed to update file details" };
   }
 }
 

@@ -1,0 +1,149 @@
+.card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--file-card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.card:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 55%, var(--border-color));
+  background: var(--file-card-hover);
+}
+
+.previewButton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.previewButton:focus-visible,
+.action:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 3px;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  background: var(--file-muted-bg);
+  border: 1px solid color-mix(in srgb, var(--border-color) 75%, transparent);
+  border-radius: 10px;
+}
+
+.content {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.name {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.description {
+  display: block;
+  max-width: 100%;
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 550;
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.action:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--text-muted) 55%, var(--border-color));
+}
+
+.danger {
+  color: var(--accent-red);
+}
+
+.danger:hover {
+  color: var(--accent-red);
+  background: color-mix(in srgb, var(--accent-red) 11%, transparent);
+  border-color: color-mix(in srgb, var(--accent-red) 34%, var(--border-color));
+}
+
+@media (max-width: 720px) {
+  .card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .previewButton {
+    flex-basis: 100%;
+  }
+
+  .actions {
+    width: 100%;
+    padding-left: 50px;
+  }
+}

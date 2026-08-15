@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, useEffect, Suspense, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getPostTimeline, getPosts, searchResources, getCategories } from "@/lib/api";
 import type { Post } from "@/lib/api";
 import Link from "next/link";
@@ -10,8 +10,10 @@ import Pagination from "@/components/Pagination";
 import { FolderIcon, ClipboardIcon, InboxIcon, FileTextIcon } from "@/components/Icons";
 
 function PostsListContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const categoryId = searchParams.get("category");
+  const searchQuery = searchParams.get("q") || "";
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,24 +48,48 @@ function PostsListContent() {
     setLoading(false);
   }, [categoryId]);
 
-  async function handleSearch(query: string) {
-    if (!query.trim()) {
-      loadPosts(1, categoryId || "");
-      return;
-    }
-
+  const searchPosts = useCallback(async (query: string) => {
     const requestId = ++searchRequestIdRef.current;
+    setLoading(true);
     const res = await searchResources(query, "posts");
     if (requestId !== searchRequestIdRef.current) {
       return;
     }
     setPosts(res.posts || []);
-    setTotalPages(1); // Disable pagination during search
+    setPage(1);
+    setTotalPages(1);
+    if (categoryId) {
+      const cats = await getCategories();
+      if (requestId !== searchRequestIdRef.current) {
+        return;
+      }
+      const category = cats.find((item) => item.id.toString() === categoryId);
+      setCurrentCategoryName(category ? category.name : null);
+    } else {
+      setCurrentCategoryName(null);
+    }
+    setLoading(false);
+  }, [categoryId]);
+
+  function handleSearch(query: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    const normalizedQuery = query.trim();
+    if (normalizedQuery) {
+      params.set("q", normalizedQuery);
+    } else {
+      params.delete("q");
+    }
+    const nextQuery = params.toString();
+    router.push(nextQuery ? `/posts?${nextQuery}` : "/posts");
   }
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      loadPosts(1, categoryId || "");
+      if (searchQuery.trim()) {
+        searchPosts(searchQuery.trim());
+      } else {
+        loadPosts(1, categoryId || "");
+      }
     });
 
     return () => {
@@ -71,7 +97,7 @@ function PostsListContent() {
       postRequestIdRef.current += 1;
       searchRequestIdRef.current += 1;
     };
-  }, [categoryId, loadPosts]);
+  }, [categoryId, loadPosts, searchPosts, searchQuery]);
 
   return (
     <div>
@@ -97,7 +123,13 @@ function PostsListContent() {
             }
           </p>
         </div>
-        <SearchInput placeholder="Search posts..." onSearch={handleSearch} style={{ width: "250px" }} />
+        <SearchInput
+          key={searchQuery}
+          placeholder="Search posts..."
+          onSearch={handleSearch}
+          style={{ width: "250px" }}
+          value={searchQuery}
+        />
       </div>
 
       {loading && posts.length === 0 ? (

@@ -59,6 +59,7 @@ func SetupRouter() *gin.Engine {
 			auth.DELETE("/categories/:id", handlers.DeleteCategory)
 
 			auth.POST("/files", handlers.UploadFile)
+			auth.PUT("/files/:id", handlers.UpdateFile)
 			auth.DELETE("/files/:id", handlers.DeleteFile)
 		}
 	}

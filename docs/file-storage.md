@@ -22,7 +22,19 @@ The server uses file signatures and structured-content detection rather than tru
 - Data and text: TXT, Markdown, CSV, and JSON
 - Archives: ZIP
 
-SVG and HTML documents, script or executable extensions, empty files, unsupported extensions, and extension/content mismatches are rejected. New files receive a cryptographically random storage key; a sanitized original name is retained only for display and download headers.
+SVG and HTML documents, script or executable extensions, empty files, unsupported extensions, and extension/content mismatches are rejected. TXT is intentionally strict: content detected as CSV, JSON, HTML, SVG, XML, or a script must use an appropriate allowed format where one exists and is rejected when disguised with a `.txt` extension. New files receive a cryptographically random storage key; a sanitized original name is retained for download headers and type validation.
+
+## File metadata and previews
+
+Administrators provide a required display name and an optional description during a managed upload. Display names are limited to 255 characters and descriptions to 500 characters. Existing records are migrated with their original filename as the display name.
+
+Display metadata can be changed without renaming the stored object or changing the original download filename:
+
+```text
+PUT /api/admin/files/:id
+```
+
+Public Drive, advanced search, and home-page search match only the effective file name. A custom display name supersedes the original filename; uploads without a custom name use the original filename as their display name. Public search never matches descriptions. Administrator search uses the same effective-name rule and additionally matches descriptions. Selecting a file in Drive, advanced search, or the administrator list opens the same details dialog. Validated images render through the hardened view endpoint; formats that are always served as attachments show metadata and a download action instead of attempting an unsafe inline preview.
 
 ## Serving rules
 

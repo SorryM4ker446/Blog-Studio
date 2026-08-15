@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import type { Post, FileRecord, Category } from "@/lib/api";
@@ -12,8 +12,9 @@ import {
   deletePost,
   getAdminFiles,
   uploadFile,
+  uploadFileWithMetadata,
+  updateFileMetadata,
   deleteFile,
-  getDownloadUrl,
   getFileViewUrl,
   getAdminCategories,
   createCategory,
@@ -23,11 +24,12 @@ import {
 } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
+import FileCard, { EditActionButton } from "@/components/files/FileCard";
+import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
 import { 
   EditIcon, 
   FileTextIcon, 
   FolderIcon, 
-  PaperclipIcon, 
   TrashIcon, 
   InboxIcon, 
   UploadIcon 
@@ -52,6 +54,9 @@ type ViewMode = "list" | "edit";
 export default function EditorPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlTab: TabType = searchParams.get("tab") === "files" ? "files" : "posts";
+  const searchQuery = searchParams.get("q") || "";
   const isMountedRef = useRef(true);
   const categoryRequestIdRef = useRef(0);
   const postRequestIdRef = useRef(0);
@@ -59,7 +64,7 @@ export default function EditorPage() {
   const searchRequestIdRef = useRef(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [activeTab, setActiveTab] = useState<TabType>("posts");
+  const [activeTab, setActiveTab] = useState<TabType>(urlTab);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   
   const [posts, setPosts] = useState<Post[]>([]);
@@ -74,7 +79,9 @@ export default function EditorPage() {
   const [editStatus, setEditStatus] = useState<string>("draft");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
+  const [metadataFile, setMetadataFile] = useState<FileRecord | null>(null);
 
   const [showNewCat, setShowNewCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
@@ -124,11 +131,16 @@ export default function EditorPage() {
 
   useEffect(() => {
     if (user) {
+      setActiveTab(urlTab);
       loadCategories();
-      loadPosts(1);
-      loadFiles(1);
+      if (searchQuery.trim()) {
+        runSearch(searchQuery.trim(), urlTab);
+      } else {
+        loadPosts(1);
+        loadFiles(1);
+      }
     }
-  }, [user]);
+  }, [searchQuery, urlTab, user]);
 
   async function loadCategories() {
     const requestId = ++categoryRequestIdRef.current;
@@ -167,26 +179,51 @@ export default function EditorPage() {
     setFilesLoading(false);
   }
 
-  async function handleSearch(query: string) {
-    if (!query.trim()) {
-      if (activeTab === "posts") loadPosts(1);
-      else loadFiles(1);
-      return;
-    }
-
+  async function runSearch(query: string, tab: TabType) {
     const requestId = ++searchRequestIdRef.current;
-    const res = await searchAdminResources(query, activeTab, false);
+    const res = await searchAdminResources(query, tab, false);
     if (!isMountedRef.current || requestId !== searchRequestIdRef.current) {
       return;
     }
 
-    if (activeTab === "posts") {
+    if (tab === "posts") {
         setPosts(filterPostsByVisibleText(res.posts || [], query));
         setPostTotalPages(1);
     } else {
         setFiles(res.files || []);
         setFileTotalPages(1);
     }
+  }
+
+  function handleSearch(query: string) {
+    const normalizedQuery = query.trim();
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", activeTab);
+    if (normalizedQuery) {
+      params.set("q", normalizedQuery);
+    } else {
+      params.delete("q");
+    }
+    const nextURL = `/editor?${params.toString()}`;
+    if (activeTab === urlTab && normalizedQuery === searchQuery.trim()) {
+      if (normalizedQuery) {
+        runSearch(normalizedQuery, activeTab);
+      } else if (activeTab === "posts") {
+        loadPosts(1);
+      } else {
+        loadFiles(1);
+      }
+      return;
+    }
+    router.push(nextURL);
+  }
+
+  function handleTabChange(tab: TabType) {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    params.delete("q");
+    router.push(`/editor?${params.toString()}`);
   }
 
   function openEditor(post: Post) {
@@ -326,19 +363,24 @@ export default function EditorPage() {
     setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false });
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!e.target.files?.length) return;
-    setUploading(true);
-    const file = e.target.files[0];
-    const res = await uploadFile(file);
-    if (res) {
-        loadFiles(1);
-        notifyUpdate();
-    } else alert("Failed to upload file.");
-    setUploading(false);
-    
-    // reset input
-    e.target.value = '';
+  async function handleManagedFileUpload(file: File, displayName: string, description: string) {
+    const result = await uploadFileWithMetadata(file, { displayName, description });
+    if (result.ok && result.file) {
+      await loadFiles(1);
+      notifyUpdate();
+    }
+    return result;
+  }
+
+  async function handleFileMetadataSave(file: FileRecord, displayName: string, description: string) {
+    const result = await updateFileMetadata(file.id, displayName, description);
+    if (result.ok && result.file) {
+      const updatedFile = result.file;
+      setFiles((current) => current.map((item) => item.id === updatedFile.id ? updatedFile : item));
+      setPreviewFile((current) => current?.id === updatedFile.id ? updatedFile : current);
+      notifyUpdate();
+    }
+    return result;
   }
 
   async function handleImageUpload(file: File): Promise<string> {
@@ -554,12 +596,12 @@ export default function EditorPage() {
             width: "fit-content",
             border: "1px solid var(--border-color)",
           }}>
-            <button style={tabStyle("posts")} onClick={() => setActiveTab("posts")}>
+            <button style={tabStyle("posts")} onClick={() => handleTabChange("posts")}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <FileTextIcon size={18} /> Posts ({postsLoading ? "..." : posts.length})
               </div>
             </button>
-            <button style={tabStyle("files")} onClick={() => setActiveTab("files")}>
+            <button style={tabStyle("files")} onClick={() => handleTabChange("files")}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <FolderIcon size={18} /> Files ({filesLoading ? "..." : files.length})
               </div>
@@ -568,9 +610,11 @@ export default function EditorPage() {
 
           <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
               <SearchInput 
+                  key={`${activeTab}:${searchQuery}`}
                   placeholder={`Search ${activeTab}...`} 
                   onSearch={handleSearch} 
-                  style={{ width: "220px" }} 
+                  style={{ width: "220px" }}
+                  value={searchQuery}
               />
               {activeTab === "posts" && (
                 <button
@@ -592,7 +636,9 @@ export default function EditorPage() {
               )}
 
               {activeTab === "files" && (
-                  <label
+                  <button
+                    type="button"
+                    onClick={() => setUploadDialogOpen(true)}
                     style={{
                       background: "var(--accent-blue)",
                       color: "#fff",
@@ -601,8 +647,7 @@ export default function EditorPage() {
                       padding: "10px 20px",
                       fontSize: "0.95rem",
                       fontWeight: 600,
-                      cursor: uploading ? "not-allowed" : "pointer",
-                      opacity: uploading ? 0.7 : 1,
+                      cursor: "pointer",
                       boxShadow: "0 4px 12px rgba(168, 199, 250, 0.2)",
                       display: "inline-flex",
                       alignItems: "center",
@@ -611,19 +656,10 @@ export default function EditorPage() {
                       boxSizing: "border-box",
                     }}
                   >
-                      {uploading ? "Uploading..." : (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <UploadIcon size={16} /> Upload File
-                        </div>
-                      )}
-                      <input
-                        type="file"
-                        accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv,.json,.zip,.doc,.xls,.ppt,.docx,.xlsx,.pptx"
-                        style={{ display: "none" }}
-                        onChange={handleFileUpload}
-                        disabled={uploading}
-                      />
-                  </label>
+                    <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <UploadIcon size={16} /> Upload File
+                    </span>
+                  </button>
               )}
           </div>
       </div>
@@ -766,101 +802,20 @@ export default function EditorPage() {
                     {post.category_id == null ? "无标签" : post.category?.name || "Uncategorized"}
                   </span>
                 </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); openEditor(post); }}
-                  style={{
-                    background: "var(--accent-blue)",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "6px 16px",
-                    fontSize: "0.85rem",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    transition: "opacity 0.2s",
-                  }}
-                >
-                  Edit
-                </button>
+                <EditActionButton onClick={(event) => { event.stopPropagation(); openEditor(post); }} />
               </div>
             </div>
           ))}
 
         {activeTab === "files" &&
           files.map((file) => (
-            <div
+            <FileCard
               key={file.id}
-              className="ai-card"
-              style={{
-                padding: "1.2rem 1.5rem",
-                flexDirection: "row",
-                alignItems: "center",
-              }}
-            >
-              <div
-                className="card-icon"
-                style={{
-                  backgroundColor: "rgba(168, 199, 250, 0.1)",
-                  marginRight: "1.2rem",
-                }}
-              >
-                <PaperclipIcon size={18} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h4
-                  style={{
-                    margin: 0,
-                    fontWeight: 500,
-                    fontSize: "1rem",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {file.orig_name}
-                </h4>
-                <div
-                  style={{
-                    fontSize: "0.78rem",
-                    color: "var(--text-muted)",
-                    marginTop: "0.2rem",
-                  }}
-                >
-                  {(file.size / 1024).toFixed(1)} KB •{" "}
-                  {new Date(file.created_at).toLocaleDateString()}
-                </div>
-              </div>
-              <a 
-                href={getDownloadUrl(file.id)}
-                download
-                style={{
-                    background: "rgba(109, 214, 140, 0.12)",
-                    color: "var(--accent-green)",
-                    padding: "4px 12px",
-                    borderRadius: "6px",
-                    fontSize: "0.82rem",
-                    textDecoration: "none",
-                    marginRight: "1rem",
-                    transition: "opacity 0.2s",
-                }}>
-                  Download
-              </a>
-              <button
-                onClick={() => handleDeleteFile(file.id)}
-                style={{
-                  background: "rgba(242, 139, 130, 0.12)",
-                  color: "var(--accent-red)",
-                  border: "none",
-                  borderRadius: "6px",
-                  padding: "6px 12px",
-                  cursor: "pointer",
-                  fontSize: "0.8rem",
-                  flexShrink: 0,
-                }}
-              >
-                Delete
-              </button>
-            </div>
+              file={file}
+              onPreview={setPreviewFile}
+              onEdit={setMetadataFile}
+              onDelete={(item) => handleDeleteFile(item.id)}
+            />
           ))}
       </div>
 
@@ -1204,6 +1159,30 @@ export default function EditorPage() {
   return (
     <>
       {viewMode === "list" ? renderListView() : renderEditView()}
+
+      {uploadDialogOpen && (
+        <FileUploadDialog
+          open
+          onClose={() => setUploadDialogOpen(false)}
+          onUpload={handleManagedFileUpload}
+        />
+      )}
+      <FilePreviewDialog
+        file={previewFile}
+        onClose={() => setPreviewFile(null)}
+        onEdit={(file) => {
+          setPreviewFile(null);
+          setMetadataFile(file);
+        }}
+      />
+      {metadataFile && (
+        <FileEditDialog
+          key={metadataFile.id}
+          file={metadataFile}
+          onClose={() => setMetadataFile(null)}
+          onSave={handleFileMetadataSave}
+        />
+      )}
 
       {/* 美化的删除确认弹窗 - 全局渲染，不受 viewMode 影响 */}
       {deleteModal.isOpen && (
