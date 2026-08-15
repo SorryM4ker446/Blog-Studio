@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-const minimumJWTSecretLength = 32
+const (
+	minimumJWTSecretLength = 32
+	defaultMaxUploadBytes  = int64(10 * 1024 * 1024)
+	maximumMaxUploadBytes  = int64(100 * 1024 * 1024)
+)
 
 // AppConfig contains the process-wide configuration required by the server.
 // Secrets must be supplied through the environment and never fall back to
@@ -22,6 +27,8 @@ type AppConfig struct {
 	Environment    string
 	AllowedOrigins []string
 	CookieSecure   bool
+	MaxUploadBytes int64
+	UploadDir      string
 }
 
 var (
@@ -77,6 +84,32 @@ func LoadFromEnv() (AppConfig, error) {
 		return AppConfig{}, errors.New("COOKIE_SECURE must be true in production")
 	}
 
+	maxUploadBytes := defaultMaxUploadBytes
+	if raw := strings.TrimSpace(os.Getenv("MAX_UPLOAD_BYTES")); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 || parsed > maximumMaxUploadBytes {
+			return AppConfig{}, fmt.Errorf("MAX_UPLOAD_BYTES must be an integer from 1 through %d", maximumMaxUploadBytes)
+		}
+		maxUploadBytes = parsed
+	}
+	uploadDir := strings.TrimSpace(os.Getenv("UPLOAD_DIR"))
+	if uploadDir == "" {
+		uploadDir = "uploads"
+	}
+	uploadDir, err = filepath.Abs(uploadDir)
+	if err != nil {
+		return AppConfig{}, fmt.Errorf("UPLOAD_DIR must resolve to a valid filesystem path: %w", err)
+	}
+	volumeRoot := filepath.Clean(filepath.VolumeName(uploadDir) + string(filepath.Separator))
+	if filepath.Clean(uploadDir) == volumeRoot {
+		return AppConfig{}, errors.New("UPLOAD_DIR must not be a filesystem root")
+	}
+	if info, statErr := os.Stat(uploadDir); statErr == nil && !info.IsDir() {
+		return AppConfig{}, errors.New("UPLOAD_DIR must be a directory")
+	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return AppConfig{}, fmt.Errorf("UPLOAD_DIR cannot be inspected: %w", statErr)
+	}
+
 	cfg := AppConfig{
 		DatabaseDSN:    databaseDSN,
 		JWTSecret:      []byte(jwtSecret),
@@ -84,6 +117,8 @@ func LoadFromEnv() (AppConfig, error) {
 		Environment:    environment,
 		AllowedOrigins: allowedOrigins,
 		CookieSecure:   cookieSecure,
+		MaxUploadBytes: maxUploadBytes,
+		UploadDir:      filepath.Clean(uploadDir),
 	}
 
 	configMu.Lock()

@@ -38,7 +38,7 @@ Production deployments should run one application migration process at a time. A
 - An upload removes the newly written disk file if its database record cannot be created.
 - File deletion first moves disk content to a quarantine name. A failed database delete restores it; a successful delete removes the quarantined content.
 
-File-type, file-size, path, and content validation will be addressed as part of file storage hardening.
+File-type, file-size, path, content, serving, and reconciliation rules are documented in [`file-storage.md`](file-storage.md).
 
 ## API validation and responses
 

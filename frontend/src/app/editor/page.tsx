@@ -96,6 +96,9 @@ export default function EditorPage() {
     id: number | null;
     isDeleting: boolean;
   }>({ isOpen: false, type: "post", id: null, isDeleting: false });
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteErrorCode, setDeleteErrorCode] = useState("");
+  const deleteIsBlocked = deleteErrorCode === "file_in_use";
 
 
   useEffect(() => {
@@ -278,15 +281,19 @@ export default function EditorPage() {
   }
 
   function handleDeletePost(id: number) {
+    setDeleteError("");
+    setDeleteErrorCode("");
     setDeleteModal({ isOpen: true, type: "post", id, isDeleting: false });
   }
 
   function handleDeleteFile(id: number) {
+    setDeleteError("");
+    setDeleteErrorCode("");
     setDeleteModal({ isOpen: true, type: "file", id, isDeleting: false });
   }
 
   async function executeDelete() {
-    if (!deleteModal.id) return;
+    if (!deleteModal.id || deleteModal.isDeleting || deleteIsBlocked) return;
     setDeleteModal(prev => ({ ...prev, isDeleting: true }));
     
     if (deleteModal.type === "post") {
@@ -297,7 +304,13 @@ export default function EditorPage() {
       }
       await loadPosts(postPage);
     } else if (deleteModal.type === "file") {
-      await deleteFile(deleteModal.id);
+      const result = await deleteFile(deleteModal.id);
+      if (!result.ok) {
+        setDeleteError(result.error || "Failed to delete file");
+        setDeleteErrorCode(result.code || "");
+        setDeleteModal(prev => ({ ...prev, isDeleting: false }));
+        return;
+      }
       await loadFiles(filePage);
     } else if (deleteModal.type === "category") {
       const { deleteCategory } = await import("@/lib/api");
@@ -308,6 +321,8 @@ export default function EditorPage() {
     }
     
     notifyUpdate();
+    setDeleteError("");
+    setDeleteErrorCode("");
     setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false });
   }
 
@@ -601,7 +616,13 @@ export default function EditorPage() {
                           <UploadIcon size={16} /> Upload File
                         </div>
                       )}
-                      <input type="file" style={{ display: "none" }} onChange={handleFileUpload} disabled={uploading}/>
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv,.json,.zip,.doc,.xls,.ppt,.docx,.xlsx,.pptx"
+                        style={{ display: "none" }}
+                        onChange={handleFileUpload}
+                        disabled={uploading}
+                      />
                   </label>
               )}
           </div>
@@ -1059,6 +1080,8 @@ export default function EditorPage() {
                       notifyUpdate();
                   }}
                   onDelete={(id) => {
+                      setDeleteError("");
+                      setDeleteErrorCode("");
                       setDeleteModal({ isOpen: true, type: "category", id, isDeleting: false });
                   }}
                   options={[
@@ -1239,7 +1262,11 @@ export default function EditorPage() {
             </p>
             <div style={{ display: "flex", gap: "1rem" }}>
               <button
-                onClick={() => setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false })}
+                onClick={() => {
+                  setDeleteError("");
+                  setDeleteErrorCode("");
+                  setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false });
+                }}
                 disabled={deleteModal.isDeleting}
                 style={{
                   flex: 1,
@@ -1257,7 +1284,8 @@ export default function EditorPage() {
               </button>
               <button
                 onClick={executeDelete}
-                disabled={deleteModal.isDeleting}
+                disabled={deleteModal.isDeleting || deleteIsBlocked}
+                aria-describedby={deleteError ? "deletion-error" : undefined}
                 style={{
                   flex: 1,
                   padding: "0.75rem",
@@ -1266,7 +1294,7 @@ export default function EditorPage() {
                   color: "#fff",
                   borderRadius: "10px",
                   fontWeight: 600,
-                  cursor: deleteModal.isDeleting ? "not-allowed" : "pointer",
+                  cursor: deleteModal.isDeleting || deleteIsBlocked ? "not-allowed" : "pointer",
                   opacity: deleteModal.isDeleting ? 0.6 : 1,
                   boxShadow: "0 4px 12px rgba(242, 139, 130, 0.3)",
                 }}
@@ -1274,6 +1302,21 @@ export default function EditorPage() {
                 {deleteModal.isDeleting ? "Deleting..." : "Delete"}
               </button>
             </div>
+            <p
+              id="deletion-error"
+              role="alert"
+              aria-live="polite"
+              style={{
+                color: "var(--accent-red)",
+                fontSize: "0.85rem",
+                lineHeight: 1.25,
+                minHeight: "1.0625rem",
+                margin: "1rem 0 0",
+                visibility: deleteError ? "visible" : "hidden",
+              }}
+            >
+              {deleteError || "No deletion error"}
+            </p>
           </div>
         </div>
       )}

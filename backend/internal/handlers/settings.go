@@ -41,11 +41,17 @@ func GetSettings(c *gin.Context) {
 				} else if dbErr != nil {
 					apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not validate avatar setting")
 					return
-				} else if resolvedPath, resolveErr := resolveStoredFilePath(file.Path, file.Name); resolveErr != nil {
+				} else if store, storeErr := currentFileStore(); storeErr != nil {
+					apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "File storage is unavailable")
+					return
+				} else if storageKey, content, _, openErr := openStoredFile(store, file); openErr != nil {
 					settingsMap["profile_avatar"] = ""
-				} else if resolvedPath != file.Path {
-					if updateErr := config.DB.Model(&file).Update("path", resolvedPath).Error; updateErr != nil {
-						log.Printf("update avatar file path for file %d: %v", file.ID, updateErr)
+				} else {
+					_ = content.Close()
+					if storageKey != file.Path {
+						if updateErr := config.DB.Model(&file).Update("path", storageKey).Error; updateErr != nil {
+							log.Printf("normalize avatar storage key for file %d: %v", file.ID, updateErr)
+						}
 					}
 				}
 			}

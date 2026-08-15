@@ -46,7 +46,7 @@ Run the E2E workflow:
 npm run test:e2e
 ```
 
-Playwright starts isolated backend and frontend servers on ports `18080` and `3100`. The test covers the HttpOnly Cookie login flow, login-to-home navigation, CSRF-protected mutations, draft creation, public draft isolation, publishing, public visibility, logout-to-home navigation, server-side logout invalidation, and protected-editor redirection.
+Playwright starts isolated backend and frontend servers on ports `18080` and `3100`. The browser suite covers the HttpOnly Cookie login flow, login-to-home navigation, CSRF-protected mutations, draft creation, public draft isolation, publishing, public visibility, logout-to-home navigation, server-side logout invalidation, and protected-editor redirection. It also exercises the complete uploaded-image lifecycle: upload a real image, reference it from a published post, verify it renders publicly, keep deletion retryable after a simulated temporary storage failure, verify deletion is blocked and explained while referenced, confirm the `file_in_use` state disables repeated deletion without changing the dialog or reloading the file list, remove the reference, and then delete the file successfully.
 
 On failure, inspect `frontend/test-results` or open the saved trace:
 
@@ -61,3 +61,5 @@ GitHub Actions creates a disposable `blog_db_test` PostgreSQL service. The backe
 The backend integration suite additionally verifies login throttling, password policy, CSRF rejection, session invalidation, JWT signature/algorithm checks, and the production CORS allowlist.
 
 Data integrity integration coverage verifies pagination and search boundaries, stable API error codes, post validation, slug conflict handling, immutable first-publication timestamps, post-publication edit timestamps and effective timeline ordering, category deletion with `ON DELETE SET NULL`, database check/foreign-key constraints, case-insensitive category uniqueness, missing-resource deletes, and atomic settings validation.
+
+File storage coverage verifies server-side content detection, extension/content mismatches, empty and oversized uploads, random storage keys, path confinement, symlink rejection, safe response headers, forced attachment handling, referenced-file deletion protection, deletion compensation, and read-only missing/orphaned content reports.

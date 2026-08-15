@@ -26,11 +26,10 @@ interface Post {
 
 interface FileRecord {
   id: number;
-  name: string;
   orig_name: string;
-  path: string;
   size: number;
   mime_type: string;
+  is_system: boolean;
   created_at: string;
 }
 
@@ -58,13 +57,25 @@ export interface AuthUser {
 
 let csrfToken = "";
 
-async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+interface APIErrorDetails {
+  error: string;
+  code?: string;
+}
+
+async function readErrorDetails(res: Response, fallback: string): Promise<APIErrorDetails> {
   try {
     const data = await res.json();
-    return data?.error || fallback;
+    return {
+      error: data?.error || fallback,
+      code: typeof data?.code === "string" ? data.code : undefined,
+    };
   } catch {
-    return fallback;
+    return { error: fallback };
   }
+}
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  return (await readErrorDetails(res, fallback)).error;
 }
 
 export function getFileViewUrl(fileId: number): string {
@@ -426,16 +437,19 @@ export function getDownloadUrl(fileId: number): string {
   return `${API_BASE}/files/${fileId}/download`;
 }
 
-export async function deleteFile(id: number): Promise<boolean> {
+export async function deleteFile(id: number): Promise<{ ok: boolean; error?: string; code?: string }> {
   try {
     const res = await fetch(`${API_BASE}/admin/files/${id}`, { 
         method: "DELETE",
         credentials: "include",
         headers: await getMutationHeaders(),
     });
-    return res.ok;
+    if (!res.ok) {
+      return { ok: false, ...(await readErrorDetails(res, "Failed to delete file")) };
+    }
+    return { ok: true };
   } catch {
-    return false;
+    return { ok: false, error: "Failed to delete file" };
   }
 }
 

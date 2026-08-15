@@ -5,89 +5,34 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"blog-backend/internal/config"
+	"blog-backend/internal/filestore"
+	"blog-backend/internal/models"
 )
 
-func resolveUploadDir() string {
-	if customDir := strings.TrimSpace(os.Getenv("UPLOAD_DIR")); customDir != "" {
-		if abs, err := filepath.Abs(customDir); err == nil {
-			return abs
-		}
-		return customDir
-	}
-
-	wd, err := os.Getwd()
-	if err != nil {
-		wd = "."
-	}
-
-	candidates := []string{
-		filepath.Join(wd, "uploads"),
-		filepath.Join(wd, "backend", "uploads"),
-		filepath.Join(wd, "Blog-Studio", "backend", "uploads"),
-		filepath.Join(wd, "..", "uploads"),
-		filepath.Join(wd, "..", "backend", "uploads"),
-	}
-
-	for _, candidate := range candidates {
-		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
-			if abs, absErr := filepath.Abs(candidate); absErr == nil {
-				return abs
-			}
-			return candidate
-		}
-	}
-
-	fallback := filepath.Join(wd, "uploads")
-	if abs, absErr := filepath.Abs(fallback); absErr == nil {
-		return abs
-	}
-	return fallback
+func currentFileStore() (filestore.Store, error) {
+	return filestore.NewLocalStore(config.Current().UploadDir)
 }
 
-func resolveStoredFilePath(storedPath, storedName string) (string, error) {
-	candidates := make([]string, 0, 6)
-	addCandidate := func(path string) {
-		if strings.TrimSpace(path) == "" {
-			return
-		}
-		candidates = append(candidates, path)
+func openStoredFile(store filestore.Store, record models.File) (string, *os.File, os.FileInfo, error) {
+	seen := make(map[string]struct{})
+	candidates := []string{strings.TrimSpace(record.Name)}
+	if base := strings.TrimSpace(filepath.Base(record.Path)); base != "" && base != "." && base != string(filepath.Separator) {
+		candidates = append(candidates, base)
 	}
-
-	addCandidate(storedPath)
-	if base := strings.TrimSpace(filepath.Base(storedPath)); base != "" && base != "." && base != string(filepath.Separator) {
-		addCandidate(filepath.Join(uploadDir, base))
-	}
-	if storedName != "" {
-		addCandidate(filepath.Join(uploadDir, storedName))
-	}
-
-	for _, candidate := range candidates {
-		if resolved, ok := resolveCandidatePath(candidate); ok {
-			return resolved, nil
-		}
-	}
-
-	return "", errors.New("file not found on disk")
-}
-
-func resolveCandidatePath(candidate string) (string, bool) {
-	cleaned := filepath.Clean(candidate)
-	possiblePaths := []string{cleaned}
-
-	if !filepath.IsAbs(cleaned) {
-		possiblePaths = append(possiblePaths, filepath.Join(filepath.Dir(uploadDir), cleaned))
-		possiblePaths = append(possiblePaths, filepath.Join(uploadDir, filepath.Base(cleaned)))
-	}
-
-	for _, path := range possiblePaths {
-		absPath, absErr := filepath.Abs(path)
-		if absErr != nil {
+	for _, key := range candidates {
+		if _, duplicate := seen[key]; duplicate {
 			continue
 		}
-		if info, statErr := os.Stat(absPath); statErr == nil && !info.IsDir() {
-			return absPath, true
+		seen[key] = struct{}{}
+		content, info, err := store.Open(key)
+		if err == nil {
+			return key, content, info, nil
+		}
+		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, filestore.ErrInvalidStorageKey) {
+			continue
 		}
 	}
-
-	return "", false
+	return "", nil, nil, os.ErrNotExist
 }
