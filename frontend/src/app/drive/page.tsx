@@ -1,27 +1,28 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { FileRecord } from "@/lib/api";
-import { getFiles, getDownloadUrl, searchResources } from "@/lib/api";
+import { getFiles, searchResources } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
-import { CloudIcon, FolderIcon, PaperclipIcon, DownloadIcon } from "@/components/Icons";
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
+import { CloudIcon, FolderIcon } from "@/components/Icons";
+import FileCard from "@/components/files/FileCard";
+import { FilePreviewDialog } from "@/components/files/FileDialogs";
 
 export default function DrivePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get("q") || "";
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const fileRequestIdRef = useRef(0);
   const searchRequestIdRef = useRef(0);
 
-  async function loadFiles(pageToLoad: number) {
+  const loadFiles = useCallback(async (pageToLoad: number) => {
     const requestId = ++fileRequestIdRef.current;
     setLoading(true);
     const result = await getFiles(pageToLoad, 10);
@@ -32,26 +33,42 @@ export default function DrivePage() {
     setPage(result.page);
     setTotalPages(Math.ceil(result.total / result.limit));
     setLoading(false);
-  }
+  }, []);
 
-  async function handleSearch(query: string) {
-    if (!query.trim()) {
-      loadFiles(1);
-      return;
-    }
-
+  const searchFiles = useCallback(async (query: string) => {
     const requestId = ++searchRequestIdRef.current;
+    setLoading(true);
     const res = await searchResources(query, "files");
     if (requestId !== searchRequestIdRef.current) {
       return;
     }
     setFiles(res.files || []);
-    setTotalPages(1); // Disable pagination during search
+    setPage(1);
+    setTotalPages(1);
+    setLoading(false);
+  }, []);
+
+  function handleSearch(query: string) {
+    const normalizedQuery = query.trim();
+    if (normalizedQuery === searchQuery.trim()) {
+      if (normalizedQuery) {
+        searchFiles(normalizedQuery);
+      } else {
+        loadFiles(1);
+      }
+      return;
+    }
+    router.push(normalizedQuery ? `/drive?q=${encodeURIComponent(normalizedQuery)}` : "/drive");
   }
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      loadFiles(1);
+      setPreviewFile(null);
+      if (searchQuery.trim()) {
+        searchFiles(searchQuery.trim());
+      } else {
+        loadFiles(1);
+      }
     });
 
     return () => {
@@ -59,7 +76,7 @@ export default function DrivePage() {
       fileRequestIdRef.current += 1;
       searchRequestIdRef.current += 1;
     };
-  }, []);
+  }, [loadFiles, searchFiles, searchQuery]);
 
   return (
     <div>
@@ -72,7 +89,13 @@ export default function DrivePage() {
             Browse and download available resources. Admin operations are moved to Editor section.
           </p>
         </div>
-        <SearchInput placeholder="Search files..." onSearch={handleSearch} style={{ width: "250px" }} />
+        <SearchInput
+          key={searchQuery}
+          placeholder="Search files..."
+          onSearch={handleSearch}
+          style={{ width: "250px" }}
+          value={searchQuery}
+        />
       </div>
 
       {/* 文件列表 */}
@@ -99,73 +122,9 @@ export default function DrivePage() {
           No files uploaded yet.
         </div>
       ) : (
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
-        >
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
           {files.map((file) => (
-            <div
-              key={file.id}
-              className="ai-card"
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                padding: "1rem 1.5rem",
-              }}
-            >
-              <div
-                className="card-icon"
-                style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.05)",
-                  color: "var(--text-secondary)",
-                  marginRight: "1.2rem",
-                  flexShrink: 0,
-                }}
-              >
-                <PaperclipIcon size={18} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h4
-                  style={{
-                    margin: 0,
-                    fontWeight: 500,
-                    fontSize: "1rem",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {file.orig_name}
-                </h4>
-                <div
-                  style={{
-                    fontSize: "0.78rem",
-                    color: "var(--text-muted)",
-                    marginTop: "0.2rem",
-                  }}
-                >
-                  {formatSize(file.size)} • {file.mime_type} •{" "}
-                  {new Date(file.created_at).toLocaleDateString()}
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-                <a
-                  href={getDownloadUrl(file.id)}
-                  style={{
-                    background: "rgba(109, 214, 140, 0.12)",
-                    color: "var(--accent-green)",
-                    padding: "4px 12px",
-                    borderRadius: "6px",
-                    fontSize: "0.82rem",
-                    textDecoration: "none",
-                    transition: "opacity 0.2s",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <DownloadIcon size={14} /> Download
-                  </div>
-                </a>
-              </div>
-            </div>
+            <FileCard key={file.id} file={file} onPreview={setPreviewFile} showDescription={false} />
           ))}
         </div>
       )}
@@ -178,6 +137,8 @@ export default function DrivePage() {
           onPageChange={(p) => loadFiles(p)} 
         />
       )}
+
+      <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 }

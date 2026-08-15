@@ -25,9 +25,14 @@ func TestDetectAllowedTypeUsesContentAndExtension(t *testing.T) {
 	}{
 		{name: "PNG", filename: "avatar.png", content: png, wantMIME: "image/png"},
 		{name: "Markdown", filename: "notes.md", content: []byte("# Safe notes\n"), wantMIME: "text/markdown; charset=utf-8"},
+		{name: "Windows UTF-16LE TXT", filename: "notepad.txt", content: []byte{0xff, 0xfe, 'H', 0x00, 'e', 0x00, 'l', 0x00, 'l', 0x00, 'o', 0x00}, wantMIME: "text/plain; charset=utf-8"},
+		{name: "CSV disguised as TXT", filename: "table.txt", content: []byte("name,role\nAlice,admin\nBob,editor\n"), wantErr: ErrContentTypeMismatch},
+		{name: "JSON disguised as TXT", filename: "payload.txt", content: []byte(`{"safe":"text document"}`), wantErr: ErrContentTypeMismatch},
 		{name: "PDF", filename: "guide.pdf", content: []byte("%PDF-1.7\n% fixture"), wantMIME: "application/pdf"},
 		{name: "unsupported extension", filename: "image.svg", content: []byte("<svg></svg>"), wantErr: ErrUnsupportedType},
 		{name: "HTML disguised as text", filename: "page.txt", content: []byte("<!doctype html><script>alert(1)</script>"), wantErr: ErrContentTypeMismatch},
+		{name: "XML disguised as text", filename: "feed.txt", content: []byte(`<?xml version="1.0"?><rss version="2.0"></rss>`), wantErr: ErrContentTypeMismatch},
+		{name: "script disguised as text", filename: "script.txt", content: []byte("#!/usr/bin/env python3\nprint('unsafe')\n"), wantErr: ErrContentTypeMismatch},
 		{name: "text disguised as image", filename: "fake.png", content: []byte("not an image"), wantErr: ErrContentTypeMismatch},
 	}
 	for _, tt := range tests {

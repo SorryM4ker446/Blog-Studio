@@ -76,6 +76,8 @@ func Migrate(db *gorm.DB) error {
 			 WHERE status IS NULL OR status NOT IN ('draft', 'published')`,
 			`UPDATE posts SET published_at = COALESCE(updated_at, created_at, NOW())
 			 WHERE status = 'published' AND published_at IS NULL`,
+			`UPDATE files SET display_name = orig_name
+			 WHERE display_name IS NULL OR btrim(display_name) = ''`,
 		}
 		for _, statement := range statements {
 			if err := tx.Exec(statement).Error; err != nil {
@@ -112,6 +114,7 @@ func Migrate(db *gorm.DB) error {
 			{"chk_posts_publication_timestamp", "posts", `status <> 'published' OR published_at IS NOT NULL`},
 			{"chk_posts_last_edited_at", "posts", `last_edited_at IS NULL OR (published_at IS NOT NULL AND last_edited_at >= published_at)`},
 			{"chk_files_size_nonnegative", "files", `size >= 0`},
+			{"chk_files_display_name_not_blank", "files", `btrim(display_name) <> ''`},
 			{"chk_settings_key_not_blank", "settings", `btrim(key) <> ''`},
 		}
 		for _, constraint := range constraints {

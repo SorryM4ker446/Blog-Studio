@@ -20,7 +20,16 @@ import (
 	"gorm.io/gorm"
 )
 
-const multipartOverheadAllowance = int64(1024 * 1024)
+const (
+	multipartOverheadAllowance = int64(1024 * 1024)
+	maxFileDisplayNameRunes    = 255
+	maxFileDescriptionRunes    = 500
+)
+
+type updateFileRequest struct {
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+}
 
 type missingFileContent struct {
 	ID       uint   `json:"id"`
@@ -98,6 +107,20 @@ func UploadFile(c *gin.Context) {
 		apiresponse.Error(c, http.StatusBadRequest, "invalid_file_name", "File name is invalid")
 		return
 	}
+	displayName := strings.TrimSpace(c.PostForm("display_name"))
+	if displayName == "" {
+		displayName = originalName
+	}
+	displayName, err = normalizeRequired(displayName, "display_name", maxFileDisplayNameRunes)
+	if err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_display_name", err.Error())
+		return
+	}
+	description := strings.TrimSpace(c.PostForm("description"))
+	if err := validateOptionalLength(description, "description", maxFileDescriptionRunes); err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_description", err.Error())
+		return
+	}
 	fileType, err := filestore.DetectAllowedType(file, originalName)
 	if err != nil {
 		if errors.Is(err, filestore.ErrUnsupportedType) || errors.Is(err, filestore.ErrContentTypeMismatch) {
@@ -134,8 +157,8 @@ func UploadFile(c *gin.Context) {
 	}
 
 	record := models.File{
-		Name: storedName, OrigName: originalName, Path: storedName, Size: written,
-		MimeType: fileType.MIME, IsSystem: isSystem,
+		Name: storedName, OrigName: originalName, DisplayName: displayName, Description: description,
+		Path: storedName, Size: written, MimeType: fileType.MIME, IsSystem: isSystem,
 	}
 	if err := config.DB.Create(&record).Error; err != nil {
 		if removeErr := store.Remove(storedName); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
@@ -145,6 +168,50 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, record)
+}
+
+func UpdateFile(c *gin.Context) {
+	id, ok := parseResourceID(c)
+	if !ok {
+		return
+	}
+	var input updateFileRequest
+	if !bindJSON(c, &input) {
+		return
+	}
+	displayName, err := normalizeRequired(input.DisplayName, "display_name", maxFileDisplayNameRunes)
+	if err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_display_name", err.Error())
+		return
+	}
+	description := strings.TrimSpace(input.Description)
+	if err := validateOptionalLength(description, "description", maxFileDescriptionRunes); err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_description", err.Error())
+		return
+	}
+
+	var record models.File
+	if err := config.DB.First(&record, id).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		apiresponse.Error(c, http.StatusNotFound, "file_not_found", "File not found")
+		return
+	} else if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load file")
+		return
+	}
+	if err := config.DB.Model(&record).Updates(map[string]any{
+		"display_name": displayName,
+		"description":  description,
+	}).Error; err != nil {
+		if isConstraintViolation(err) {
+			apiresponse.Error(c, http.StatusBadRequest, "invalid_file_metadata", "File metadata violates database constraints")
+			return
+		}
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not update file")
+		return
+	}
+	record.DisplayName = displayName
+	record.Description = description
+	c.JSON(http.StatusOK, record)
 }
 
 func DownloadFile(c *gin.Context) {

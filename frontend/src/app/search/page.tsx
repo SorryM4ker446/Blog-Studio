@@ -1,20 +1,21 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import type { Post, FileRecord } from "@/lib/api";
-import { searchResources, getDownloadUrl, filterPostsByVisibleText, getPostTimeline } from "@/lib/api";
+import { searchResources, filterPostsByVisibleText, getPostTimeline } from "@/lib/api";
+import FileCard from "@/components/files/FileCard";
+import { FilePreviewDialog } from "@/components/files/FileDialogs";
 import { 
   SearchIcon, 
   FileTextIcon, 
-  FolderIcon, 
-  PaperclipIcon, 
-  DownloadIcon 
+  FolderIcon
 } from "@/components/Icons";
 
 function SearchContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
@@ -22,6 +23,7 @@ function SearchContent() {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const searchRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
 
@@ -46,6 +48,15 @@ function SearchContent() {
     setSearched(true);
     setLoading(false);
   };
+
+  function submitSearch(value: string) {
+    const normalizedQuery = value.trim();
+    if (normalizedQuery === initialQuery.trim()) {
+      doSearch(normalizedQuery);
+      return;
+    }
+    router.push(normalizedQuery ? `/search?q=${encodeURIComponent(normalizedQuery)}` : "/search");
+  }
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -72,7 +83,7 @@ function SearchContent() {
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") {
-      doSearch(query);
+      submitSearch(query);
     }
   }
 
@@ -119,7 +130,7 @@ function SearchContent() {
           }}
         />
         <button
-          onClick={() => doSearch(query)}
+          onClick={() => submitSearch(query)}
           style={{
             background: "var(--accent-blue)",
             color: "#fff",
@@ -268,63 +279,12 @@ function SearchContent() {
                 }}
               >
                 {files.map((file) => (
-                  <div
+                  <FileCard
                     key={file.id}
-                    className="ai-card"
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      padding: "1rem 1.2rem",
-                    }}
-                  >
-                    <div
-                      className="card-icon"
-                      style={{
-                        backgroundColor: "rgba(109, 214, 140, 0.12)",
-                        color: "var(--accent-green)",
-                        marginRight: "1rem",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <PaperclipIcon size={16} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h4
-                        style={{
-                          margin: 0,
-                          fontWeight: 500,
-                          fontSize: "0.95rem",
-                        }}
-                      >
-                        {file.orig_name}
-                      </h4>
-                      <div
-                        style={{
-                          fontSize: "0.78rem",
-                          color: "var(--text-muted)",
-                          marginTop: "0.2rem",
-                        }}
-                      >
-                        {(file.size / 1024).toFixed(1)} KB • {file.mime_type}
-                      </div>
-                    </div>
-                    <a
-                      href={getDownloadUrl(file.id)}
-                      style={{
-                        background: "rgba(109, 214, 140, 0.12)",
-                        color: "var(--accent-green)",
-                        padding: "4px 12px",
-                        borderRadius: "6px",
-                        fontSize: "0.8rem",
-                        textDecoration: "none",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <DownloadIcon size={14} /> Download
-                      </div>
-                    </a>
-                  </div>
+                    file={file}
+                    onPreview={setPreviewFile}
+                    showDescription={false}
+                  />
                 ))}
               </div>
             )}
@@ -350,6 +310,8 @@ function SearchContent() {
           </div>
         </div>
       )}
+
+      <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 }

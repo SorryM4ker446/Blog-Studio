@@ -58,8 +58,12 @@ test("administrator can publish an uploaded image and safely remove it after ref
   const unique = Date.now();
   const postTitle = `E2E image lifecycle ${unique}`;
   const imageName = `e2e-image-${unique}.png`;
+  const displayName = `Launch image ${unique} with a long display name that must not overlap file actions.png`;
+  const updatedDisplayName = `Updated launch image ${unique} with a long display name that remains safely truncated.png`;
+  const fileDescription = `Public image metadata ${unique}`;
   const imageAlt = `Uploaded image ${unique}`;
 
+  await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/login");
   await page.getByPlaceholder("Username").fill(E2E_ADMIN_USER);
   await page.getByPlaceholder("Password").fill(E2E_ADMIN_PASS);
@@ -68,17 +72,171 @@ test("administrator can publish an uploaded image and safely remove it after ref
 
   await page.goto("/editor");
   await page.getByRole("button", { name: /Files \(/ }).click();
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.getByRole("button", { name: "Upload File" }).click();
+  const uploadDialog = page.getByRole("dialog", { name: "Upload a file" });
+  await expect(page.locator("body")).not.toHaveClass(/theme-light/);
+  await expect(uploadDialog).toHaveCSS("background-color", "rgb(29, 30, 31)");
+  await expect(uploadDialog.getByRole("textbox", { name: /Display name/ })).toHaveCSS(
+    "background-color",
+    "rgb(20, 21, 22)",
+  );
+  await expect(uploadDialog.getByRole("button", { name: "Upload file" })).toHaveCSS(
+    "color",
+    "rgb(16, 17, 20)",
+  );
+  const fileDropzone = uploadDialog.getByRole("button", { name: /Choose a file or drag it here/ });
+  await expect(fileDropzone).toBeFocused();
+  const dropzoneBox = await fileDropzone.boundingBox();
+  const uploadIconBox = await fileDropzone.locator("svg").first().locator("..").boundingBox();
+  expect(dropzoneBox).not.toBeNull();
+  expect(uploadIconBox).not.toBeNull();
+  expect(
+    Math.abs(
+      (uploadIconBox!.x + uploadIconBox!.width / 2)
+      - (dropzoneBox!.x + dropzoneBox!.width / 2),
+    ),
+  ).toBeLessThan(1);
+  await uploadDialog.locator('input[type="file"]').setInputFiles({
     name: imageName,
     mimeType: "image/png",
     buffer: onePixelPNG,
   });
-  await expect(page.getByText(imageName, { exact: true })).toBeVisible();
+  await uploadDialog.getByRole("textbox", { name: /Display name/ }).fill(displayName);
+  await uploadDialog.getByRole("textbox", { name: /Description/ }).fill(fileDescription);
+  await uploadDialog.getByRole("button", { name: "Upload file" }).click();
+  await expect(uploadDialog).toHaveCount(0);
+  await expect(page.getByText(displayName, { exact: true })).toBeVisible();
+  await expect(page.getByText(fileDescription, { exact: true })).toBeVisible();
 
-  let fileCard = page.locator(".ai-card").filter({ hasText: imageName });
+  let fileCard = page.locator("[data-file-id]").filter({ hasText: displayName });
+  await expect(fileCard).toHaveCSS("background-color", "rgb(30, 31, 32)");
+  await expect(fileCard.locator('[data-file-icon="attachment"]')).toBeVisible();
+  const darkCardNameBox = await fileCard.getByText(displayName, { exact: true }).boundingBox();
+  const darkCardEditBox = await fileCard.getByRole("button", { name: "Edit" }).boundingBox();
+  expect(darkCardNameBox).not.toBeNull();
+  expect(darkCardEditBox).not.toBeNull();
+  expect(darkCardNameBox!.x + darkCardNameBox!.width).toBeLessThan(darkCardEditBox!.x);
+
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Dark Mode" }).click();
+  await expect(page.locator("body")).toHaveClass(/theme-light/);
+  await expect(page.getByRole("button", { name: "Light Mode" })).toBeVisible();
+
+  await page.goto("/editor");
+  await page.getByRole("button", { name: /Files \(/ }).click();
+  fileCard = page.locator("[data-file-id]").filter({ hasText: displayName });
+  await expect(fileCard).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  const fileEditPresentation = await fileCard.getByRole("button", { name: "Edit" }).evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      border: style.border,
+      borderRadius: style.borderRadius,
+      color: style.color,
+      height: style.height,
+      padding: style.padding,
+    };
+  });
+  await fileCard.getByRole("button", { name: `Preview ${displayName}` }).click();
+  let previewDialog = page.getByRole("dialog", { name: displayName });
+  await expect(previewDialog).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  const previewImage = previewDialog.getByRole("img", { name: displayName });
+  await expect(previewImage.locator("..")).toHaveCSS("background-color", "rgb(246, 247, 248)");
+  await expect(previewImage).toBeVisible();
+  await expect.poll(async () => previewImage.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  await previewDialog.getByRole("button", { name: "Close dialog" }).click();
+
+  await fileCard.getByRole("button", { name: "Edit" }).click();
+  const editDialog = page.getByRole("dialog", { name: "Edit file details" });
+  const displayNameInput = editDialog.getByRole("textbox", { name: /Display name/ });
+  const saveDetailsButton = editDialog.getByRole("button", { name: "Save changes" });
+  await expect(editDialog).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(displayNameInput).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(saveDetailsButton).toHaveCSS("background-color", "rgb(26, 115, 232)");
+  await expect(saveDetailsButton).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(displayNameInput).toBeFocused();
+  await displayNameInput.fill(updatedDisplayName);
+  await editDialog.getByRole("textbox", { name: /Description/ }).fill(`Updated ${fileDescription}`);
+  await page.route(/\/api\/admin\/files\/\d+$/, async (route) => {
+    await route.fulfill({ status: 404, contentType: "text/plain", body: "404 page not found" });
+  }, { times: 1 });
+  await saveDetailsButton.click();
+  await expect(editDialog.getByRole("alert")).toContainText("running backend is out of date");
+  await expect(saveDetailsButton).toBeEnabled();
+  await saveDetailsButton.click();
+  await expect(editDialog).toHaveCount(0);
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
+
+  fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   const downloadHref = await fileCard.getByRole("link", { name: "Download" }).getAttribute("href");
   expect(downloadHref).toBeTruthy();
   const imageViewURL = downloadHref!.replace(/\/download$/, "/view");
+
+  await page.goto("/drive");
+  const driveSearch = page.getByPlaceholder("Search files...");
+  await driveSearch.fill(imageName);
+  await driveSearch.press("Enter");
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
+  await driveSearch.fill(`Updated ${fileDescription}`);
+  await driveSearch.press("Enter");
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
+  await driveSearch.fill(updatedDisplayName);
+  await driveSearch.press("Enter");
+  const publicFileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
+  await expect(publicFileCard.locator('[data-file-icon="attachment"]')).toBeVisible();
+  await expect(publicFileCard).not.toContainText(`Updated ${fileDescription}`);
+  const publicNameBox = await publicFileCard.getByText(updatedDisplayName, { exact: true }).boundingBox();
+  const publicMetaBox = await publicFileCard.locator("span").filter({ hasText: /image\/png/ }).last().boundingBox();
+  expect(publicNameBox).not.toBeNull();
+  expect(publicMetaBox).not.toBeNull();
+  expect(publicMetaBox!.y).toBeGreaterThan(publicNameBox!.y + publicNameBox!.height);
+  await page.getByRole("button", { name: `Preview ${updatedDisplayName}` }).click();
+  previewDialog = page.getByRole("dialog", { name: updatedDisplayName });
+  await expect(previewDialog.locator("dd").filter({ hasText: `Updated ${fileDescription}` })).toBeVisible();
+  await expect(previewDialog.getByRole("img", { name: updatedDisplayName })).toBeVisible();
+  await previewDialog.getByRole("button", { name: "Close dialog" }).click();
+
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(updatedDisplayName);
+  await page.goto("/");
+  await page.goBack();
+  await expect(page).toHaveURL(/\/drive\?q=/);
+  await expect(page.getByPlaceholder("Search files...")).toHaveValue(updatedDisplayName);
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
+
+  await page.goto("/");
+  await page.locator("#home-search-bar").fill(updatedDisplayName);
+  await page.locator("#home-search-bar").press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=/);
+  const advancedSearchFileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
+  await expect(advancedSearchFileCard).toBeVisible();
+  await expect(advancedSearchFileCard).not.toContainText(`Updated ${fileDescription}`);
+  await advancedSearchFileCard.getByRole("button", { name: `Preview ${updatedDisplayName}` }).click();
+  previewDialog = page.getByRole("dialog", { name: updatedDisplayName });
+  await expect(previewDialog.locator("dd").filter({ hasText: `Updated ${fileDescription}` })).toBeVisible();
+  await previewDialog.getByRole("button", { name: "Close dialog" }).click();
+
+  const advancedSearchInput = page.locator("#search-input");
+  await advancedSearchInput.fill(imageName);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.getByText("Files (0 results)", { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(imageName);
+  await advancedSearchInput.fill(`Updated ${fileDescription}`);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.getByText("Files (0 results)", { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(`Updated ${fileDescription}`);
+
+  await page.goto("/editor");
+  await page.getByRole("button", { name: /Files \(/ }).click();
+  const editorFileSearch = page.getByPlaceholder("Search files...");
+  await editorFileSearch.fill(`Updated ${fileDescription}`);
+  await editorFileSearch.press("Enter");
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
+  await editorFileSearch.fill(imageName);
+  await editorFileSearch.press("Enter");
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
+  await editorFileSearch.fill(updatedDisplayName);
+  await editorFileSearch.press("Enter");
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: /Posts \(/ }).click();
   await page.getByRole("button", { name: "+ New Post" }).click();
@@ -96,10 +254,46 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(publicImage).toBeVisible();
   await expect.poll(async () => publicImage.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
 
+  await page.goto("/");
+  await page.locator("#home-search-bar").fill(updatedDisplayName);
+  await page.locator("#home-search-bar").press("Enter");
+  await expect(page.locator("#search-input")).toHaveValue(updatedDisplayName);
+  await page.locator("#search-input").fill(postTitle);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(postTitle);
+  await page.getByText(postTitle, { exact: true }).click();
+  await page.getByRole("button", { name: "←", exact: true }).click();
+  await expect(page).toHaveURL(/\/search\?q=/);
+  await expect(page.locator("#search-input")).toHaveValue(postTitle);
+  await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
+
+  await page.goto("/posts");
+  const postSearch = page.getByPlaceholder("Search posts...");
+  await postSearch.fill(postTitle);
+  await postSearch.press("Enter");
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(postTitle);
+  await page.getByText(postTitle, { exact: true }).click();
+  await page.getByRole("button", { name: "←", exact: true }).click();
+  await expect(page).toHaveURL(/\/posts\?q=/);
+  await expect(page.getByPlaceholder("Search posts...")).toHaveValue(postTitle);
+  await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
+
+  await page.goto("/editor");
+  const editorPostSearch = page.getByPlaceholder("Search posts...");
+  await editorPostSearch.fill(postTitle);
+  await editorPostSearch.press("Enter");
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(postTitle);
+  await page.getByText(postTitle, { exact: true }).click();
+  await page.getByRole("button", { name: "←", exact: true }).click();
+  await expect(page).toHaveURL(/\/editor\?tab=posts&q=/);
+  await expect(page.getByPlaceholder("Search posts...")).toHaveValue(postTitle);
+  await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
+
   await page.goto("/editor");
   await page.getByRole("button", { name: /Files \(/ }).click();
-  fileCard = page.locator(".ai-card").filter({ hasText: imageName });
+  fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   await expect(fileCard).toBeVisible();
+  await page.waitForLoadState("networkidle");
   let fileListReloads = 0;
   let protectedDeleteRequests = 0;
   page.on("request", (request) => {
@@ -140,7 +334,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   expect(deleteResponse.status()).toBe(409);
   expect(await deleteResponse.json()).toMatchObject({ code: "file_in_use" });
   await expect(deletionPanel.getByRole("alert")).toContainText("referenced by article content or settings");
-  await expect(page.getByText(imageName, { exact: true })).toBeVisible();
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
   expect(fileListReloads).toBe(0);
   expect(protectedDeleteRequests).toBe(2);
 
@@ -156,14 +350,27 @@ test("administrator can publish an uploaded image and safely remove it after ref
 
   await page.getByRole("button", { name: /Posts \(/ }).click();
   const postCard = page.locator(".ai-card").filter({ hasText: postTitle });
-  await postCard.getByRole("button", { name: "Edit" }).click();
+  const postEditButton = postCard.getByRole("button", { name: "Edit" });
+  await expect(postEditButton.locator("svg")).toHaveCount(1);
+  expect(await postEditButton.evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      border: style.border,
+      borderRadius: style.borderRadius,
+      color: style.color,
+      height: style.height,
+      padding: style.padding,
+    };
+  })).toEqual(fileEditPresentation);
+  await postEditButton.click();
   await page.locator(".custom-editor-wrapper textarea").fill("# Image reference removed");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Files \(/ })).toBeVisible();
 
   await page.getByRole("button", { name: /Files \(/ }).click();
-  fileCard = page.locator(".ai-card").filter({ hasText: imageName });
+  fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   await fileCard.getByRole("button", { name: "Delete" }).click();
   deleteResponsePromise = page.waitForResponse(
     (response) => response.request().method() === "DELETE" && /\/api\/admin\/files\/\d+$/.test(response.url()),
@@ -172,5 +379,5 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await deletionPanel.getByRole("button", { name: "Delete", exact: true }).click();
   deleteResponse = await deleteResponsePromise;
   expect(deleteResponse.status()).toBe(200);
-  await expect(page.getByText(imageName, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
 });

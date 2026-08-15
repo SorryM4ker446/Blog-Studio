@@ -6,10 +6,11 @@ interface SearchInputProps {
   placeholder?: string;
   onSearch: (query: string) => Promise<void> | void;
   style?: React.CSSProperties;
+  value?: string;
 }
 
-export default function SearchInput({ placeholder = "Search...", onSearch, style }: SearchInputProps) {
-  const [query, setQuery] = useState("");
+export default function SearchInput({ placeholder = "Search...", onSearch, style, value }: SearchInputProps) {
+  const [query, setQuery] = useState(value || "");
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
