@@ -5,26 +5,26 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"os"
-	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
+	"blog-backend/internal/filestore"
 	"blog-backend/internal/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-var uploadDir = resolveUploadDir()
+const multipartOverheadAllowance = int64(1024 * 1024)
 
-func init() {
-	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
-		panic("Failed to create uploads directory: " + err.Error())
-	}
+type missingFileContent struct {
+	ID       uint   `json:"id"`
+	OrigName string `json:"orig_name"`
 }
 
 func respondWithFiles(c *gin.Context, includeSystem bool) {
@@ -68,42 +68,78 @@ func UploadFile(c *gin.Context) {
 		apiresponse.Error(c, http.StatusBadRequest, "invalid_system", "system must be true or false")
 		return
 	}
+
+	maxUploadBytes := config.Current().MaxUploadBytes
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadBytes+multipartOverheadAllowance)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "missing_file", "No file provided")
+		if isRequestTooLarge(err) {
+			apiresponse.Error(c, http.StatusRequestEntityTooLarge, "file_too_large", "File exceeds the configured upload limit")
+			return
+		}
+		apiresponse.Error(c, http.StatusBadRequest, "missing_file", "No valid file was provided")
 		return
 	}
 	defer file.Close()
+	if c.Request.MultipartForm != nil {
+		defer c.Request.MultipartForm.RemoveAll()
+	}
 
-	ext := filepath.Ext(header.Filename)
-	storedName := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
-	savePath, err := filepath.Abs(filepath.Join(uploadDir, storedName))
-	if err != nil {
-		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Could not resolve upload path")
+	if header.Size == 0 {
+		apiresponse.Error(c, http.StatusBadRequest, "empty_file", "Empty files are not allowed")
 		return
 	}
-	destination, err := os.OpenFile(savePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if header.Size > maxUploadBytes {
+		apiresponse.Error(c, http.StatusRequestEntityTooLarge, "file_too_large", "File exceeds the configured upload limit")
+		return
+	}
+	originalName, err := filestore.SanitizeOriginalName(header.Filename)
+	if err != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_file_name", "File name is invalid")
+		return
+	}
+	fileType, err := filestore.DetectAllowedType(file, originalName)
+	if err != nil {
+		if errors.Is(err, filestore.ErrUnsupportedType) || errors.Is(err, filestore.ErrContentTypeMismatch) {
+			apiresponse.Error(c, http.StatusUnsupportedMediaType, "unsupported_file_type", "File extension and content type must match an allowed format")
+			return
+		}
+		apiresponse.Error(c, http.StatusBadRequest, "file_read_error", "Could not inspect uploaded file")
+		return
+	}
+
+	store, err := currentFileStore()
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "File storage is unavailable")
+		return
+	}
+	storedName, err := filestore.RandomStorageKey(fileType.Extension)
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Could not allocate storage for file")
+		return
+	}
+	written, err := store.Save(storedName, file, maxUploadBytes)
+	if errors.Is(err, filestore.ErrFileTooLarge) {
+		apiresponse.Error(c, http.StatusRequestEntityTooLarge, "file_too_large", "File exceeds the configured upload limit")
+		return
+	}
 	if err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Failed to save file")
 		return
 	}
-	written, copyErr := io.Copy(destination, file)
-	closeErr := destination.Close()
-	if copyErr != nil || closeErr != nil {
-		if removeErr := os.Remove(savePath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			log.Printf("remove partial upload %q: %v", savePath, removeErr)
-		}
-		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Failed to write file")
+	if written == 0 {
+		_ = store.Remove(storedName)
+		apiresponse.Error(c, http.StatusBadRequest, "empty_file", "Empty files are not allowed")
 		return
 	}
 
 	record := models.File{
-		Name: storedName, OrigName: header.Filename, Path: savePath, Size: written,
-		MimeType: header.Header.Get("Content-Type"), IsSystem: isSystem,
+		Name: storedName, OrigName: originalName, Path: storedName, Size: written,
+		MimeType: fileType.MIME, IsSystem: isSystem,
 	}
 	if err := config.DB.Create(&record).Error; err != nil {
-		if removeErr := os.Remove(savePath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			log.Printf("rollback uploaded file %q: %v", savePath, removeErr)
+		if removeErr := store.Remove(storedName); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			log.Printf("rollback uploaded content %q: %v", storedName, removeErr)
 		}
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not record uploaded file")
 		return
@@ -119,13 +155,13 @@ func ViewFile(c *gin.Context) {
 	serveStoredFile(c, false)
 }
 
-func serveStoredFile(c *gin.Context, attachment bool) {
+func serveStoredFile(c *gin.Context, forceAttachment bool) {
 	id, ok := parseResourceID(c)
 	if !ok {
 		return
 	}
-	var file models.File
-	err := config.DB.First(&file, id).Error
+	var record models.File
+	err := config.DB.First(&record, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		apiresponse.Error(c, http.StatusNotFound, "file_not_found", "File not found")
 		return
@@ -134,26 +170,58 @@ func serveStoredFile(c *gin.Context, attachment bool) {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load file")
 		return
 	}
-	resolvedPath, resolveErr := resolveStoredFilePath(file.Path, file.Name)
-	if resolveErr != nil {
+	store, err := currentFileStore()
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "File storage is unavailable")
+		return
+	}
+	storageKey, content, info, err := openStoredFile(store, record)
+	if err != nil {
 		apiresponse.Error(c, http.StatusNotFound, "file_content_not_found", "File content not found")
 		return
 	}
-	if resolvedPath != file.Path {
-		if err := config.DB.Model(&file).Update("path", resolvedPath).Error; err != nil {
-			log.Printf("update resolved path for file %d: %v", file.ID, err)
+	defer content.Close()
+	if storageKey != record.Path {
+		if err := config.DB.Model(&record).Update("path", storageKey).Error; err != nil {
+			log.Printf("normalize storage key for file %d: %v", record.ID, err)
 		}
 	}
-	if attachment {
-		c.FileAttachment(resolvedPath, file.OrigName)
+
+	fileType, typeErr := filestore.DetectAllowedType(content, record.OrigName)
+	contentType := "application/octet-stream"
+	inline := false
+	if typeErr == nil {
+		contentType = fileType.MIME
+		inline = fileType.Inline
+		if record.MimeType != contentType {
+			if err := config.DB.Model(&record).Update("mime_type", contentType).Error; err != nil {
+				log.Printf("normalize MIME type for file %d: %v", record.ID, err)
+			}
+		}
+	}
+	if _, err := content.Seek(0, io.SeekStart); err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Could not read file content")
 		return
 	}
-	if file.MimeType != "" {
-		c.Header("Content-Type", file.MimeType)
+
+	disposition := "inline"
+	if forceAttachment || !inline {
+		disposition = "attachment"
 	}
-	safeName := strings.ReplaceAll(file.OrigName, `"`, "")
-	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", safeName))
-	c.File(resolvedPath)
+	downloadName, err := filestore.SanitizeOriginalName(record.OrigName)
+	if err != nil {
+		downloadName = "download"
+	}
+	contentDisposition := mime.FormatMediaType(disposition, map[string]string{"filename": downloadName})
+	if contentDisposition == "" {
+		contentDisposition = disposition
+	}
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", contentDisposition)
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy", "sandbox; default-src 'none'")
+	c.Header("Referrer-Policy", "no-referrer")
+	http.ServeContent(c.Writer, c.Request, downloadName, info.ModTime(), content)
 }
 
 func DeleteFile(c *gin.Context) {
@@ -161,8 +229,8 @@ func DeleteFile(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var file models.File
-	err := config.DB.First(&file, id).Error
+	var record models.File
+	err := config.DB.First(&record, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		apiresponse.Error(c, http.StatusNotFound, "file_not_found", "File not found")
 		return
@@ -171,12 +239,31 @@ func DeleteFile(c *gin.Context) {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load file")
 		return
 	}
+	inUse, err := fileIsReferenced(record.ID)
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not validate file references")
+		return
+	}
+	if inUse {
+		apiresponse.Error(c, http.StatusConflict, "file_in_use", "File is referenced by article content or settings")
+		return
+	}
 
-	resolvedPath, resolveErr := resolveStoredFilePath(file.Path, file.Name)
-	quarantinePath := ""
-	if resolveErr == nil {
-		quarantinePath = resolvedPath + fmt.Sprintf(".deleting-%d", time.Now().UnixNano())
-		if err := os.Rename(resolvedPath, quarantinePath); err != nil {
+	store, err := currentFileStore()
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "File storage is unavailable")
+		return
+	}
+	storageKey := ""
+	quarantineKey := ""
+	if key, content, _, openErr := openStoredFile(store, record); openErr == nil {
+		storageKey = key
+		if closeErr := content.Close(); closeErr != nil {
+			apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Could not prepare file for deletion")
+			return
+		}
+		quarantineKey, err = store.Quarantine(storageKey)
+		if err != nil {
 			apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Could not prepare file for deletion")
 			return
 		}
@@ -184,8 +271,8 @@ func DeleteFile(c *gin.Context) {
 
 	result := config.DB.Delete(&models.File{}, id)
 	if result.Error != nil || result.RowsAffected == 0 {
-		if quarantinePath != "" {
-			if restoreErr := os.Rename(quarantinePath, resolvedPath); restoreErr != nil {
+		if quarantineKey != "" {
+			if restoreErr := store.Restore(quarantineKey, storageKey); restoreErr != nil {
 				log.Printf("restore file %d after database delete failure: %v", id, restoreErr)
 			}
 		}
@@ -196,10 +283,70 @@ func DeleteFile(c *gin.Context) {
 		}
 		return
 	}
-	if quarantinePath != "" {
-		if err := os.Remove(quarantinePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			log.Printf("remove quarantined file %d at %q: %v", id, quarantinePath, err)
+	if quarantineKey != "" {
+		if err := store.Remove(quarantineKey); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("remove quarantined content for file %d: %v", id, err)
 		}
 	}
 	apiresponse.Message(c, http.StatusOK, "File deleted")
+}
+
+func GetFileStorageHealth(c *gin.Context) {
+	store, err := currentFileStore()
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "File storage is unavailable")
+		return
+	}
+	var records []models.File
+	if err := config.DB.Order("id ASC").Find(&records).Error; err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not inspect file records")
+		return
+	}
+	knownKeys := make(map[string]struct{}, len(records))
+	missing := make([]missingFileContent, 0)
+	for _, record := range records {
+		key, content, _, openErr := openStoredFile(store, record)
+		if openErr != nil {
+			missing = append(missing, missingFileContent{ID: record.ID, OrigName: record.OrigName})
+			continue
+		}
+		knownKeys[key] = struct{}{}
+		_ = content.Close()
+	}
+	keys, err := store.ListKeys()
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Could not inspect stored content")
+		return
+	}
+	orphaned := make([]string, 0)
+	for _, key := range keys {
+		if _, exists := knownKeys[key]; !exists {
+			orphaned = append(orphaned, key)
+		}
+	}
+	sort.Strings(orphaned)
+	c.JSON(http.StatusOK, gin.H{"missing_content": missing, "orphaned_content": orphaned})
+}
+
+func fileIsReferenced(fileID uint) (bool, error) {
+	fragment := fmt.Sprintf("%%/api/files/%d/%%", fileID)
+	var postCount int64
+	if err := config.DB.Model(&models.Post{}).
+		Where("content LIKE ? OR summary LIKE ?", fragment, fragment).
+		Count(&postCount).Error; err != nil {
+		return false, err
+	}
+	if postCount > 0 {
+		return true, nil
+	}
+	var settingCount int64
+	if err := config.DB.Model(&models.Setting{}).Where("value LIKE ?", fragment).Count(&settingCount).Error; err != nil {
+		return false, err
+	}
+	return settingCount > 0, nil
+}
+
+func isRequestTooLarge(err error) bool {
+	var maxBytesError *http.MaxBytesError
+	return errors.As(err, &maxBytesError) || strings.Contains(strings.ToLower(err.Error()), "request body too large")
 }

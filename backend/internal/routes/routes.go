@@ -45,6 +45,7 @@ func SetupRouter() *gin.Engine {
 			auth.GET("/posts", handlers.AdminGetPosts)
 			auth.GET("/categories", handlers.AdminGetCategories)
 			auth.GET("/files", handlers.AdminGetFiles)
+			auth.GET("/files/storage-health", handlers.GetFileStorageHealth)
 			auth.GET("/search", handlers.AdminSearchResources)
 			auth.PUT("/password", handlers.UpdatePassword)
 			auth.PUT("/settings", handlers.UpdateSettings)
