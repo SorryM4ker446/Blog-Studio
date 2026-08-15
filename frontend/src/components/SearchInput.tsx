@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 
 interface SearchInputProps {
   placeholder?: string;
@@ -10,18 +10,29 @@ interface SearchInputProps {
 }
 
 export default function SearchInput({ placeholder = "Search...", onSearch, style, value }: SearchInputProps) {
-  const [query, setQuery] = useState(value || "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input || value === undefined || input.value === value) {
+      return;
+    }
+
+    const isFocused = document.activeElement === input;
+    input.value = value;
+    if (isFocused) {
+      input.setSelectionRange(value.length, value.length);
+    }
+  }, [value]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
-      onSearch(query);
+      onSearch(e.currentTarget.value);
     }
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    setQuery(value);
-    if (!value.trim()) {
+    if (!e.currentTarget.value.trim()) {
       onSearch("");
     }
   }
@@ -32,8 +43,9 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
         🔍
       </span>
       <input
+        ref={inputRef}
         type="text"
-        value={query}
+        defaultValue={value || ""}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}

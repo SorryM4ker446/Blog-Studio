@@ -90,7 +90,6 @@ export default function DrivePage() {
           </p>
         </div>
         <SearchInput
-          key={searchQuery}
           placeholder="Search files..."
           onSearch={handleSearch}
           style={{ width: "250px" }}

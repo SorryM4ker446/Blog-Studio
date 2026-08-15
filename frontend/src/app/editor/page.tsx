@@ -610,7 +610,6 @@ export default function EditorPage() {
 
           <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
               <SearchInput 
-                  key={`${activeTab}:${searchQuery}`}
                   placeholder={`Search ${activeTab}...`} 
                   onSearch={handleSearch} 
                   style={{ width: "220px" }}
