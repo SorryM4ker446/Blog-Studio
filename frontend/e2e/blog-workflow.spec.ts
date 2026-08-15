@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import {
   E2E_ADMIN_PASS,
   E2E_ADMIN_USER,
@@ -9,6 +10,55 @@ const onePixelPNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
+
+const driveFileSearchRoute = { apiPath: "/api/search", pagePath: "/drive" };
+const editorFileSearchRoute = {
+  apiPath: "/api/admin/search",
+  pagePath: "/editor",
+  tab: "files" as const,
+};
+
+async function submitFileSearchAndWait(
+  page: Page,
+  input: Locator,
+  query: string,
+  expected: { apiPath: string; pagePath: string; tab?: "files" },
+) {
+  await input.fill(query);
+  const responsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET"
+      && url.pathname === expected.apiPath
+      && url.searchParams.get("scope") === "files"
+      && url.searchParams.get("q") === query;
+  });
+
+  await input.press("Enter");
+  await expect.poll(() => {
+    const url = new URL(page.url());
+    return {
+      pathname: url.pathname,
+      tab: url.searchParams.get("tab"),
+      query: url.searchParams.get("q"),
+    };
+  }).toEqual({ pathname: expected.pagePath, tab: expected.tab || null, query });
+
+  const response = await responsePromise;
+  expect(response.ok()).toBeTruthy();
+  await expect(input).toHaveValue(query);
+}
+
+function waitForEditorLists(page: Page) {
+  const paths = ["/api/admin/categories", "/api/admin/posts", "/api/admin/files"];
+  return Promise.all(paths.map((path) => page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === path;
+  }))).then((responses) => {
+    for (const response of responses) {
+      expect(response.ok()).toBeTruthy();
+    }
+  });
+}
 
 test("administrator can draft, publish, and log out", async ({ page, request }) => {
   const postTitle = `E2E workflow ${Date.now()}`;
@@ -174,14 +224,11 @@ test("administrator can publish an uploaded image and safely remove it after ref
 
   await page.goto("/drive");
   const driveSearch = page.getByPlaceholder("Search files...");
-  await driveSearch.fill(imageName);
-  await driveSearch.press("Enter");
+  await submitFileSearchAndWait(page, driveSearch, imageName, driveFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
-  await driveSearch.fill(`Updated ${fileDescription}`);
-  await driveSearch.press("Enter");
+  await submitFileSearchAndWait(page, driveSearch, `Updated ${fileDescription}`, driveFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
-  await driveSearch.fill(updatedDisplayName);
-  await driveSearch.press("Enter");
+  await submitFileSearchAndWait(page, driveSearch, updatedDisplayName, driveFileSearchRoute);
   const publicFileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   await expect(publicFileCard.locator('[data-file-icon="attachment"]')).toBeVisible();
   await expect(publicFileCard).not.toContainText(`Updated ${fileDescription}`);
@@ -226,19 +273,29 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(`Updated ${fileDescription}`);
 
   await page.goto("/editor");
+  const editorFileListsPromise = waitForEditorLists(page);
   await page.getByRole("button", { name: /Files \(/ }).click();
+  await expect.poll(() => {
+    const url = new URL(page.url());
+    return { pathname: url.pathname, tab: url.searchParams.get("tab"), query: url.searchParams.get("q") };
+  }).toEqual({ pathname: "/editor", tab: "files", query: null });
+  await editorFileListsPromise;
   const editorFileSearch = page.getByPlaceholder("Search files...");
-  await editorFileSearch.fill(`Updated ${fileDescription}`);
-  await editorFileSearch.press("Enter");
+  await submitFileSearchAndWait(page, editorFileSearch, `Updated ${fileDescription}`, editorFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
-  await editorFileSearch.fill(imageName);
-  await editorFileSearch.press("Enter");
+  await submitFileSearchAndWait(page, editorFileSearch, imageName, editorFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
-  await editorFileSearch.fill(updatedDisplayName);
-  await editorFileSearch.press("Enter");
+  await submitFileSearchAndWait(page, editorFileSearch, updatedDisplayName, editorFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
 
+  const editorListsPromise = waitForEditorLists(page);
   await page.getByRole("button", { name: /Posts \(/ }).click();
+  await expect.poll(() => {
+    const url = new URL(page.url());
+    return { pathname: url.pathname, tab: url.searchParams.get("tab"), query: url.searchParams.get("q") };
+  }).toEqual({ pathname: "/editor", tab: "posts", query: null });
+  await editorListsPromise;
+  await expect(page.getByPlaceholder("Search posts...")).toHaveValue("");
   await page.getByRole("button", { name: "+ New Post" }).click();
   await page.getByPlaceholder("Enter post title...").fill(postTitle);
   await page.getByPlaceholder("Write a brief introduction for this post...").fill("Image lifecycle verification");
