@@ -46,6 +46,15 @@ async function submitFileSearchAndWait(
   const response = await responsePromise;
   expect(response.ok()).toBeTruthy();
   await expect(input).toHaveValue(query);
+  await expect.poll(() => input.evaluate((element: HTMLInputElement) => ({
+    focused: document.activeElement === element,
+    selectionStart: element.selectionStart,
+    selectionEnd: element.selectionEnd,
+  }))).toEqual({
+    focused: true,
+    selectionStart: query.length,
+    selectionEnd: query.length,
+  });
 }
 
 function waitForEditorLists(page: Page) {

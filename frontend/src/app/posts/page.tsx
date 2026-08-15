@@ -124,7 +124,6 @@ function PostsListContent() {
           </p>
         </div>
         <SearchInput
-          key={searchQuery}
           placeholder="Search posts..."
           onSearch={handleSearch}
           style={{ width: "250px" }}
