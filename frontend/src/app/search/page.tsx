@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import type { Post, FileRecord } from "@/lib/api";
-import { searchResources, filterPostsByVisibleText, getPostTimeline } from "@/lib/api";
+import { getApiErrorMessage, searchResources, filterPostsByVisibleText, getPostTimeline } from "@/lib/api";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
 import { 
@@ -13,6 +13,7 @@ import {
   FileTextIcon, 
   FolderIcon
 } from "@/components/Icons";
+import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
 function SearchContent() {
   const router = useRouter();
@@ -23,31 +24,43 @@ function SearchContent() {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const searchRequestIdRef = useRef(0);
+  const retryQueryRef = useRef(initialQuery);
   const isMountedRef = useRef(true);
 
-  const doSearch = async (q: string) => {
+  const doSearch = useCallback(async (q: string) => {
     const normalizedQuery = q.trim();
     if (!normalizedQuery) {
       setPosts([]);
       setFiles([]);
       setSearched(false);
       setLoading(false);
+      setError("");
       return;
     }
 
     const requestId = ++searchRequestIdRef.current;
+    retryQueryRef.current = normalizedQuery;
     setLoading(true);
-    const result = await searchResources(normalizedQuery);
-    if (!isMountedRef.current || requestId !== searchRequestIdRef.current) {
-      return;
+    setError("");
+    try {
+      const result = await searchResources(normalizedQuery);
+      if (!isMountedRef.current || requestId !== searchRequestIdRef.current) return;
+      setPosts(filterPostsByVisibleText(result.posts, normalizedQuery));
+      setFiles(result.files);
+      setSearched(true);
+    } catch (requestError) {
+      if (!isMountedRef.current || requestId !== searchRequestIdRef.current) return;
+      setSearched(false);
+      setError(getApiErrorMessage(requestError, "Could not complete the search."));
+    } finally {
+      if (isMountedRef.current && requestId === searchRequestIdRef.current) {
+        setLoading(false);
+      }
     }
-    setPosts(filterPostsByVisibleText(result.posts, normalizedQuery));
-    setFiles(result.files);
-    setSearched(true);
-    setLoading(false);
-  };
+  }, []);
 
   function submitSearch(value: string) {
     const normalizedQuery = value.trim();
@@ -68,11 +81,15 @@ function SearchContent() {
         setPosts([]);
         setFiles([]);
         setSearched(false);
+        setError("");
       }
     });
 
-    return () => window.cancelAnimationFrame(frame);
-  }, [initialQuery]);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      searchRequestIdRef.current += 1;
+    };
+  }, [doSearch, initialQuery]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -116,6 +133,7 @@ function SearchContent() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Type your search query and press Enter..."
+          aria-label="Search posts and files"
           autoFocus
           style={{
             flex: 1,
@@ -131,30 +149,40 @@ function SearchContent() {
         />
         <button
           onClick={() => submitSearch(query)}
+          disabled={loading}
+          aria-busy={loading}
           style={{
             background: "var(--accent-blue)",
-            color: "#fff",
+            color: "var(--accent-contrast-text)",
             border: "none",
             borderRadius: "12px",
             padding: "0 1.5rem",
             fontSize: "0.9rem",
             fontWeight: 500,
-            cursor: "pointer",
+            cursor: loading ? "wait" : "pointer",
             transition: "opacity 0.2s",
+            opacity: loading ? 0.7 : 1,
           }}
         >
           Search
         </button>
       </div>
 
-      {loading && (
-        <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: "0.8rem", padding: "1rem 0" }}>
-          <div className="skeleton-pulse" style={{ height: "60px", borderRadius: "10px" }} />
-          <div className="skeleton-pulse" style={{ height: "60px", borderRadius: "10px" }} />
-        </div>
+      <section aria-label="Search results" aria-busy={loading}>
+      {error && (
+        <ErrorState
+          title="Search unavailable"
+          message={error}
+          onRetry={() => { void doSearch(retryQueryRef.current); }}
+          retrying={loading}
+        />
       )}
 
-      {searched && !loading && (
+      {!error && loading && (
+        <LoadingState label="Searching posts and files…" rows={2} />
+      )}
+
+      {!error && searched && !loading && (
         <div>
           {/* 文章结果 */}
           <div style={{ marginBottom: "2rem" }}>
@@ -292,7 +320,7 @@ function SearchContent() {
         </div>
       )}
 
-      {!searched && !loading && (
+      {!error && !searched && !loading && (
         <div
           style={{
             display: "flex",
@@ -310,6 +338,7 @@ function SearchContent() {
           </div>
         </div>
       )}
+      </section>
 
       <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>

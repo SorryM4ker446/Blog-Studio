@@ -81,8 +81,8 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   await page.goto("/editor");
   await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
   await page.getByRole("button", { name: "+ New Post" }).click();
-  await page.getByPlaceholder("Enter post title...").fill(postTitle);
-  await page.getByPlaceholder("Write a brief introduction for this post...").fill("Automated workflow summary");
+  await page.getByLabel("POST TITLE").fill(postTitle);
+  await page.getByLabel("INTRODUCTION").fill("Automated workflow summary");
   await page.locator(".custom-editor-wrapper textarea").fill("# Automated workflow\n\nCreated by Playwright.");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
@@ -96,8 +96,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
 
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
   await page.getByText(postTitle, { exact: true }).click();
-  await page.locator(".custom-select-trigger").first().click();
-  await page.locator(".custom-select-option").filter({ hasText: "Published" }).click();
+  await page.getByLabel("Publication status").selectOption("published");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
 
@@ -130,7 +129,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page).toHaveURL("/");
 
   await page.goto("/editor");
-  await page.getByRole("button", { name: /Files \(/ }).click();
+  await page.getByRole("tab", { name: /Files \(/ }).click();
   await page.getByRole("button", { name: "Upload File" }).click();
   const uploadDialog = page.getByRole("dialog", { name: "Upload a file" });
   await expect(page.locator("body")).not.toHaveClass(/theme-light/);
@@ -177,12 +176,12 @@ test("administrator can publish an uploaded image and safely remove it after ref
   expect(darkCardNameBox!.x + darkCardNameBox!.width).toBeLessThan(darkCardEditBox!.x);
 
   await page.goto("/settings");
-  await page.getByRole("button", { name: "Dark Mode" }).click();
+  await page.getByRole("button", { name: "Switch to Light Mode" }).click();
   await expect(page.locator("body")).toHaveClass(/theme-light/);
-  await expect(page.getByRole("button", { name: "Light Mode" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Switch to Dark Mode" })).toBeVisible();
 
   await page.goto("/editor");
-  await page.getByRole("button", { name: /Files \(/ }).click();
+  await page.getByRole("tab", { name: /Files \(/ }).click();
   fileCard = page.locator("[data-file-id]").filter({ hasText: displayName });
   await expect(fileCard).toHaveCSS("background-color", "rgb(255, 255, 255)");
   const fileEditPresentation = await fileCard.getByRole("button", { name: "Edit" }).evaluate((element) => {
@@ -283,7 +282,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
 
   await page.goto("/editor");
   const editorFileListsPromise = waitForEditorLists(page);
-  await page.getByRole("button", { name: /Files \(/ }).click();
+  await page.getByRole("tab", { name: /Files \(/ }).click();
   await expect.poll(() => {
     const url = new URL(page.url());
     return { pathname: url.pathname, tab: url.searchParams.get("tab"), query: url.searchParams.get("q") };
@@ -297,8 +296,24 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await submitFileSearchAndWait(page, editorFileSearch, updatedDisplayName, editorFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
 
+  fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
+  await fileCard.getByRole("button", { name: "Edit" }).click();
+  await editDialog.getByRole("textbox", { name: /Description/ }).fill(`Updated ${fileDescription}`);
+  const filteredFileRefreshPromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET"
+      && url.pathname === "/api/admin/search"
+      && url.searchParams.get("scope") === "files"
+      && url.searchParams.get("q") === updatedDisplayName;
+  });
+  await saveDetailsButton.click();
+  expect((await filteredFileRefreshPromise).ok()).toBeTruthy();
+  await expect(page).toHaveURL(/\/editor\?tab=files&q=/);
+  await expect(editorFileSearch).toHaveValue(updatedDisplayName);
+  await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
+
   const editorListsPromise = waitForEditorLists(page);
-  await page.getByRole("button", { name: /Posts \(/ }).click();
+  await page.getByRole("tab", { name: /Posts \(/ }).click();
   await expect.poll(() => {
     const url = new URL(page.url());
     return { pathname: url.pathname, tab: url.searchParams.get("tab"), query: url.searchParams.get("q") };
@@ -306,11 +321,10 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await editorListsPromise;
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue("");
   await page.getByRole("button", { name: "+ New Post" }).click();
-  await page.getByPlaceholder("Enter post title...").fill(postTitle);
-  await page.getByPlaceholder("Write a brief introduction for this post...").fill("Image lifecycle verification");
+  await page.getByLabel("POST TITLE").fill(postTitle);
+  await page.getByLabel("INTRODUCTION").fill("Image lifecycle verification");
   await page.locator(".custom-editor-wrapper textarea").fill(`![${imageAlt}](${imageViewURL})`);
-  await page.locator(".custom-select-trigger").first().click();
-  await page.locator(".custom-select-option").filter({ hasText: "Published" }).click();
+  await page.getByLabel("Publication status").selectOption("published");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
 
@@ -349,6 +363,22 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await editorPostSearch.fill(postTitle);
   await editorPostSearch.press("Enter");
   await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(postTitle);
+  const searchedPostCard = page.locator(".editor-post-card").filter({ hasText: postTitle });
+  await searchedPostCard.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("INTRODUCTION").fill("Image lifecycle verification after filtered refresh");
+  const filteredPostRefreshPromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET"
+      && url.pathname === "/api/admin/search"
+      && url.searchParams.get("scope") === "posts"
+      && url.searchParams.get("q") === postTitle;
+  });
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  expect((await filteredPostRefreshPromise).ok()).toBeTruthy();
+  await expect(page.getByPlaceholder("Search posts...")).toBeVisible();
+  await expect(page).toHaveURL(/\/editor\?tab=posts&q=/);
+  await expect(page.getByPlaceholder("Search posts...")).toHaveValue(postTitle);
+  await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
   await page.getByText(postTitle, { exact: true }).click();
   await page.getByRole("button", { name: "←", exact: true }).click();
   await expect(page).toHaveURL(/\/editor\?tab=posts&q=/);
@@ -356,7 +386,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
 
   await page.goto("/editor");
-  await page.getByRole("button", { name: /Files \(/ }).click();
+  await page.getByRole("tab", { name: /Files \(/ }).click();
   fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   await expect(fileCard).toBeVisible();
   await page.waitForLoadState("networkidle");
@@ -414,7 +444,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   expect(protectedDeleteRequests).toBe(2);
   await deletionPanel.getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: /Posts \(/ }).click();
+  await page.getByRole("tab", { name: /Posts \(/ }).click();
   const postCard = page.locator(".ai-card").filter({ hasText: postTitle });
   const postEditButton = postCard.getByRole("button", { name: "Edit" });
   await expect(postEditButton.locator("svg")).toHaveCount(1);
@@ -433,9 +463,9 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await page.locator(".custom-editor-wrapper textarea").fill("# Image reference removed");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Files \(/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Files \(/ })).toBeVisible();
 
-  await page.getByRole("button", { name: /Files \(/ }).click();
+  await page.getByRole("tab", { name: /Files \(/ }).click();
   fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   await fileCard.getByRole("button", { name: "Delete" }).click();
   deleteResponsePromise = page.waitForResponse(

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useId, useRef } from "react";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -23,6 +23,10 @@ export default function ConfirmModal({
   cancelText = "Cancel",
   type = "info",
 }: ConfirmModalProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = isOpen ? "hidden" : previousOverflow;
@@ -31,6 +35,37 @@ export default function ConfirmModal({
       document.body.style.overflow = previousOverflow;
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>("button:not(:disabled)"));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [isOpen, onCancel]);
 
   if (!isOpen) return null;
 
@@ -56,8 +91,13 @@ export default function ConfirmModal({
       }}
     >
       <div
+        ref={panelRef}
         className={`modal-content ${isOpen ? "active" : ""}`}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         style={{
           width: "90%",
           maxWidth: "400px",
@@ -70,15 +110,17 @@ export default function ConfirmModal({
           transition: "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}
       >
-        <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.25rem", fontWeight: 600, color: "var(--text-primary)" }}>
+        <h3 id={titleId} style={{ margin: "0 0 1rem 0", fontSize: "1.25rem", fontWeight: 600, color: "var(--text-primary)" }}>
           {title}
         </h3>
-        <p style={{ margin: "0 0 2rem 0", color: "var(--text-secondary)", lineHeight: 1.6, fontSize: "0.95rem" }}>
+        <p id={descriptionId} style={{ margin: "0 0 2rem 0", color: "var(--text-secondary)", lineHeight: 1.6, fontSize: "0.95rem" }}>
           {message}
         </p>
 
         <div style={{ display: "flex", gap: "1rem", justifyContent: "flex-end" }}>
           <button
+            type="button"
+            data-autofocus
             onClick={onCancel}
             style={{
               padding: "0.75rem 1.5rem",
@@ -96,13 +138,14 @@ export default function ConfirmModal({
             {cancelText}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             style={{
               padding: "0.75rem 1.5rem",
               borderRadius: "10px",
               border: "none",
               background: type === "danger" ? "rgba(242, 139, 130, 0.15)" : "var(--accent-blue)",
-              color: type === "danger" ? "var(--accent-red)" : "#fff",
+              color: type === "danger" ? "var(--accent-red)" : "var(--accent-contrast-text)",
               fontWeight: 600,
               cursor: "pointer",
               transition: "all 0.2s",

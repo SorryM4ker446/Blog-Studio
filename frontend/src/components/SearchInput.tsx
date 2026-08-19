@@ -7,9 +7,10 @@ interface SearchInputProps {
   onSearch: (query: string) => Promise<void> | void;
   style?: React.CSSProperties;
   value?: string;
+  ariaLabel?: string;
 }
 
-export default function SearchInput({ placeholder = "Search...", onSearch, style, value }: SearchInputProps) {
+export default function SearchInput({ placeholder = "Search...", onSearch, style, value, ariaLabel }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -39,12 +40,14 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
 
   return (
     <div style={{ position: "relative", ...style }}>
-      <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+      <span aria-hidden="true" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: "0.9rem" }}>
         🔍
       </span>
       <input
         ref={inputRef}
         type="text"
+        aria-label={ariaLabel || placeholder}
+        enterKeyHint="search"
         defaultValue={value || ""}
         onChange={handleChange}
         onKeyDown={handleKeyDown}

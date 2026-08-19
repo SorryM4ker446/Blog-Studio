@@ -1,5 +1,16 @@
 // lib/api.ts
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
+import {
+  API_BASE,
+  ApiError,
+  apiRequest,
+  clearCSRFToken,
+  ensureCSRFToken,
+  isApiError,
+  setCSRFToken,
+} from "@/lib/api-client";
+
+export { API_BASE, ApiError, getApiErrorMessage, isApiError } from "@/lib/api-client";
+export type { ApiErrorKind } from "@/lib/api-client";
 
 interface Category {
   id: number;
@@ -49,13 +60,15 @@ interface PaginatedResponse<T> {
 }
 
 export type { Category, Post, FileRecord, SearchResult, PaginatedResponse };
-export { API_BASE };
 
 export interface FileMutationResult {
   ok: boolean;
   file?: FileRecord;
   error?: string;
   code?: string;
+  status?: number | null;
+  kind?: import("@/lib/api-client").ApiErrorKind;
+  retryAfterSeconds?: number;
 }
 
 export interface AuthUser {
@@ -64,27 +77,18 @@ export interface AuthUser {
   role: string;
 }
 
-let csrfToken = "";
-
-interface APIErrorDetails {
-  error: string;
-  code?: string;
-}
-
-async function readErrorDetails(res: Response, fallback: string): Promise<APIErrorDetails> {
-  try {
-    const data = await res.json();
+function fileMutationFailure(error: unknown, fallback: string): FileMutationResult {
+  if (isApiError(error)) {
     return {
-      error: data?.error || fallback,
-      code: typeof data?.code === "string" ? data.code : undefined,
+      ok: false,
+      error: error.message || fallback,
+      code: error.code,
+      status: error.status,
+      kind: error.kind,
+      retryAfterSeconds: error.retryAfterSeconds,
     };
-  } catch {
-    return { error: fallback };
   }
-}
-
-async function readErrorMessage(res: Response, fallback: string): Promise<string> {
-  return (await readErrorDetails(res, fallback)).error;
+  return { ok: false, error: fallback };
 }
 
 export function getFileViewUrl(fileId: number): string {
@@ -150,83 +154,65 @@ export function getPostTimeline(post: Pick<Post, "published_at" | "last_edited_a
   };
 }
 
-async function ensureCSRFToken(forceRefresh = false): Promise<string> {
-  if (csrfToken && !forceRefresh) {
-    return csrfToken;
-  }
-  const res = await fetch(`${API_BASE}/csrf`, {
-    credentials: "include",
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorMessage(res, "Failed to initialize secure session"));
-  }
-  const data = await res.json();
-  csrfToken = data.csrf_token;
-  return csrfToken;
-}
-
-async function getMutationHeaders(isFormData = false): Promise<HeadersInit> {
+function getMutationHeaders(isFormData = false): HeadersInit {
   const headers: HeadersInit = {};
   if (!isFormData) {
     headers["Content-Type"] = "application/json";
   }
-  headers["X-CSRF-Token"] = await ensureCSRFToken();
   return headers;
 }
 
 export async function loginUser(username: string, password: string): Promise<AuthUser> {
-  csrfToken = await ensureCSRFToken(true);
-  const res = await fetch(`${API_BASE}/login`, {
+  await ensureCSRFToken(true);
+  const data = await apiRequest<{ csrf_token: string; user: AuthUser }>("/login", {
     method: "POST",
-    credentials: "include",
-    headers: await getMutationHeaders(),
+    headers: getMutationHeaders(),
+    csrf: true,
     body: JSON.stringify({ username, password }),
   });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || "Login failed");
+  if (typeof data.csrf_token !== "string" || !data.csrf_token || !data.user) {
+    clearCSRFToken();
+    throw new ApiError("Server returned an invalid login response", {
+      kind: "parse",
+      status: 200,
+      code: "invalid_login_response",
+    });
   }
-  csrfToken = data.csrf_token;
+  setCSRFToken(data.csrf_token);
   return data.user;
 }
 
 export async function logoutUser(): Promise<void> {
   try {
-    await fetch(`${API_BASE}/admin/logout`, {
+    await apiRequest<void>("/admin/logout", {
       method: "POST",
-      credentials: "include",
-      headers: await getMutationHeaders(),
+      headers: getMutationHeaders(),
+      csrf: true,
+      responseType: "void",
     });
+  } catch (error) {
+    if (isApiError(error) && error.status === 401) {
+      return;
+    }
+    throw error;
   } finally {
-    csrfToken = "";
+    clearCSRFToken();
   }
 }
 
 // ==================== Post API ====================
 
 export async function getPosts(page = 1, limit = 10, _useAuth = false, sort = "", categoryId = ""): Promise<PaginatedResponse<Post>> {
-  try {
-    const options: RequestInit = { cache: "no-store", credentials: "include" };
-    const query = new URLSearchParams({ 
-      page: page.toString(), 
-      limit: limit.toString() 
-    });
-    if (sort) query.append("sort", sort);
-    if (categoryId) query.append("category_id", categoryId);
-    
-    const res = await fetch(`${API_BASE}/posts?${query.toString()}`, options);
-    if (!res.ok) throw new Error(await readErrorMessage(res, "Backend error"));
-    return await res.json();
-  } catch (error) {
-    return {
-      data: [],
-      total: 0,
-      page: 1,
-      limit: 10,
-      error: error instanceof Error ? error.message : "Failed to load posts",
-    };
-  }
+  const query = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+  });
+  if (sort) query.append("sort", sort);
+  if (categoryId) query.append("category_id", categoryId);
+
+  return apiRequest<PaginatedResponse<Post>>(`/posts?${query.toString()}`, {
+    cache: "no-store",
+  });
 }
 
 export async function getAdminPosts(
@@ -235,193 +221,130 @@ export async function getAdminPosts(
   sort = "admin",
   categoryId = ""
 ): Promise<PaginatedResponse<Post>> {
-  try {
-    const query = new URLSearchParams({
-      page: page.toString(),
-      limit: limit.toString(),
-    });
-    if (sort) query.append("sort", sort);
-    if (categoryId) query.append("category_id", categoryId);
-    const res = await fetch(`${API_BASE}/admin/posts?${query.toString()}`, {
-      cache: "no-store",
-      credentials: "include",
-    });
-    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin posts"));
-    return await res.json();
-  } catch (error) {
-    return {
-      data: [],
-      total: 0,
-      page: 1,
-      limit: 10,
-      error: error instanceof Error ? error.message : "Failed to load admin posts",
-    };
-  }
+  const query = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+  });
+  if (sort) query.append("sort", sort);
+  if (categoryId) query.append("category_id", categoryId);
+  return apiRequest<PaginatedResponse<Post>>(`/admin/posts?${query.toString()}`, {
+    cache: "no-store",
+    auth: true,
+  });
 }
 
 export async function getPost(id: string): Promise<Post | null> {
   try {
-    const res = await fetch(`${API_BASE}/posts/${id}`, { cache: "no-store" });
-    if (!res.ok) throw new Error("Post not found");
-    return await res.json();
-  } catch {
-    return null;
+    return await apiRequest<Post>(`/posts/${encodeURIComponent(id)}`, { cache: "no-store" });
+  } catch (error) {
+    if (isApiError(error) && error.status === 404) {
+      return null;
+    }
+    throw error;
   }
 }
 
 export async function createPost(
   data: { title: string; summary: string; content: string; category_id?: number; status?: string }
 ): Promise<Post | null> {
-    const res = await fetch(`${API_BASE}/admin/posts`, {
-        method: "POST",
-        credentials: "include",
-        headers: await getMutationHeaders(),
-        body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || `Error ${res.status}`);
-    }
-    return await res.json();
+  return apiRequest<Post>("/admin/posts", {
+    method: "POST",
+    auth: true,
+    csrf: true,
+    headers: getMutationHeaders(),
+    body: JSON.stringify(data),
+  });
 }
 
 export async function updatePost(
   id: number,
   data: { title?: string; summary?: string; content?: string; category_id?: number; status?: string }
 ): Promise<Post | null> {
-    const res = await fetch(`${API_BASE}/admin/posts/${id}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: await getMutationHeaders(),
-        body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || `Error ${res.status}`);
-    }
-    return await res.json();
+  return apiRequest<Post>(`/admin/posts/${id}`, {
+    method: "PUT",
+    auth: true,
+    csrf: true,
+    headers: getMutationHeaders(),
+    body: JSON.stringify(data),
+  });
 }
 
 export async function deletePost(id: number): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/admin/posts/${id}`, { 
-      method: "DELETE",
-      credentials: "include",
-      headers: await getMutationHeaders(),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  await apiRequest<void>(`/admin/posts/${id}`, {
+    method: "DELETE",
+    auth: true,
+    csrf: true,
+    headers: getMutationHeaders(),
+    responseType: "void",
+  });
+  return true;
 }
 
 // ==================== Category API ====================
 
 export async function getCategories(): Promise<Category[]> {
-  try {
-    const res = await fetch(`${API_BASE}/categories`, { cache: "no-store" });
-    if (!res.ok) throw new Error("Backend error");
-    return await res.json();
-  } catch {
-    return [];
-  }
+  return apiRequest<Category[]>("/categories", { cache: "no-store" });
 }
 
 export async function getAdminCategories(): Promise<Category[]> {
-  try {
-    const res = await fetch(`${API_BASE}/admin/categories`, {
-      cache: "no-store",
-      credentials: "include",
-    });
-    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin categories"));
-    return await res.json();
-  } catch {
-    return [];
-  }
+  return apiRequest<Category[]>("/admin/categories", {
+    cache: "no-store",
+    auth: true,
+  });
 }
 
 export async function createCategory(name: string): Promise<Category | null> {
-    try {
-        const res = await fetch(`${API_BASE}/admin/categories`, {
-            method: "POST",
-            credentials: "include",
-            headers: await getMutationHeaders(),
-            body: JSON.stringify({ name }),
-        });
-        if (!res.ok) throw new Error("Create failed");
-        return await res.json();
-    } catch {
-        return null;
-    }
+  return apiRequest<Category>("/admin/categories", {
+    method: "POST",
+    auth: true,
+    csrf: true,
+    headers: getMutationHeaders(),
+    body: JSON.stringify({ name }),
+  });
 }
 
 export async function updateCategory(id: number, name: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/admin/categories/${id}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: await getMutationHeaders(),
-      body: JSON.stringify({ name })
-    });
-    return res.ok;
-  } catch (error) {
-    return false;
-  }
+  await apiRequest<void>(`/admin/categories/${id}`, {
+    method: "PUT",
+    auth: true,
+    csrf: true,
+    headers: getMutationHeaders(),
+    body: JSON.stringify({ name }),
+    responseType: "void",
+  });
+  return true;
 }
 
 export async function deleteCategory(id: number): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/admin/categories/${id}`, {
-      method: "DELETE",
-      credentials: "include",
-      headers: await getMutationHeaders(),
-    });
-    return res.ok;
-  } catch (error) {
-    return false;
-  }
+  await apiRequest<void>(`/admin/categories/${id}`, {
+    method: "DELETE",
+    auth: true,
+    csrf: true,
+    headers: getMutationHeaders(),
+    responseType: "void",
+  });
+  return true;
 }
 
 // ==================== File API（云盘） ====================
 
 export async function getFiles(page = 1, limit = 10): Promise<PaginatedResponse<FileRecord>> {
-  try {
-    const res = await fetch(`${API_BASE}/files?page=${page}&limit=${limit}`, { cache: "no-store" });
-    if (!res.ok) throw new Error(await readErrorMessage(res, "Backend error"));
-    return await res.json();
-  } catch (error) {
-    return {
-      data: [],
-      total: 0,
-      page: 1,
-      limit: 10,
-      error: error instanceof Error ? error.message : "Failed to load files",
-    };
-  }
+  const query = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
+  return apiRequest<PaginatedResponse<FileRecord>>(`/files?${query.toString()}`, {
+    cache: "no-store",
+  });
 }
 
 export async function getAdminFiles(page = 1, limit = 10, includeSystem = true): Promise<PaginatedResponse<FileRecord>> {
-  try {
-    const query = new URLSearchParams({
-      page: page.toString(),
-      limit: limit.toString(),
-      include_system: includeSystem ? "true" : "false",
-    });
-    const res = await fetch(`${API_BASE}/admin/files?${query.toString()}`, {
-      cache: "no-store",
-      credentials: "include",
-    });
-    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load admin files"));
-    return await res.json();
-  } catch (error) {
-    return {
-      data: [],
-      total: 0,
-      page: 1,
-      limit: 10,
-      error: error instanceof Error ? error.message : "Failed to load admin files",
-    };
-  }
+  const query = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+    include_system: includeSystem ? "true" : "false",
+  });
+  return apiRequest<PaginatedResponse<FileRecord>>(`/admin/files?${query.toString()}`, {
+    cache: "no-store",
+    auth: true,
+  });
 }
 
 export async function uploadFileWithMetadata(
@@ -434,25 +357,31 @@ export async function uploadFileWithMetadata(
     formData.append("file", file);
     if (metadata.displayName) formData.append("display_name", metadata.displayName);
     if (metadata.description) formData.append("description", metadata.description);
-    const url = isSystem ? `${API_BASE}/admin/files?system=true` : `${API_BASE}/admin/files`;
-    const res = await fetch(url, {
+    const path = isSystem ? "/admin/files?system=true" : "/admin/files";
+    const fileRecord = await apiRequest<FileRecord>(path, {
       method: "POST",
-      credentials: "include",
-      headers: await getMutationHeaders(true),
+      auth: true,
+      csrf: true,
+      headers: getMutationHeaders(true),
       body: formData,
     });
-    if (!res.ok) {
-      return { ok: false, ...(await readErrorDetails(res, "Failed to upload file")) };
-    }
-    return { ok: true, file: await res.json() };
-  } catch {
-    return { ok: false, error: "Failed to upload file" };
+    return { ok: true, file: fileRecord };
+  } catch (error) {
+    return fileMutationFailure(error, "Failed to upload file");
   }
 }
 
 export async function uploadFile(file: File, isSystem = false): Promise<FileRecord | null> {
   const result = await uploadFileWithMetadata(file, {}, isSystem);
-  return result.file || null;
+  if (!result.ok || !result.file) {
+    throw new ApiError(result.error || "Failed to upload file", {
+      kind: result.kind || "http",
+      status: result.status,
+      code: result.code,
+      retryAfterSeconds: result.retryAfterSeconds,
+    });
+  }
+  return result.file;
 }
 
 export async function updateFileMetadata(
@@ -461,28 +390,25 @@ export async function updateFileMetadata(
   description: string,
 ): Promise<FileMutationResult> {
   try {
-    const res = await fetch(`${API_BASE}/admin/files/${id}`, {
+    const fileRecord = await apiRequest<FileRecord>(`/admin/files/${id}`, {
       method: "PUT",
-      credentials: "include",
-      headers: await getMutationHeaders(),
+      auth: true,
+      csrf: true,
+      headers: getMutationHeaders(),
       body: JSON.stringify({ display_name: displayName, description }),
     });
-    if (!res.ok) {
-      if (
-        (res.status === 404 || res.status === 405)
-        && !res.headers.get("content-type")?.includes("application/json")
-      ) {
-        return {
-          ok: false,
-          code: "file_metadata_endpoint_unavailable",
-          error: "File details cannot be updated because the running backend is out of date. Restart the backend and try again.",
-        };
-      }
-      return { ok: false, ...(await readErrorDetails(res, "Failed to update file details")) };
+    return { ok: true, file: fileRecord };
+  } catch (error) {
+    if (isApiError(error) && (error.status === 404 || error.status === 405) && !error.code) {
+      return {
+        ok: false,
+        status: error.status,
+        kind: error.kind,
+        code: "file_metadata_endpoint_unavailable",
+        error: "File details cannot be updated because the running backend is out of date. Restart the backend and try again.",
+      };
     }
-    return { ok: true, file: await res.json() };
-  } catch {
-    return { ok: false, error: "Failed to update file details" };
+    return fileMutationFailure(error, "Failed to update file details");
   }
 }
 
@@ -490,34 +416,28 @@ export function getDownloadUrl(fileId: number): string {
   return `${API_BASE}/files/${fileId}/download`;
 }
 
-export async function deleteFile(id: number): Promise<{ ok: boolean; error?: string; code?: string }> {
+export async function deleteFile(id: number): Promise<FileMutationResult> {
   try {
-    const res = await fetch(`${API_BASE}/admin/files/${id}`, { 
+    await apiRequest<void>(`/admin/files/${id}`, {
         method: "DELETE",
-        credentials: "include",
-        headers: await getMutationHeaders(),
+        auth: true,
+        csrf: true,
+        headers: getMutationHeaders(),
+        responseType: "void",
     });
-    if (!res.ok) {
-      return { ok: false, ...(await readErrorDetails(res, "Failed to delete file")) };
-    }
     return { ok: true };
-  } catch {
-    return { ok: false, error: "Failed to delete file" };
+  } catch (error) {
+    return fileMutationFailure(error, "Failed to delete file");
   }
 }
 
 // ==================== 搜索 API ====================
 
 export async function searchResources(query: string, scope: "posts" | "files" | "all" = "all"): Promise<SearchResult> {
-  try {
-    const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}&scope=${scope}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) throw new Error("Search failed");
-    return await res.json();
-  } catch {
-    return { posts: [], files: [] };
-  }
+  const searchParams = new URLSearchParams({ q: query, scope });
+  return apiRequest<SearchResult>(`/search?${searchParams.toString()}`, {
+    cache: "no-store",
+  });
 }
 
 export async function searchAdminResources(
@@ -525,76 +445,71 @@ export async function searchAdminResources(
   scope: "posts" | "files" | "all" = "all",
   includeSystem = true
 ): Promise<SearchResult> {
-  try {
-    const searchParams = new URLSearchParams({
-      q: query,
-      scope,
-      include_system: includeSystem ? "true" : "false",
-    });
-    const res = await fetch(`${API_BASE}/admin/search?${searchParams.toString()}`, {
-      cache: "no-store",
-      credentials: "include",
-    });
-    if (!res.ok) throw new Error(await readErrorMessage(res, "Search failed"));
-    return await res.json();
-  } catch {
-    return { posts: [], files: [] };
-  }
+  const searchParams = new URLSearchParams({
+    q: query,
+    scope,
+    include_system: includeSystem ? "true" : "false",
+  });
+  return apiRequest<SearchResult>(`/admin/search?${searchParams.toString()}`, {
+    cache: "no-store",
+    auth: true,
+  });
 }
 
 // ==================== Settings API ====================
 
 export async function getSettings(): Promise<Record<string, string>> {
-    try {
-        const res = await fetch(`${API_BASE}/settings`, { cache: "no-store" });
-        if (!res.ok) throw new Error("Fetch failed");
-        return await res.json();
-    } catch {
-        return {};
-    }
+  return apiRequest<Record<string, string>>("/settings", { cache: "no-store" });
 }
 
 export async function getCurrentUser(): Promise<{ id: number; username: string; role: string } | null> {
   try {
-    const res = await fetch(`${API_BASE}/admin/me`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      csrfToken = "";
-      throw new Error("Unauthorized");
+    return await apiRequest<AuthUser>("/admin/me", { cache: "no-store" });
+  } catch (error) {
+    if (isApiError(error) && error.status === 401) {
+      clearCSRFToken();
+      return null;
     }
-    return await res.json();
-  } catch {
-    return null;
+    throw error;
   }
 }
 
 export async function updateSettings(data: Record<string, string>): Promise<boolean> {
-    try {
-        const res = await fetch(`${API_BASE}/admin/settings`, {
-            method: "PUT",
-            credentials: "include",
-            headers: await getMutationHeaders(),
-            body: JSON.stringify(data),
-        });
-        return res.ok;
-    } catch {
-        return false;
-    }
+  await apiRequest<void>("/admin/settings", {
+    method: "PUT",
+    auth: true,
+    csrf: true,
+    headers: getMutationHeaders(),
+    body: JSON.stringify(data),
+    responseType: "void",
+  });
+  return true;
 }
 
-export async function updatePassword(currentPassword: string, newPassword: string): Promise<{success: boolean, error?: string}> {
-    try {
-        const res = await fetch(`${API_BASE}/admin/password`, {
-            method: "PUT",
-            credentials: "include",
-            headers: await getMutationHeaders(),
-            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-        });
-        const data = await res.json();
-        return { success: res.ok, error: data.error };
-    } catch {
-        return { success: false, error: "Network error" };
+export async function updatePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ success: boolean; error?: string; code?: string; status?: number | null }> {
+  try {
+    await apiRequest<void>("/admin/password", {
+      method: "PUT",
+      auth: true,
+      csrf: true,
+      headers: getMutationHeaders(),
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      responseType: "void",
+    });
+    clearCSRFToken();
+    return { success: true };
+  } catch (error) {
+    if (isApiError(error) && error.kind === "http") {
+      return {
+        success: false,
+        error: error.message,
+        code: error.code,
+        status: error.status,
+      };
     }
+    throw error;
+  }
 }

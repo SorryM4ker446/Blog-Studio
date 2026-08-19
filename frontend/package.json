@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -19,10 +21,17 @@
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.5",
     "@types/node": "25.6.0",
     "@types/react": "19.2.18",
+    "@vitejs/plugin-react": "^6.0.5",
     "eslint": "^9",
-    "eslint-config-next": "16.3.1"
+    "eslint-config-next": "16.3.1",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "react-markdown-editor-lite": {

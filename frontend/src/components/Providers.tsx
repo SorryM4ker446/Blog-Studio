@@ -76,21 +76,24 @@ export function SidebarContent() {
   const [isPostsExpanded, setIsPostsExpanded] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
 
-  const refreshCategories = useCallback(() => {
-    getCategories().then((cats) =>
+  const refreshCategories = useCallback(async () => {
+    try {
+      const cats = await getCategories();
       setCategories(
         cats
           .filter((c) => (c.post_count || 0) > 0)
           .sort((a, b) => (b.post_count || 0) - (a.post_count || 0))
-      )
-    );
+      );
+    } catch {
+      // Keep the last successful category list when the public API is temporarily unavailable.
+    }
   }, []);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setMounted(true);
+      void refreshCategories();
     });
-    refreshCategories();
     window.addEventListener("blog:refresh-sidebar", refreshCategories);
     return () => {
       window.cancelAnimationFrame(frame);
@@ -121,15 +124,16 @@ export function SidebarContent() {
             <ListIcon className="nav-icon active-icon-blue" />
             <span className="nav-item-label">All Posts</span>
           </Link>
-          <div
+          <button
+            type="button"
             className="nav-posts-chevron"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               setIsPostsExpanded((v) => !v);
             }}
-            role="button"
             aria-label="Toggle categories"
+            aria-expanded={isPostsExpanded}
           >
             <ChevronDownIcon
               size={14}
@@ -138,7 +142,7 @@ export function SidebarContent() {
                 transform: isPostsExpanded ? "rotate(180deg)" : "rotate(0deg)",
               }}
             />
-          </div>
+          </button>
         </div>
       )}
 
@@ -169,7 +173,7 @@ export function SidebarContent() {
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", marginRight: "0.5rem" }}>
                 {cat.name}
               </span>
-              <span style={{ background: "var(--accent-blue)", color: "#fff", fontSize: "0.72rem", padding: "1px 7px", borderRadius: "10px", fontWeight: 600, flexShrink: 0 }}>
+              <span style={{ background: "var(--accent-blue)", color: "var(--accent-contrast-text)", fontSize: "0.72rem", padding: "1px 7px", borderRadius: "10px", fontWeight: 600, flexShrink: 0 }}>
                 {cat.post_count}
               </span>
             </Link>
@@ -207,7 +211,7 @@ export function SidebarContent() {
 
 // ─── Sidebar Footer ───────────────────────────────────────────────────────────
 export function SidebarFooter() {
-  const { user, isLoading } = useAuth();
+  const { user, authStatus } = useAuth();
   const { isCollapsed } = useSidebar();
   const [mounted, setMounted] = useState(false);
 
@@ -228,7 +232,7 @@ export function SidebarFooter() {
       </Link>
 
       {/* Login — above Settings, guest only */}
-      {mounted && !isLoading && !user && (
+      {mounted && authStatus === "anonymous" && !user && (
         <Link href="/login" className="nav-item" data-tooltip={isCollapsed ? "Login" : undefined}>
           <LoginIcon className="nav-icon" />
           <span className="nav-item-label">Login</span>
@@ -239,10 +243,10 @@ export function SidebarFooter() {
       <Link
         href="/settings"
         className="nav-item"
-        data-tooltip={isCollapsed ? `Settings${mounted && user ? " (Admin)" : ""}` : undefined}
+        data-tooltip={isCollapsed ? `Settings${mounted && user?.role === "admin" ? " (Admin)" : ""}` : undefined}
       >
         <SettingsIcon className="nav-icon" />
-        <span className="nav-item-label">Settings{mounted && user && " (Admin)"}</span>
+        <span className="nav-item-label">Settings{mounted && user?.role === "admin" && " (Admin)"}</span>
       </Link>
     </div>
   );
