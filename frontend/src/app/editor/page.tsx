@@ -1,224 +1,228 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
-import type { Post, FileRecord, Category } from "@/lib/api";
+import type { Category, FileRecord, Post } from "@/lib/api";
 import {
-  getAdminPosts,
-  createPost,
-  updatePost,
-  deletePost,
-  getAdminFiles,
-  uploadFile,
-  uploadFileWithMetadata,
-  updateFileMetadata,
-  deleteFile,
-  getFileViewUrl,
-  getAdminCategories,
   createCategory,
+  createPost,
+  deleteCategory,
+  deleteFile,
+  deletePost,
+  filterPostsByVisibleText,
+  getApiErrorMessage,
+  getAdminCategories,
+  getAdminFiles,
+  getAdminPosts,
+  getFileViewUrl,
   normalizeMarkdownFileUrls,
   searchAdminResources,
-  filterPostsByVisibleText,
+  updateCategory,
+  updateFileMetadata,
+  updatePost,
+  uploadFile,
+  uploadFileWithMetadata,
 } from "@/lib/api";
-import SearchInput from "@/components/SearchInput";
-import Pagination from "@/components/Pagination";
-import FileCard, { EditActionButton } from "@/components/files/FileCard";
+import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
+import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
+import PostEditorForm from "@/components/editor/PostEditorForm";
 import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
-import { 
-  EditIcon, 
-  FileTextIcon, 
-  FolderIcon, 
-  TrashIcon, 
-  InboxIcon, 
-  UploadIcon 
-} from "@/components/Icons";
-import "react-markdown-editor-lite/lib/index.css";
+import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
-// Markdown editor 动态导入（不支持 SSR）
-const MdEditor = dynamic(() => import("react-markdown-editor-lite"), {
-  ssr: false,
-});
-
-let mdParser: { render: (text: string) => string } | null = null;
-if (typeof window !== "undefined") {
-  const MarkdownIt = require("markdown-it");
-  const { imageSizePlugin } = require("@/lib/md-plugins");
-  mdParser = new MarkdownIt({ html: false }).use(imageSizePlugin);
-}
-
-type TabType = "posts" | "files";
 type ViewMode = "list" | "edit";
+type DeleteType = "post" | "file" | "category";
 
 export default function EditorPage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, authStatus, authError, refreshAuth } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const urlTab: TabType = searchParams.get("tab") === "files" ? "files" : "posts";
+  const urlTab: EditorTab = searchParams.get("tab") === "files" ? "files" : "posts";
   const searchQuery = searchParams.get("q") || "";
+
   const isMountedRef = useRef(true);
   const categoryRequestIdRef = useRef(0);
   const postRequestIdRef = useRef(0);
   const fileRequestIdRef = useRef(0);
-  const searchRequestIdRef = useRef(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [activeTab, setActiveTab] = useState<TabType>(urlTab);
+  const [activeTab, setActiveTab] = useState<EditorTab>(urlTab);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  
   const [posts, setPosts] = useState<Post[]>([]);
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState("");
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [postsError, setPostsError] = useState("");
+  const [filesError, setFilesError] = useState("");
+
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
   const [editContent, setEditContent] = useState("");
-  const [editCategoryId, setEditCategoryId] = useState<number>(0);
-  const [editStatus, setEditStatus] = useState<string>("draft");
+  const [editCategoryId, setEditCategoryId] = useState(0);
+  const [editStatus, setEditStatus] = useState("draft");
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const [metadataFile, setMetadataFile] = useState<FileRecord | null>(null);
-
-  const [showNewCat, setShowNewCat] = useState(false);
-  const [newCatName, setNewCatName] = useState("");
-  const [creatingCat, setCreatingCat] = useState(false);
-  const [loadError, setLoadError] = useState("");
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [filesLoading, setFilesLoading] = useState(false);
-
-  const notifyUpdate = () => {
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("blog:refresh-sidebar"));
-    }
-  };
-
-  // 删除确认弹窗状态
-  const [deleteModal, setDeleteModal] = useState<{
-    isOpen: boolean;
-    type: "post" | "file" | "category";
-    id: number | null;
-    isDeleting: boolean;
-  }>({ isOpen: false, type: "post", id: null, isDeleting: false });
-  const [deleteError, setDeleteError] = useState("");
-  const [deleteErrorCode, setDeleteErrorCode] = useState("");
-  const deleteIsBlocked = deleteErrorCode === "file_in_use";
-
-
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/login?redirect=/editor");
-    }
-  }, [user, isLoading, router]);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const [postPage, setPostPage] = useState(1);
   const [postTotalPages, setPostTotalPages] = useState(1);
   const [filePage, setFilePage] = useState(1);
   const [fileTotalPages, setFileTotalPages] = useState(1);
 
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    type: DeleteType;
+    id: number | null;
+    busy: boolean;
+  }>({ open: false, type: "post", id: null, busy: false });
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteErrorCode, setDeleteErrorCode] = useState("");
+
+  function notifyUpdate() {
+    window.dispatchEvent(new CustomEvent("blog:refresh-sidebar"));
+  }
+
   useEffect(() => {
-    if (user) {
-      setActiveTab(urlTab);
-      loadCategories();
-      if (searchQuery.trim()) {
-        runSearch(searchQuery.trim(), urlTab);
-      } else {
-        loadPosts(1);
-        loadFiles(1);
-      }
+    if (!isLoading && authStatus === "anonymous") router.replace("/login?redirect=/editor");
+  }, [authStatus, isLoading, router]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    setActiveTab(urlTab);
+    void loadCategories();
+    if (searchQuery.trim()) {
+      void runSearch(searchQuery.trim(), urlTab);
+    } else {
+      void loadPosts(1);
+      void loadFiles(1);
     }
+    // Requests carry sequence IDs so stale responses cannot overwrite the latest URL state.
   }, [searchQuery, urlTab, user]);
 
   async function loadCategories() {
     const requestId = ++categoryRequestIdRef.current;
-    const c = await getAdminCategories();
-    if (!isMountedRef.current || requestId !== categoryRequestIdRef.current) {
-      return;
+    setCategoriesLoading(true);
+    setCategoriesError("");
+    try {
+      const result = await getAdminCategories();
+      if (isMountedRef.current && requestId === categoryRequestIdRef.current) setCategories(result);
+    } catch (error) {
+      if (isMountedRef.current && requestId === categoryRequestIdRef.current) {
+        setCategoriesError(getApiErrorMessage(error, "Failed to load categories."));
+      }
+    } finally {
+      if (isMountedRef.current && requestId === categoryRequestIdRef.current) setCategoriesLoading(false);
     }
-    setCategories(c);
   }
 
   async function loadPosts(pageToLoad: number) {
     const requestId = ++postRequestIdRef.current;
     setPostsLoading(true);
-    const result = await getAdminPosts(pageToLoad, 10, "admin");
-    if (!isMountedRef.current || requestId !== postRequestIdRef.current) {
-      return;
+    setPostsError("");
+    try {
+      const result = await getAdminPosts(pageToLoad, 10, "admin");
+      if (!isMountedRef.current || requestId !== postRequestIdRef.current) return;
+      setPosts(result.data);
+      setPostPage(result.page);
+      setPostTotalPages(Math.max(1, Math.ceil(result.total / result.limit)));
+    } catch (error) {
+      if (isMountedRef.current && requestId === postRequestIdRef.current) {
+        setPostsError(getApiErrorMessage(error, "Failed to load posts."));
+      }
+    } finally {
+      if (isMountedRef.current && requestId === postRequestIdRef.current) setPostsLoading(false);
     }
-    setLoadError(result.error || "");
-    setPosts(result.data);
-    setPostPage(result.page);
-    setPostTotalPages(Math.ceil(result.total / result.limit));
-    setPostsLoading(false);
   }
 
   async function loadFiles(pageToLoad: number) {
     const requestId = ++fileRequestIdRef.current;
     setFilesLoading(true);
-    const result = await getAdminFiles(pageToLoad, 10, false);
-    if (!isMountedRef.current || requestId !== fileRequestIdRef.current) {
-      return;
+    setFilesError("");
+    try {
+      const result = await getAdminFiles(pageToLoad, 10, false);
+      if (!isMountedRef.current || requestId !== fileRequestIdRef.current) return;
+      setFiles(result.data);
+      setFilePage(result.page);
+      setFileTotalPages(Math.max(1, Math.ceil(result.total / result.limit)));
+    } catch (error) {
+      if (isMountedRef.current && requestId === fileRequestIdRef.current) {
+        setFilesError(getApiErrorMessage(error, "Failed to load files."));
+      }
+    } finally {
+      if (isMountedRef.current && requestId === fileRequestIdRef.current) setFilesLoading(false);
     }
-    setLoadError(result.error || "");
-    setFiles(result.data);
-    setFilePage(result.page);
-    setFileTotalPages(Math.ceil(result.total / result.limit));
-    setFilesLoading(false);
   }
 
-  async function runSearch(query: string, tab: TabType) {
-    const requestId = ++searchRequestIdRef.current;
-    const res = await searchAdminResources(query, tab, false);
-    if (!isMountedRef.current || requestId !== searchRequestIdRef.current) {
-      return;
-    }
-
-    if (tab === "posts") {
-        setPosts(filterPostsByVisibleText(res.posts || [], query));
+  async function runSearch(query: string, tab: EditorTab) {
+    const requestIdRef = tab === "posts" ? postRequestIdRef : fileRequestIdRef;
+    const requestId = ++requestIdRef.current;
+    const setLoading = tab === "posts" ? setPostsLoading : setFilesLoading;
+    const setError = tab === "posts" ? setPostsError : setFilesError;
+    setLoading(true);
+    setError("");
+    try {
+      const result = await searchAdminResources(query, tab, false);
+      if (!isMountedRef.current || requestId !== requestIdRef.current) return;
+      if (tab === "posts") {
+        setPosts(filterPostsByVisibleText(result.posts || [], query));
+        setPostPage(1);
         setPostTotalPages(1);
-    } else {
-        setFiles(res.files || []);
+      } else {
+        setFiles(result.files || []);
+        setFilePage(1);
         setFileTotalPages(1);
+      }
+    } catch (error) {
+      if (isMountedRef.current && requestId === requestIdRef.current) {
+        setError(getApiErrorMessage(error, `Failed to search ${tab}.`));
+      }
+    } finally {
+      if (isMountedRef.current && requestId === requestIdRef.current) setLoading(false);
     }
+  }
+
+  async function refreshPosts(pageToLoad = postPage) {
+    const query = searchQuery.trim();
+    if (query) await runSearch(query, "posts");
+    else await loadPosts(pageToLoad);
+  }
+
+  async function refreshFiles(pageToLoad = filePage) {
+    const query = searchQuery.trim();
+    if (query) await runSearch(query, "files");
+    else await loadFiles(pageToLoad);
   }
 
   function handleSearch(query: string) {
-    const normalizedQuery = query.trim();
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("tab", activeTab);
-    if (normalizedQuery) {
-      params.set("q", normalizedQuery);
-    } else {
-      params.delete("q");
-    }
-    const nextURL = `/editor?${params.toString()}`;
-    if (activeTab === urlTab && normalizedQuery === searchQuery.trim()) {
-      if (normalizedQuery) {
-        runSearch(normalizedQuery, activeTab);
-      } else if (activeTab === "posts") {
-        loadPosts(1);
-      } else {
-        loadFiles(1);
-      }
+    const normalized = query.trim();
+    if (activeTab === urlTab && normalized === searchQuery.trim()) {
+      if (normalized) void runSearch(normalized, activeTab);
+      else if (activeTab === "posts") void loadPosts(1);
+      else void loadFiles(1);
       return;
     }
-    router.push(nextURL);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", activeTab);
+    if (normalized) params.set("q", normalized);
+    else params.delete("q");
+    router.push(`/editor?${params.toString()}`);
   }
 
-  function handleTabChange(tab: TabType) {
+  function handleTabChange(tab: EditorTab) {
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
@@ -226,147 +230,131 @@ export default function EditorPage() {
     router.push(`/editor?${params.toString()}`);
   }
 
-  function openEditor(post: Post) {
+  function openEditor(post: Post | null) {
     setEditingPost(post);
-    setEditTitle(post.title);
-    setEditSummary(post.summary || "");
-    setEditContent(normalizeMarkdownFileUrls(post.content));
-    setEditCategoryId(post.category_id ?? 0);
-    setEditStatus(post.status || "draft");
-    setSaveMsg("");
-    setViewMode("edit");
-  }
-
-  function handleNewPost() {
-    setEditingPost(null);
-    setEditTitle("");
-    setEditSummary("");
-    setEditContent("");
-    setEditCategoryId(0);
-    setEditStatus("draft");
-    setSaveMsg("");
+    setEditTitle(post?.title || "");
+    setEditSummary(post?.summary || "");
+    setEditContent(normalizeMarkdownFileUrls(post?.content || ""));
+    setEditCategoryId(post?.category_id ?? 0);
+    setEditStatus(post?.status || "draft");
+    setSaveMessage("");
     setViewMode("edit");
   }
 
   async function handleSave() {
-    // Both new post and editing existing post
-    if (!editTitle || !editContent) {
-        setSaveMsg("❌ Title and content are required.");
-        return;
+    if (!editTitle.trim() || !editContent.trim()) {
+      setSaveMessage("❌ Title and content are required.");
+      if (!editTitle.trim()) document.getElementById("post-title")?.focus();
+      else document.querySelector<HTMLElement>(".custom-editor-wrapper textarea")?.focus();
+      return;
     }
     setSaving(true);
-    setSaveMsg("");
-    
+    setSaveMessage("");
     try {
-        let result = null;
-        if (editingPost) {
-            result = await updatePost(editingPost.id, {
-                title: editTitle,
-                summary: editSummary,
-                content: editContent,
-                category_id: editCategoryId || 0,
-                status: editStatus,
-            });
-        } else {
-            result = await createPost({
-                title: editTitle,
-                summary: editSummary,
-                content: editContent,
-                category_id: editCategoryId || 0,
-                status: editStatus,
-            });
-        }
-
-        if (result) {
-            setSaveMsg("✅ Saved successfully!");
-            // Refresh current post page if editing, else go to first page
-            editingPost ? await loadPosts(postPage) : await loadPosts(1);
-            notifyUpdate();
-            router.refresh(); // Invalidate Next.js router cache
-            // Auto-redirect back to list after a brief delay
-            if (saveTimeoutRef.current) {
-              clearTimeout(saveTimeoutRef.current);
-            }
-            saveTimeoutRef.current = setTimeout(() => {
-              if (isMountedRef.current) {
-                setViewMode("list");
-              }
-            }, 600);
-        } else {
-            setSaveMsg("❌ Failed to save.");
-        }
-    } catch (err: any) {
-        setSaveMsg("❌ Failed to save: " + (err.message || "System error."));
+      const payload = {
+        title: editTitle.trim(),
+        summary: editSummary,
+        content: editContent,
+        category_id: editCategoryId || 0,
+        status: editStatus,
+      };
+      const result = editingPost ? await updatePost(editingPost.id, payload) : await createPost(payload);
+      if (!result) throw new Error("Failed to save post.");
+      setSaveMessage("✅ Saved successfully!");
+      await refreshPosts(editingPost ? postPage : 1);
+      notifyUpdate();
+      router.refresh();
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) setViewMode("list");
+      }, 600);
+    } catch (error) {
+      setSaveMessage(`❌ ${getApiErrorMessage(error, "Failed to save post.")}`);
     } finally {
-        setSaving(false);
+      setSaving(false);
     }
   }
 
-  async function handleCreateCategory() {
-      if (!newCatName.trim()) return;
-      setCreatingCat(true);
-      const res = await createCategory(newCatName.trim());
-      setCreatingCat(false);
-      if (res) {
-          setCategories([...categories, res]);
-          setEditCategoryId(res.id);
-          setNewCatName("");
-          setShowNewCat(false);
-      } else {
-          alert("Failed to create category");
-      }
+  async function handleCreateCategory(name: string): Promise<string | null> {
+    try {
+      const category = await createCategory(name);
+      if (!category) return "Failed to create category.";
+      setCategories((current) => [...current, category]);
+      setEditCategoryId(category.id);
+      notifyUpdate();
+      return null;
+    } catch (error) {
+      return getApiErrorMessage(error, "Failed to create category.");
+    }
   }
 
-  function handleDeletePost(id: number) {
-    setDeleteError("");
-    setDeleteErrorCode("");
-    setDeleteModal({ isOpen: true, type: "post", id, isDeleting: false });
+  async function handleRenameCategory(id: number, name: string): Promise<string | null> {
+    try {
+      const updated = await updateCategory(id, name);
+      if (!updated) return "Failed to rename category.";
+      await loadCategories();
+      notifyUpdate();
+      return null;
+    } catch (error) {
+      return getApiErrorMessage(error, "Failed to rename category.");
+    }
   }
 
-  function handleDeleteFile(id: number) {
+  function openDelete(type: DeleteType, id: number) {
     setDeleteError("");
     setDeleteErrorCode("");
-    setDeleteModal({ isOpen: true, type: "file", id, isDeleting: false });
+    setDeleteDialog({ open: true, type, id, busy: false });
+  }
+
+  function closeDelete() {
+    if (deleteDialog.busy) return;
+    setDeleteError("");
+    setDeleteErrorCode("");
+    setDeleteDialog({ open: false, type: "post", id: null, busy: false });
   }
 
   async function executeDelete() {
-    if (!deleteModal.id || deleteModal.isDeleting || deleteIsBlocked) return;
-    setDeleteModal(prev => ({ ...prev, isDeleting: true }));
-    
-    if (deleteModal.type === "post") {
-      await deletePost(deleteModal.id);
-      if (editingPost?.id === deleteModal.id) {
-        setEditingPost(null);
-        setViewMode("list");
-      }
-      await loadPosts(postPage);
-    } else if (deleteModal.type === "file") {
-      const result = await deleteFile(deleteModal.id);
-      if (!result.ok) {
-        setDeleteError(result.error || "Failed to delete file");
-        setDeleteErrorCode(result.code || "");
-        setDeleteModal(prev => ({ ...prev, isDeleting: false }));
-        return;
-      }
-      await loadFiles(filePage);
-    } else if (deleteModal.type === "category") {
-      const { deleteCategory } = await import("@/lib/api");
-      await deleteCategory(deleteModal.id);
-      if (editCategoryId === deleteModal.id) setEditCategoryId(0);
-      await loadCategories();
-      await loadPosts(postPage); // re-fetch posts to show 'Uncategorized' fallback
-    }
-    
-    notifyUpdate();
+    if (!deleteDialog.id || deleteDialog.busy || deleteErrorCode === "file_in_use") return;
+    const { id, type } = deleteDialog;
+    setDeleteDialog((current) => ({ ...current, busy: true }));
     setDeleteError("");
     setDeleteErrorCode("");
-    setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false });
+    try {
+      if (type === "post") {
+        const deleted = await deletePost(id);
+        if (!deleted) throw new Error("Failed to delete post.");
+        if (editingPost?.id === id) {
+          setEditingPost(null);
+          setViewMode("list");
+        }
+        await refreshPosts(postPage);
+      } else if (type === "file") {
+        const result = await deleteFile(id);
+        if (!result.ok) {
+          setDeleteError(result.error || "Failed to delete file.");
+          setDeleteErrorCode(result.code || "");
+          setDeleteDialog((current) => ({ ...current, busy: false }));
+          return;
+        }
+        await refreshFiles(filePage);
+      } else {
+        const deleted = await deleteCategory(id);
+        if (!deleted) throw new Error("Failed to delete category.");
+        if (editCategoryId === id) setEditCategoryId(0);
+        await Promise.all([loadCategories(), refreshPosts(postPage)]);
+      }
+      notifyUpdate();
+      setDeleteDialog({ open: false, type: "post", id: null, busy: false });
+    } catch (error) {
+      setDeleteError(getApiErrorMessage(error, `Failed to delete ${type}.`));
+      setDeleteDialog((current) => ({ ...current, busy: false }));
+    }
   }
 
   async function handleManagedFileUpload(file: File, displayName: string, description: string) {
     const result = await uploadFileWithMetadata(file, { displayName, description });
     if (result.ok && result.file) {
-      await loadFiles(1);
+      await refreshFiles(1);
       notifyUpdate();
     }
     return result;
@@ -375,797 +363,97 @@ export default function EditorPage() {
   async function handleFileMetadataSave(file: FileRecord, displayName: string, description: string) {
     const result = await updateFileMetadata(file.id, displayName, description);
     if (result.ok && result.file) {
-      const updatedFile = result.file;
-      setFiles((current) => current.map((item) => item.id === updatedFile.id ? updatedFile : item));
-      setPreviewFile((current) => current?.id === updatedFile.id ? updatedFile : current);
+      const updated = result.file;
+      setFiles((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setPreviewFile((current) => current?.id === updated.id ? updated : current);
+      await refreshFiles(filePage);
       notifyUpdate();
     }
     return result;
   }
 
   async function handleImageUpload(file: File): Promise<string> {
-    const res = await uploadFile(file, true); // 使用 system=true 进行隔离上传
-    if (res) {
-      return getFileViewUrl(res.id);
-    }
-    return "";
+    const uploaded = await uploadFile(file, true);
+    if (!uploaded) throw new Error("Failed to upload image.");
+    return getFileViewUrl(uploaded.id);
   }
 
-  // 粘贴拦截器：防止带有 HTML 碎屑的图片粘贴插入冗余代码
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData.items;
-    let hasImage = false;
-    for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf("image") !== -1) {
-            hasImage = true;
-            break;
-        }
-    }
-    if (hasImage) {
-        // 如果包含图片，我们阻止默认的“富文本粘贴”行为（即 HTML 碎片）
-        // 这样可以确保只触发 onImageUpload 的上传逻辑，避免 HTML 被注入
-        e.preventDefault();
-        console.log("Prevented default HTML injection for image paste");
-    }
-  };
-
-  // 自定义 Select 组件带编辑器
-  const CustomSelect = ({ 
-    value, 
-    onChange, 
-    options, 
-    placeholder,
-    width = "100%",
-    allowActions = false,
-    onRename,
-    onDelete
-  }: { 
-    value: any, 
-    onChange: (val: any) => void, 
-    options: { value: any, label: string }[],
-    placeholder?: string,
-    width?: string,
-    allowActions?: boolean,
-    onRename?: (id: number, newName: string) => void,
-    onDelete?: (id: number) => void
-  }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [editingId, setEditingId] = useState<number | null>(null);
-    const [editName, setEditName] = useState("");
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-                setEditingId(null);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    const handleSaveRename = (id: number) => {
-        if (onRename && editName.trim()) {
-            onRename(id, editName.trim());
-        }
-        setEditingId(null);
-    };
-
-    const selectedOption = options.find(o => o.value === value);
-
+  if (isLoading || authStatus === "checking" || authStatus === "anonymous") {
+    return <LoadingState label="Checking editor access…" rows={3} />;
+  }
+  if (authStatus === "unavailable") {
     return (
-        <div className="custom-select-container" ref={containerRef} style={{ width }}>
-            <div className="custom-select-trigger" onClick={() => !editingId && setIsOpen(!isOpen)}>
-                <span>{selectedOption ? selectedOption.label : placeholder}</span>
-                <span style={{ fontSize: "0.8rem", opacity: 0.5, marginLeft: "10px" }}>{isOpen ? "▲" : "▼"}</span>
-            </div>
-            {isOpen && (
-                <ul className="custom-select-options fade-in">
-                    {options.map(opt => (
-                        <li 
-                            key={opt.value} 
-                            style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                            className={`custom-select-option ${value === opt.value ? "active" : ""}`}
-                            onMouseEnter={(e) => {
-                                const actions = e.currentTarget.querySelector('.opt-actions') as HTMLElement | null;
-                                if (actions) actions.style.display = "flex";
-                            }}
-                            onMouseLeave={(e) => {
-                                const actions = e.currentTarget.querySelector('.opt-actions') as HTMLElement | null;
-                                if (actions) actions.style.display = "none";
-                            }}
-                        >
-                            {editingId === opt.value ? (
-                                <div style={{ display: "flex", gap: "5px", width: "100%" }} onClick={e => e.stopPropagation()}>
-                                    <input 
-                                        autoFocus
-                                        value={editName}
-                                        onChange={e => setEditName(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') handleSaveRename(opt.value); if (e.key === 'Escape') setEditingId(null); }}
-                                        style={{ flex: 1, background: "transparent", border: "1px solid var(--border-color)", color: "var(--text-primary)", padding: "2px 5px", borderRadius: "4px" }}
-                                    />
-                                    <button onClick={() => handleSaveRename(opt.value)} style={{ background: "var(--accent-blue)", border: "none", color: "#fff", borderRadius: "4px", cursor: "pointer", fontSize: "0.7rem", padding: "0 5px" }}>✓</button>
-                                </div>
-                            ) : (
-                                <>
-                                    <span style={{ flex: 1 }} onClick={() => { onChange(opt.value); setIsOpen(false); }}>
-                                        {opt.label}
-                                    </span>
-                                    {allowActions && opt.value !== 0 && (
-                                        <div className="opt-actions" style={{ display: "none", gap: "5px" }} onClick={e => e.stopPropagation()}>
-                                                <EditIcon size={14} />
-                                            <span 
-                                                title="Delete"
-                                                onClick={() => { onDelete && onDelete(opt.value); }}
-                                                style={{ cursor: "pointer", display: "flex", alignItems: "center", color: "var(--accent-red)" }}>
-                                                <TrashIcon size={14} />
-                                            </span>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
-    );
-  };
-
-  const tabStyle = (tab: TabType) => ({
-    padding: "10px 24px",
-    borderRadius: "8px",
-    border: "none",
-    cursor: "pointer",
-    fontSize: "0.95rem",
-    fontWeight: 600 as const,
-    background:
-      activeTab === tab ? "rgba(168, 199, 250, 0.15)" : "transparent",
-    color:
-      activeTab === tab ? "var(--accent-blue)" : "var(--text-secondary)",
-    transition: "all 0.2s ease",
-  });
-
-  if (isLoading || !user) {
-    return (
-        <div className="fade-in" style={{ padding: "2rem" }}>
-            <div className="skeleton-pulse" style={{ height: "32px", width: "250px", marginBottom: "1.5rem" }} />
-            <div className="skeleton-pulse" style={{ height: "16px", width: "350px", marginBottom: "2rem" }} />
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: "1rem" }}>
-                {[1, 2, 3].map(i => (
-                    <div key={i} className="skeleton-pulse" style={{ height: "180px", borderRadius: "16px" }} />
-                ))}
-            </div>
-        </div>
+      <ErrorState
+        title="Editor access could not be verified"
+        message={getApiErrorMessage(authError, "The server could not verify your session.")}
+        onRetry={() => void refreshAuth()}
+      />
     );
   }
-
-  const renderListView = () => (
-    <div className="fade-in">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "2rem",
-        }}
-      >
-        <div>
-          <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "0.5rem" }}>
-            <EditIcon size={28} /> Content Editor
-          </h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            Manage and edit your posts and cloud drive files.
-          </p>
-        </div>
-      </div>
-
-      {loadError && (
-        <div
-          className="fade-in"
-          style={{
-            marginBottom: "1rem",
-            padding: "0.9rem 1rem",
-            background: "rgba(242, 139, 130, 0.12)",
-            border: "1px solid rgba(242, 139, 130, 0.24)",
-            borderRadius: "12px",
-            color: "var(--accent-red)",
-            fontSize: "0.9rem",
-          }}
-        >
-          Failed to sync editor data: {loadError}
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "2rem",
-        }}
-      >
-          <div style={{
-            display: "flex",
-            gap: "0.5rem",
-            background: "var(--bg-surface)",
-            padding: "6px",
-            borderRadius: "12px",
-            width: "fit-content",
-            border: "1px solid var(--border-color)",
-          }}>
-            <button style={tabStyle("posts")} onClick={() => handleTabChange("posts")}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <FileTextIcon size={18} /> Posts ({postsLoading ? "..." : posts.length})
-              </div>
-            </button>
-            <button style={tabStyle("files")} onClick={() => handleTabChange("files")}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <FolderIcon size={18} /> Files ({filesLoading ? "..." : files.length})
-              </div>
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-              <SearchInput 
-                  placeholder={`Search ${activeTab}...`} 
-                  onSearch={handleSearch} 
-                  style={{ width: "220px" }}
-                  value={searchQuery}
-              />
-              {activeTab === "posts" && (
-                <button
-                  onClick={handleNewPost}
-                  style={{
-                    background: "var(--accent-blue)",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "8px",
-                    padding: "10px 20px",
-                    fontSize: "0.95rem",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    boxShadow: "0 4px 12px rgba(168, 199, 250, 0.2)",
-                  }}
-                >
-                  + New Post
-                </button>
-              )}
-
-              {activeTab === "files" && (
-                  <button
-                    type="button"
-                    onClick={() => setUploadDialogOpen(true)}
-                    style={{
-                      background: "var(--accent-blue)",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "10px 20px",
-                      fontSize: "0.95rem",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      boxShadow: "0 4px 12px rgba(168, 199, 250, 0.2)",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      lineHeight: 1,
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <UploadIcon size={16} /> Upload File
-                    </span>
-                  </button>
-              )}
-          </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
-          gap: "1rem",
-        }}
-      >
-        {activeTab === "posts" && postsLoading && posts.length === 0 &&
-          [1, 2, 3].map((index) => (
-            <div key={`post-skeleton-${index}`} className="skeleton-pulse" style={{ height: "220px", borderRadius: "16px" }} />
-          ))}
-
-        {activeTab === "files" && filesLoading && files.length === 0 &&
-          [1, 2, 3].map((index) => (
-            <div key={`file-skeleton-${index}`} className="skeleton-pulse" style={{ height: "84px", borderRadius: "16px" }} />
-          ))}
-
-        {activeTab === "posts" &&
-          posts.map((post) => (
-            <div
-              key={post.id}
-              className="ai-card"
-              onClick={() => {
-                if (post.status === "published") {
-                  router.push(`/posts/${post.id}`);
-                  return;
-                }
-                openEditor(post);
-              }}
-              style={{
-                padding: "1.5rem",
-                cursor: "pointer",
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flex: 1, minWidth: 0 }}>
-                  <h3
-                    style={{
-                      margin: 0,
-                      fontWeight: 600,
-                      fontSize: "1.1rem",
-                      color: "var(--text-primary)",
-                      lineHeight: 1.4,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {post.title}
-                  </h3>
-                  <span
-                    style={{
-                      padding: "2px 10px",
-                      borderRadius: "12px",
-                      fontSize: "0.72rem",
-                      fontWeight: 600,
-                      letterSpacing: "0.03em",
-                      flexShrink: 0,
-                      background: post.status === "published"
-                        ? "rgba(109, 214, 140, 0.15)"
-                        : "rgba(255, 183, 77, 0.15)",
-                      color: post.status === "published"
-                        ? "var(--accent-green)"
-                        : "#ffb74d",
-                    }}
-                  >
-                    {post.status === "published" ? "Published" : "Draft"}
-                  </span>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDeletePost(post.id); }}
-                  style={{
-                    background: "rgba(242, 139, 130, 0.1)",
-                    color: "var(--accent-red)",
-                    border: "none",
-                    borderRadius: "50%",
-                    width: "28px",
-                    height: "28px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    fontSize: "0.8rem",
-                    flexShrink: 0,
-                    marginLeft: "1rem",
-                  }}
-                  title="Delete post"
-                >
-                  ✕
-                </button>
-              </div>
-              <div
-                style={{
-                  fontSize: "0.85rem",
-                  color: "var(--text-secondary)",
-                  margin: "0 0 1.5rem 0",
-                  flex: 1,
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  lineHeight: "1.6",
-                }}
-              >
-                {post.summary || <span style={{opacity: 0.4}}>No introduction provided.</span>}
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginTop: "auto",
-                }}
-              >
-                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span>{new Date(post.updated_at).toLocaleDateString()}</span>
-                  <span style={{ 
-                      background: post.category_id == null ? "rgba(128,128,128,0.15)" : "rgba(168, 199, 250, 0.1)",
-                      color: post.category_id == null ? "var(--text-muted)" : "var(--accent-blue)",
-                      padding: "2px 8px",
-                      borderRadius: "6px",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                  }}>
-                    {post.category_id == null ? "无标签" : post.category?.name || "Uncategorized"}
-                  </span>
-                </div>
-                <EditActionButton onClick={(event) => { event.stopPropagation(); openEditor(post); }} />
-              </div>
-            </div>
-          ))}
-
-        {activeTab === "files" &&
-          files.map((file) => (
-            <FileCard
-              key={file.id}
-              file={file}
-              onPreview={setPreviewFile}
-              onEdit={setMetadataFile}
-              onDelete={(item) => handleDeleteFile(item.id)}
-            />
-          ))}
-      </div>
-
-      {activeTab === "posts" && !postsLoading && posts.length === 0 && (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "5rem",
-            color: "var(--text-muted)",
-            background: "var(--bg-surface)",
-            borderRadius: "16px",
-            border: "1px solid var(--border-color)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: "1.5rem", opacity: 0.5 }}>
-            <InboxIcon size={64} />
-          </div>
-          <p>{loadError ? `Failed to load posts: ${loadError}` : "No posts available in the admin workspace yet."}</p>
-        </div>
-      )}
-
-      {/* Pagination Controls */}
-      {activeTab === "posts" && posts.length > 0 && (
-        <Pagination 
-          currentPage={postPage} 
-          totalPages={postTotalPages} 
-          onPageChange={(p) => loadPosts(p)} 
-        />
-      )}
-      {activeTab === "files" && files.length > 0 && (
-        <Pagination 
-          currentPage={filePage} 
-          totalPages={fileTotalPages} 
-          onPageChange={(p) => loadFiles(p)} 
-        />
-      )}
-
-    </div>
-  );
-
-  const renderEditView = () => (
-    <div className="fade-in">
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "1.5rem",
-          marginBottom: "2rem",
-        }}
-      >
-        <button
-          onClick={() => setViewMode("list")}
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border-color)",
-            color: "var(--text-primary)",
-            width: "42px",
-            height: "42px",
-            borderRadius: "12px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "1.2rem",
-            transition: "all 0.2s ease",
-          }}
-          title="Back to list"
-        >
-          ←
-        </button>
-        <div style={{ flex: 1 }}>
-          <h1 className="page-title" style={{ margin: 0, fontSize: "1.5rem" }}>
-            {editingPost ? `Editing: ${editingPost.title}` : "New Post"}
-          </h1>
-          {editingPost && (
-            <p
-              style={{
-                color: "var(--text-muted)",
-                fontSize: "0.85rem",
-                margin: "4px 0 0 0",
-              }}
-            >
-              Last updated: {new Date(editingPost.updated_at).toLocaleString()}
-            </p>
-          )}
-        </div>
-        <div style={{ display: "flex", gap: "0.8rem", alignItems: "center" }}>
-          <CustomSelect
-            value={editStatus}
-            onChange={setEditStatus}
-            width="140px"
-            options={[
-                { value: "draft", label: "Draft" },
-                { value: "published", label: "Published" }
-            ]}
-          />
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="ai-card"
-            style={{
-              background: "var(--accent-blue)",
-              color: "#fff",
-              border: "none",
-              padding: "0.6rem 1.5rem",
-              borderRadius: "10px",
-              cursor: saving ? "not-allowed" : "pointer",
-              fontWeight: 600,
-              fontSize: "0.9rem",
-              boxShadow: "0 4px 12px rgba(168, 199, 250, 0.2)",
-            }}
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
-      </div>
-
-      <div
-        style={{
-          background: "var(--bg-surface)",
-          borderRadius: "16px",
-          padding: "2rem",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
-          border: "1px solid rgba(255,255,255,0.05)", // 极淡的边框
-        }}
-      >
-        <div style={{ marginBottom: "2rem" }}>
-          <label
-            style={{
-              display: "block",
-              fontSize: "0.8rem",
-              color: "var(--text-muted)",
-              marginBottom: "0.8rem",
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-            }}
-          >
-            POST TITLE
-          </label>
-          <input
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            style={{
-              width: "100%",
-              background: "transparent",
-              border: "none",
-              borderBottom: "1px solid var(--border-color)", // 仅保留底边线
-              borderRadius: "0",
-              padding: "0.5rem 0",
-              color: "var(--text-primary)",
-              fontSize: "1.5rem",
-              fontWeight: 500,
-              outline: "none",
-              boxSizing: "border-box",
-            }}
-            placeholder="Enter post title..."
-          />
-        </div>
-
-        <div style={{ marginBottom: "2rem" }}>
-          <label
-            style={{
-              display: "block",
-              fontSize: "0.8rem",
-              color: "var(--text-muted)",
-              marginBottom: "0.8rem",
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-            }}
-          >
-            INTRODUCTION
-          </label>
-          <textarea
-            value={editSummary}
-            onChange={(e) => setEditSummary(e.target.value)}
-            style={{
-              width: "100%",
-              background: "rgba(0,0,0,0.2)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "8px",
-              padding: "1rem",
-              color: "var(--text-secondary)",
-              fontSize: "0.95rem",
-              resize: "vertical",
-              minHeight: "80px",
-              outline: "none",
-              lineHeight: 1.5,
-              fontFamily: "inherit"
-            }}
-            placeholder="Write a brief introduction for this post..."
-          />
-        </div>
-
-        <div style={{ marginBottom: "2rem" }}>
-          <label
-            style={{
-              display: "block",
-              fontSize: "0.8rem",
-              color: "var(--text-muted)",
-              marginBottom: "0.8rem",
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-            }}
-          >
-            CATEGORY / TAG
-          </label>
-          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <CustomSelect
-                  value={editCategoryId}
-                  onChange={setEditCategoryId}
-                  placeholder="Select a category..."
-                  allowActions={true}
-                  onRename={async (id, newName) => {
-                      const { updateCategory } = await import("@/lib/api");
-                      await updateCategory(id, newName);
-                      loadCategories();
-                      notifyUpdate();
-                  }}
-                  onDelete={(id) => {
-                      setDeleteError("");
-                      setDeleteErrorCode("");
-                      setDeleteModal({ isOpen: true, type: "category", id, isDeleting: false });
-                  }}
-                  options={[
-                      { value: 0, label: "无标签 (None)" },
-                      ...categories.map(c => ({ value: c.id, label: c.name }))
-                  ]}
-              />
-              <button 
-                  onClick={() => setShowNewCat(!showNewCat)}
-                  style={{
-                      background: showNewCat ? "rgba(168, 199, 250, 0.15)" : "transparent",
-                      border: "1px solid var(--border-color)",
-                      color: "var(--accent-blue)",
-                      borderRadius: "8px",
-                      width: "36px",
-                      height: "36px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      fontSize: "1.2rem",
-                      transition: "all 0.2s"
-                  }}
-              >+</button>
-          </div>
-          {showNewCat && (
-              <div className="fade-in" style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
-                  <input 
-                      value={newCatName}
-                      onChange={e => setNewCatName(e.target.value)}
-                      placeholder="New category name..."
-                      style={{
-                          background: "var(--bg-main)",
-                          border: "1px solid var(--border-color)",
-                          borderRadius: "6px",
-                          padding: "6px 10px",
-                          color: "var(--text-primary)",
-                          outline: "none",
-                          fontSize: "0.9rem",
-                          flex: 1,
-                      }}
-                  />
-                  <button
-                      onClick={handleCreateCategory}
-                      disabled={creatingCat || !newCatName.trim()}
-                      style={{
-                          background: "var(--accent-blue)",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: "6px",
-                          padding: "6px 12px",
-                          cursor: (creatingCat || !newCatName.trim()) ? "not-allowed" : "pointer",
-                          opacity: (creatingCat || !newCatName.trim()) ? 0.7 : 1,
-                      }}
-                  >Create</button>
-              </div>
-          )}
-        </div>
-
-        <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "0.8rem",
-              color: "var(--text-muted)",
-              marginBottom: "0.8rem",
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-            }}
-          >
-            CONTENT (MARKDOWN)
-          </label>
-          {mdParser && (
-            <div className="custom-editor-wrapper" style={{ border: "none" }}>
-              <MdEditor
-                value={editContent}
-                style={{ 
-                    height: "calc(100vh - 450px)", 
-                    minHeight: "450px", 
-                    borderRadius: "12px",
-                    border: "1px solid var(--border-color)",
-                }}
-                renderHTML={(text: string) => mdParser!.render(normalizeMarkdownFileUrls(text))}
-                onChange={({ text }: { text: string }) => setEditContent(text)}
-                onImageUpload={handleImageUpload}
-                onPaste={handlePaste}
-              />
-            </div>
-          )}
-        </div>
-
-        <div
-          style={{
-            marginTop: "1.5rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: "1rem",
-          }}
-        >
-          {saveMsg && (
-            <div
-              style={{
-                fontSize: "0.9rem",
-                color: saveMsg.includes("✅") ? "var(--accent-green)" : "#ff6b6b",
-                fontWeight: 500,
-                background: saveMsg.includes("✅") ? "rgba(109, 214, 140, 0.1)" : "rgba(255, 107, 107, 0.1)",
-                padding: "8px 16px",
-                borderRadius: "8px",
-              }}
-            >
-              {saveMsg}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  if (!user || user.role !== "admin") {
+    return <ErrorState title="Administrator access required" message="This account cannot access the content editor." />;
+  }
 
   return (
     <>
-      {viewMode === "list" ? renderListView() : renderEditView()}
-
-      {uploadDialogOpen && (
-        <FileUploadDialog
-          open
-          onClose={() => setUploadDialogOpen(false)}
-          onUpload={handleManagedFileUpload}
+      {viewMode === "list" ? (
+        <EditorListView
+          activeTab={activeTab}
+          searchQuery={searchQuery}
+          posts={posts}
+          files={files}
+          postsLoading={postsLoading}
+          filesLoading={filesLoading}
+          postsError={postsError}
+          filesError={filesError}
+          postPage={postPage}
+          postTotalPages={postTotalPages}
+          filePage={filePage}
+          fileTotalPages={fileTotalPages}
+          onTabChange={handleTabChange}
+          onSearch={handleSearch}
+          onNewPost={() => openEditor(null)}
+          onUploadFile={() => setUploadDialogOpen(true)}
+          onViewPost={(post) => post.status === "published" ? router.push(`/posts/${post.id}`) : openEditor(post)}
+          onEditPost={openEditor}
+          onDeletePost={(id) => openDelete("post", id)}
+          onPreviewFile={setPreviewFile}
+          onEditFile={setMetadataFile}
+          onDeleteFile={(id) => openDelete("file", id)}
+          onLoadPosts={(page) => void loadPosts(page)}
+          onLoadFiles={(page) => void loadFiles(page)}
+          onRetryPosts={() => searchQuery.trim() ? void runSearch(searchQuery.trim(), "posts") : void loadPosts(postPage)}
+          onRetryFiles={() => searchQuery.trim() ? void runSearch(searchQuery.trim(), "files") : void loadFiles(filePage)}
+        />
+      ) : (
+        <PostEditorForm
+          editingPost={editingPost}
+          title={editTitle}
+          summary={editSummary}
+          content={editContent}
+          categoryId={editCategoryId}
+          status={editStatus}
+          categories={categories}
+          categoriesLoading={categoriesLoading}
+          categoriesError={categoriesError}
+          saving={saving}
+          saveMessage={saveMessage}
+          onTitleChange={setEditTitle}
+          onSummaryChange={setEditSummary}
+          onContentChange={setEditContent}
+          onCategoryChange={setEditCategoryId}
+          onStatusChange={setEditStatus}
+          onBack={() => setViewMode("list")}
+          onSave={handleSave}
+          onCreateCategory={handleCreateCategory}
+          onRenameCategory={handleRenameCategory}
+          onDeleteCategory={(id) => openDelete("category", id)}
+          onRetryCategories={() => void loadCategories()}
+          onImageUpload={handleImageUpload}
         />
       )}
+
+      {uploadDialogOpen && <FileUploadDialog open onClose={() => setUploadDialogOpen(false)} onUpload={handleManagedFileUpload} />}
       <FilePreviewDialog
         file={previewFile}
         onClose={() => setPreviewFile(null)}
@@ -1175,129 +463,17 @@ export default function EditorPage() {
         }}
       />
       {metadataFile && (
-        <FileEditDialog
-          key={metadataFile.id}
-          file={metadataFile}
-          onClose={() => setMetadataFile(null)}
-          onSave={handleFileMetadataSave}
-        />
+        <FileEditDialog key={metadataFile.id} file={metadataFile} onClose={() => setMetadataFile(null)} onSave={handleFileMetadataSave} />
       )}
-
-      {/* 美化的删除确认弹窗 - 全局渲染，不受 viewMode 影响 */}
-      {deleteModal.isOpen && (
-        <div
-          className="fade-in"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.4)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div
-            className="ai-card"
-            style={{
-              background: "var(--bg-surface)",
-              padding: "2rem 2.5rem",
-              borderRadius: "20px",
-              maxWidth: "400px",
-              width: "100%",
-              height: "auto",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-              border: "1px solid var(--border-color)",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                width: "64px",
-                height: "64px",
-                background: "rgba(242, 139, 130, 0.15)",
-                color: "var(--accent-red)",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "2rem",
-                margin: "0 auto 1.5rem auto",
-              }}
-            >
-              🗑️
-            </div>
-            <h2 style={{ margin: "0 0 10px 0", fontSize: "1.25rem", color: "var(--text-primary)" }}>
-              Confirm Deletion
-            </h2>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.95rem", marginBottom: "2rem", lineHeight: 1.5 }}>
-              Are you sure you want to delete this {deleteModal.type}? This action cannot be undone.
-              {deleteModal.type === "category" && " Posts in this category will automatically become Uncategorized."}
-            </p>
-            <div style={{ display: "flex", gap: "1rem" }}>
-              <button
-                onClick={() => {
-                  setDeleteError("");
-                  setDeleteErrorCode("");
-                  setDeleteModal({ isOpen: false, type: "post", id: null, isDeleting: false });
-                }}
-                disabled={deleteModal.isDeleting}
-                style={{
-                  flex: 1,
-                  padding: "0.75rem",
-                  background: "transparent",
-                  border: "1px solid var(--border-color)",
-                  color: "var(--text-primary)",
-                  borderRadius: "10px",
-                  fontWeight: 600,
-                  cursor: deleteModal.isDeleting ? "not-allowed" : "pointer",
-                  opacity: deleteModal.isDeleting ? 0.6 : 1,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executeDelete}
-                disabled={deleteModal.isDeleting || deleteIsBlocked}
-                aria-describedby={deleteError ? "deletion-error" : undefined}
-                style={{
-                  flex: 1,
-                  padding: "0.75rem",
-                  background: "var(--accent-red)",
-                  border: "none",
-                  color: "#fff",
-                  borderRadius: "10px",
-                  fontWeight: 600,
-                  cursor: deleteModal.isDeleting || deleteIsBlocked ? "not-allowed" : "pointer",
-                  opacity: deleteModal.isDeleting ? 0.6 : 1,
-                  boxShadow: "0 4px 12px rgba(242, 139, 130, 0.3)",
-                }}
-              >
-                {deleteModal.isDeleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-            <p
-              id="deletion-error"
-              role="alert"
-              aria-live="polite"
-              style={{
-                color: "var(--accent-red)",
-                fontSize: "0.85rem",
-                lineHeight: 1.25,
-                minHeight: "1.0625rem",
-                margin: "1rem 0 0",
-                visibility: deleteError ? "visible" : "hidden",
-              }}
-            >
-              {deleteError || "No deletion error"}
-            </p>
-          </div>
-        </div>
-      )}
+      <EditorDeleteDialog
+        open={deleteDialog.open}
+        resourceType={deleteDialog.type}
+        busy={deleteDialog.busy}
+        blocked={deleteErrorCode === "file_in_use"}
+        error={deleteError}
+        onConfirm={() => void executeDelete()}
+        onCancel={closeDelete}
+      />
     </>
   );
 }

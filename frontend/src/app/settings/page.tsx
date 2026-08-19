@@ -1,15 +1,32 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
-import { getSettings, getFileViewUrl, normalizeFileViewUrl, updateSettings, updatePassword, uploadFile } from "@/lib/api";
+import {
+  getSettings,
+  getApiErrorMessage,
+  getFileViewUrl,
+  normalizeFileViewUrl,
+  updateSettings,
+  updatePassword,
+  uploadFile,
+} from "@/lib/api";
 import ConfirmModal from "@/components/ConfirmModal";
-import { SettingsIcon, CameraIcon, MoonIcon, SunIcon } from "@/components/Icons";
+import { SettingsIcon } from "@/components/Icons";
+import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
+import {
+  AppearancePanel,
+  ProfileForm,
+  ProfileSummary,
+  SecurityForm,
+  SessionPanel,
+} from "@/components/settings/SettingsSections";
 
 export default function SettingsPage() {
-  const { user, logout, isLoading, refreshProfile } = useAuth();
+  const { user, logout, completeLogout, isLoading, refreshProfile, authStatus, authError, refreshAuth } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
@@ -17,26 +34,30 @@ export default function SettingsPage() {
   const [profileDesc, setProfileDesc] = useState("");
   const [profileTag, setProfileTag] = useState("");
   const [profileAvatar, setProfileAvatar] = useState("");
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState("");
+  const [profileSaveMsg, setProfileSaveMsg] = useState("");
+  const [avatarMsg, setAvatarMsg] = useState("");
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
-
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [passMsg, setPassMsg] = useState("");
   const [passLoading, setPassLoading] = useState(false);
-
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+
   const settingsRequestIdRef = useRef(0);
   const logoutInProgressRef = useRef(false);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
-    if (!isLoading && !user && !logoutInProgressRef.current) {
-      router.push("/login?redirect=/settings");
+    if (!isLoading && authStatus === "anonymous" && !logoutInProgressRef.current) {
+      router.replace("/login?redirect=/settings");
     }
-  }, [user, isLoading, router]);
+  }, [authStatus, isLoading, router]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -47,404 +68,207 @@ export default function SettingsPage() {
 
   const loadSettings = useCallback(async () => {
     const requestId = ++settingsRequestIdRef.current;
-    const data = await getSettings();
-    if (!isMountedRef.current || requestId !== settingsRequestIdRef.current) {
-      return;
+    setSettingsLoading(true);
+    setSettingsError("");
+    try {
+      const data = await getSettings();
+      if (!isMountedRef.current || requestId !== settingsRequestIdRef.current) return;
+      setProfileName(data.profile_name || "");
+      setProfileDesc(data.profile_description || "");
+      setProfileTag(data.profile_tag || user?.role || "admin");
+      setProfileAvatar(normalizeFileViewUrl(data.profile_avatar || ""));
+      setFailedAvatarUrl("");
+    } catch (error) {
+      if (!isMountedRef.current || requestId !== settingsRequestIdRef.current) return;
+      setSettingsError(getApiErrorMessage(error, "Failed to load settings."));
+    } finally {
+      if (isMountedRef.current && requestId === settingsRequestIdRef.current) {
+        setSettingsLoading(false);
+      }
     }
-    setProfileName(data["profile_name"] || "");
-    setProfileDesc(data["profile_description"] || "");
-    setProfileTag(data["profile_tag"] || user?.role || "admin");
-    setProfileAvatar(normalizeFileViewUrl(data["profile_avatar"] || ""));
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      const frame = window.requestAnimationFrame(() => {
-        loadSettings();
-      });
-
-      return () => window.cancelAnimationFrame(frame);
-    }
+    if (!user || user.role !== "admin") return;
+    const frame = window.requestAnimationFrame(() => void loadSettings());
+    return () => window.cancelAnimationFrame(frame);
   }, [user, loadSettings]);
 
-  async function handleSaveSettings() {
+  async function handleSaveSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setSaving(true);
-    setSaveMsg("");
-    const success = await updateSettings({
-      profile_name: profileName,
-      profile_description: profileDesc,
-      profile_tag: profileTag,
-      profile_avatar: profileAvatar,
-    });
-    setSaving(false);
-    if (success) {
-      setSaveMsg("✅ Settings saved successfully!");
-      refreshProfile(); // Trigger global sync
-    } else {
-      setSaveMsg("❌ Failed to save settings.");
+    setProfileSaveMsg("");
+    try {
+      const success = await updateSettings({
+        profile_name: profileName,
+        profile_description: profileDesc,
+        profile_tag: profileTag,
+      });
+      if (!success) throw new Error("Failed to save settings.");
+      setProfileSaveMsg("✅ Settings saved successfully!");
+      await refreshProfile();
+    } catch (error) {
+      setProfileSaveMsg(`❌ ${getApiErrorMessage(error, "Failed to save settings.")}`);
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!e.target.files?.length) return;
+  async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
+    if (!event.target.files?.length) return;
     setAvatarUploading(true);
-    const file = e.target.files[0];
-    const res = await uploadFile(file, true);
-    if (res) {
-      const avatarUrl = getFileViewUrl(res.id);
+    setAvatarMsg("");
+    try {
+      const uploaded = await uploadFile(event.target.files[0], true);
+      if (!uploaded) throw new Error("Failed to upload avatar.");
+      const avatarUrl = getFileViewUrl(uploaded.id);
+      const saved = await updateSettings({ profile_avatar: avatarUrl });
+      if (!saved) throw new Error("The avatar was uploaded but could not be saved to your profile.");
       setProfileAvatar(avatarUrl);
-      // Auto-save avatar setting
-      await updateSettings({ profile_avatar: avatarUrl });
-      await refreshProfile(); // Trigger global sync
-      setSaveMsg("✅ Avatar updated!");
-    } else {
-      setSaveMsg("❌ Failed to upload avatar.");
+      setFailedAvatarUrl("");
+      await refreshProfile();
+      setAvatarMsg("✅ Avatar updated!");
+    } catch (error) {
+      setAvatarMsg(`❌ ${getApiErrorMessage(error, "Failed to upload avatar.")}`);
+    } finally {
+      setAvatarUploading(false);
+      event.target.value = "";
     }
-    setAvatarUploading(false);
-    e.target.value = "";
   }
 
-  async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     if (!currentPass || !newPass) {
       setPassMsg("❌ Both fields are required.");
       return;
     }
     setPassLoading(true);
     setPassMsg("");
-    const res = await updatePassword(currentPass, newPass);
-    setPassLoading(false);
-    if (res.success) {
+    try {
+      const result = await updatePassword(currentPass, newPass);
+      if (!result.success) {
+        setPassMsg(`❌ ${result.error || "Failed to update."}`);
+        return;
+      }
       setPassMsg("✅ Password updated. Please sign in again.");
       setCurrentPass("");
       setNewPass("");
-      await handleLogout();
-    } else {
-      setPassMsg(`❌ ${res.error || "Failed to update."}`);
+      logoutInProgressRef.current = true;
+      completeLogout();
+    } catch (error) {
+      setPassMsg(`❌ ${getApiErrorMessage(error, "Failed to update password.")}`);
+    } finally {
+      setPassLoading(false);
     }
   }
 
   async function handleLogout() {
+    if (logoutLoading) return;
     logoutInProgressRef.current = true;
     setShowLogoutModal(false);
-    await logout();
+    setLogoutLoading(true);
+    setLogoutError("");
+    try {
+      await logout();
+    } catch (error) {
+      logoutInProgressRef.current = false;
+      if (isMountedRef.current) {
+        setLogoutError(getApiErrorMessage(error, "Logout could not be confirmed. Please try again."));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLogoutLoading(false);
+      }
+    }
   }
 
-  const avatarFailed = !!profileAvatar && failedAvatarUrl === profileAvatar;
-
-  if (isLoading || !user) {
+  if (isLoading || authStatus === "checking" || authStatus === "anonymous") {
+    return <LoadingState label="Checking your account…" rows={2} />;
+  }
+  if (authStatus === "unavailable") {
     return (
-      <div className="fade-in" style={{ padding: "5rem", textAlign: "center" }}>
-        <div className="skeleton-pulse" style={{ width: "200px", height: "24px", margin: "0 auto 1rem" }} />
-        <div className="skeleton-pulse" style={{ width: "300px", height: "16px", margin: "0 auto" }} />
-      </div>
+      <ErrorState
+        title="Settings access could not be verified"
+        message={getApiErrorMessage(authError, "The server could not verify your session.")}
+        onRetry={() => void refreshAuth()}
+      />
     );
   }
+  if (!user) {
+    return <ErrorState title="Account unavailable" message="The current account could not be loaded." />;
+  }
+
+  const isAdmin = user.role === "admin";
 
   return (
     <div className="fade-in">
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.80rem" }}>
+      <header style={{ marginBottom: "2rem" }}>
+        <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.8rem" }}>
           <SettingsIcon size={28} /> Settings
         </h1>
         <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
           Manage your account and platform preferences.
         </p>
-      </div>
+      </header>
 
-      <div style={{ display: "grid", gap: "2rem", maxWidth: "800px" }}>
-        {/* Profile Card */}
-        <div className="ai-card" style={{ padding: "2rem" }}>
-          <h2 style={{ margin: "0 0 1.5rem 0", fontSize: "1.2rem", fontWeight: 600 }}>Personal Profile</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
-            {/* Avatar with upload */}
-            <label
-              style={{
-                cursor: avatarUploading ? "not-allowed" : "pointer",
-                position: "relative",
-              }}
-              title="Click to change avatar"
-            >
-              <div
-                style={{
-                  width: "80px",
-                  height: "80px",
-                  borderRadius: "50%",
-                  background: profileAvatar ? "transparent" : "var(--accent-blue)",
-                  color: "#fff",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "2rem",
-                  fontWeight: 600,
-                  position: "relative",
-                  overflow: "hidden",
-                  border: "2px solid var(--border-color)",
-                  transition: "opacity 0.2s",
-                }}
-              >
-                {profileAvatar && !avatarFailed ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={profileAvatar}
-                    alt="avatar"
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    onError={() => setFailedAvatarUrl(profileAvatar)}
-                  />
-                ) : (
-                  (profileName.trim() || user.username).charAt(0).toUpperCase()
-                )}
-              </div>
-              {/* Upload overlay */}
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: 0,
-                  right: 0,
-                  width: "24px",
-                  height: "24px",
-                  borderRadius: "50%",
-                  background: "var(--accent-blue)",
-                  color: "#fff",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "0.7rem",
-                  border: "2px solid var(--bg-surface)",
-                }}
-              >
-                {avatarUploading ? "…" : <CameraIcon size={14} />}
-              </div>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                style={{ display: "none" }}
-                onChange={handleAvatarUpload}
-                disabled={avatarUploading}
-              />
-            </label>
-            <div>
-              <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.3rem" }}>
-                {profileName.trim() || user.username}
-              </h3>
-              <span
-                style={{
-                  background: "rgba(168, 199, 250, 0.15)",
-                  color: "var(--accent-blue)",
-                  padding: "4px 10px",
-                  borderRadius: "6px",
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                }}
-              >
-                {(profileTag || user.role || "admin").trim()}
-              </span>
-            </div>
-          </div>
+      {!isAdmin ? (
+        <div style={{ display: "grid", gap: "2rem", maxWidth: "800px" }}>
+          <ErrorState title="Administrator access required" message="This account cannot change site settings." />
+          <SessionPanel
+            onLogout={() => setShowLogoutModal(true)}
+            loading={logoutLoading}
+            error={logoutError}
+          />
         </div>
-
-        {/* Profile Configuration */}
-        <div className="ai-card" style={{ padding: "2rem" }}>
-          <h2 style={{ margin: "0 0 1.5rem 0", fontSize: "1.2rem", fontWeight: 600 }}>Profile Configuration</h2>
-
-          <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-              Profile Name
-            </label>
-            <input
-              value={profileName}
-              onChange={(e) => setProfileName(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "0.8rem 1rem",
-                background: "var(--bg-base)",
-                border: "1px solid var(--border-color)",
-                borderRadius: "8px",
-                color: "var(--text-primary)",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-              Profile Description
-            </label>
-            <textarea
-              value={profileDesc}
-              onChange={(e) => setProfileDesc(e.target.value)}
-              placeholder=""
-              rows={3}
-              style={{
-                width: "100%",
-                padding: "0.8rem 1rem",
-                background: "var(--bg-base)",
-                border: "1px solid var(--border-color)",
-                borderRadius: "8px",
-                color: "var(--text-primary)",
-                resize: "vertical",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-              Profile Tag
-            </label>
-            <input
-              value={profileTag}
-              onChange={(e) => setProfileTag(e.target.value)}
-              placeholder="admin"
-              style={{
-                width: "100%",
-                padding: "0.8rem 1rem",
-                background: "var(--bg-base)",
-                border: "1px solid var(--border-color)",
-                borderRadius: "8px",
-                color: "var(--text-primary)",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <button
-              onClick={handleSaveSettings}
-              disabled={saving}
-              style={{
-                background: "var(--accent-blue)",
-                color: "#fff",
-                border: "none",
-                padding: "0.7rem 1.5rem",
-                borderRadius: "8px",
-                fontSize: "0.9rem",
-                fontWeight: 500,
-                cursor: saving ? "not-allowed" : "pointer",
-                opacity: saving ? 0.7 : 1,
-              }}
-            >
-              {saving ? "Saving..." : "Save Configuration"}
-            </button>
-            {saveMsg && <span style={{ fontSize: "0.9rem", color: saveMsg.includes("✅") ? "var(--accent-green)" : "var(--accent-red)" }}>{saveMsg}</span>}
-          </div>
+      ) : settingsLoading ? (
+        <LoadingState label="Loading settings…" rows={4} />
+      ) : settingsError ? (
+        <ErrorState title="Settings could not be loaded" message={settingsError} onRetry={() => void loadSettings()} />
+      ) : (
+        <div style={{ display: "grid", gap: "2rem", maxWidth: "800px" }}>
+          <ProfileSummary
+            user={user}
+            profileName={profileName}
+            profileTag={profileTag}
+            profileAvatar={profileAvatar}
+            avatarFailed={Boolean(profileAvatar && failedAvatarUrl === profileAvatar)}
+            avatarUploading={avatarUploading}
+            message={avatarMsg}
+            onAvatarUpload={handleAvatarUpload}
+            onAvatarError={() => setFailedAvatarUrl(profileAvatar)}
+          />
+          <ProfileForm
+            profileName={profileName}
+            profileDescription={profileDesc}
+            profileTag={profileTag}
+            saving={saving}
+            message={profileSaveMsg}
+            onNameChange={setProfileName}
+            onDescriptionChange={setProfileDesc}
+            onTagChange={setProfileTag}
+            onSubmit={handleSaveSettings}
+          />
+          <SecurityForm
+            currentPassword={currentPass}
+            newPassword={newPass}
+            loading={passLoading}
+            message={passMsg}
+            onCurrentPasswordChange={setCurrentPass}
+            onNewPasswordChange={setNewPass}
+            onSubmit={handleChangePassword}
+          />
+          <AppearancePanel theme={theme} onToggle={toggleTheme} />
+          <SessionPanel
+            onLogout={() => setShowLogoutModal(true)}
+            loading={logoutLoading}
+            error={logoutError}
+          />
         </div>
-
-        {/* Security Section */}
-        <div className="ai-card" style={{ padding: "2rem" }}>
-          <h2 style={{ margin: "0 0 1.5rem 0", fontSize: "1.2rem", fontWeight: 600 }}>Security</h2>
-          <form onSubmit={handleChangePassword}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-              <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Current Password</label>
-                <input
-                  type="password"
-                  value={currentPass}
-                  onChange={e => setCurrentPass(e.target.value)}
-                  style={{ width: "100%", padding: "0.8rem", background: "var(--bg-base)", border: "1px solid var(--border-color)", borderRadius: "8px", color: "var(--text-primary)" }}
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.85rem", color: "var(--text-secondary)" }}>New Password</label>
-                <input
-                  type="password"
-                  value={newPass}
-                  onChange={e => setNewPass(e.target.value)}
-                  style={{ width: "100%", padding: "0.8rem", background: "var(--bg-base)", border: "1px solid var(--border-color)", borderRadius: "8px", color: "var(--text-primary)" }}
-                />
-              </div>
-            </div>
-            <p style={{ margin: "-0.75rem 0 1.5rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              Use 12–128 characters (up to 72 UTF-8 bytes). Avoid common passwords and do not include your username.
-            </p>
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-              <button
-                type="submit"
-                disabled={passLoading}
-                style={{
-                  background: "var(--bg-base)",
-                  border: "1px solid var(--border-color)",
-                  color: "var(--text-primary)",
-                  padding: "0.7rem 1.5rem",
-                  borderRadius: "8px",
-                  cursor: passLoading ? "not-allowed" : "pointer",
-                  fontSize: "0.9rem"
-                }}
-              >
-                {passLoading ? "Updating..." : "Update Password"}
-              </button>
-              {passMsg && <span style={{ fontSize: "0.85rem", color: passMsg.includes("✅") ? "var(--accent-green)" : "var(--accent-red)" }}>{passMsg}</span>}
-            </div>
-          </form>
-        </div>
-
-        {/* Appearance Settings */}
-        <div className="ai-card" style={{ padding: "2rem" }}>
-          <h2 style={{ margin: "0 0 1.5rem 0", fontSize: "1.2rem", fontWeight: 600 }}>Appearance</h2>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontWeight: 500 }}>System Theme</div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                Toggle between dark and light modes.
-              </div>
-            </div>
-            <button
-              onClick={toggleTheme}
-              style={{
-                background: "var(--bg-base)",
-                border: "1px solid var(--border-color)",
-                color: "var(--text-primary)",
-                padding: "0.6rem 1.2rem",
-                borderRadius: "8px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                fontWeight: 500,
-              }}
-            >
-              {theme === "dark" ? (
-                <>
-                  <MoonIcon size={18} /> Dark Mode
-                </>
-              ) : (
-                <>
-                  <SunIcon size={18} /> Light Mode
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Danger Zone */}
-        <div className="ai-card" style={{ padding: "2rem", border: "1px solid rgba(242, 139, 130, 0.3)" }}>
-          <h2 style={{ margin: "0 0 1.5rem 0", fontSize: "1.2rem", fontWeight: 600, color: "var(--accent-red)" }}>Danger Zone</h2>
-          <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
-            Logging out invalidates your current server session. You will need to re-authenticate to access the editor.
-          </p>
-          <button
-            onClick={() => setShowLogoutModal(true)}
-            style={{
-              background: "rgba(242, 139, 130, 0.1)",
-              color: "var(--accent-red)",
-              border: "1px solid rgba(242, 139, 130, 0.2)",
-              padding: "0.7rem 1.5rem",
-              borderRadius: "8px",
-              fontSize: "0.9rem",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Log Out Securely
-          </button>
-        </div>
-      </div>
+      )}
 
       <ConfirmModal
         isOpen={showLogoutModal}
-        onConfirm={() => {
-          void handleLogout();
-        }}
+        onConfirm={() => void handleLogout()}
         onCancel={() => setShowLogoutModal(false)}
         title="Confirm Logout"
         message="Are you sure you want to log out? You will need to sign in again to manage your blog."

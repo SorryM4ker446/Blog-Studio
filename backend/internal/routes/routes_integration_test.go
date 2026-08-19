@@ -189,11 +189,35 @@ func TestAuthenticationAndAdminAuthorization(t *testing.T) {
 		}
 	})
 
-	t.Run("non-admin user", func(t *testing.T) {
+	t.Run("non-admin user can restore identity but cannot manage content", func(t *testing.T) {
 		auth := loginAs(t, router, "writer", "writer-password")
-		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, auth, false)
-		if response.Code != http.StatusForbidden {
-			t.Fatalf("admin /me status = %d, want %d", response.Code, http.StatusForbidden)
+		meResponse := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, auth, false)
+		if meResponse.Code != http.StatusOK {
+			t.Fatalf("authenticated /me status = %d, want %d", meResponse.Code, http.StatusOK)
+		}
+		var identity struct {
+			Username string `json:"username"`
+			Role     string `json:"role"`
+		}
+		if err := json.Unmarshal(meResponse.Body.Bytes(), &identity); err != nil {
+			t.Fatalf("decode writer identity: %v", err)
+		}
+		if identity.Username != "writer" || identity.Role != "writer" {
+			t.Fatalf("writer identity = %#v", identity)
+		}
+
+		adminResponse := performJSONRequest(t, router, http.MethodGet, "/api/admin/posts", nil, auth, false)
+		if adminResponse.Code != http.StatusForbidden {
+			t.Fatalf("writer admin posts status = %d, want %d", adminResponse.Code, http.StatusForbidden)
+		}
+
+		logoutResponse := performJSONRequest(t, router, http.MethodPost, "/api/admin/logout", nil, auth, true)
+		if logoutResponse.Code != http.StatusOK {
+			t.Fatalf("writer logout status = %d, want %d; body=%s", logoutResponse.Code, http.StatusOK, logoutResponse.Body.String())
+		}
+		afterLogoutResponse := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, auth, false)
+		if afterLogoutResponse.Code != http.StatusUnauthorized {
+			t.Fatalf("writer /me after logout status = %d, want %d", afterLogoutResponse.Code, http.StatusUnauthorized)
 		}
 	})
 

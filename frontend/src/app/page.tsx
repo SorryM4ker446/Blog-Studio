@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getPostTimeline, getPosts } from "@/lib/api";
+import { getApiErrorMessage, getPostTimeline, getPosts } from "@/lib/api";
 import type { Post } from "@/lib/api";
 import { 
   StarIcon, 
@@ -14,21 +14,32 @@ import {
   EnterIcon 
 } from "@/components/Icons";
 import Link from "next/link";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
 export default function Home() {
   const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const loadRequestIdRef = useRef(0);
 
   async function loadPosts() {
     const requestId = ++loadRequestIdRef.current;
-    // Only load the first 5 posts directly from the backend for the recent list
-    const result = await getPosts(1, 5);
-    if (requestId !== loadRequestIdRef.current) {
-      return;
+    setPostsLoading(true);
+    setPostsError("");
+    try {
+      // Only load the first 5 posts directly from the backend for the recent list.
+      const result = await getPosts(1, 5);
+      if (requestId !== loadRequestIdRef.current) return;
+      setPosts(result.data);
+    } catch (error) {
+      if (requestId === loadRequestIdRef.current) {
+        setPostsError(getApiErrorMessage(error, "Could not load recent articles."));
+      }
+    } finally {
+      if (requestId === loadRequestIdRef.current) setPostsLoading(false);
     }
-    setPosts(result.data);
   }
 
   useEffect(() => {
@@ -116,16 +127,12 @@ export default function Home() {
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {posts.length === 0 ? (
-            <div
-              style={{
-                padding: "2rem",
-                textAlign: "center",
-                color: "var(--text-muted)",
-              }}
-            >
-              No posts available yet.
-            </div>
+          {postsLoading ? (
+            <LoadingState label="Loading recent articles…" rows={3} />
+          ) : postsError ? (
+            <ErrorState title="Recent articles could not be loaded" message={postsError} onRetry={() => void loadPosts()} />
+          ) : posts.length === 0 ? (
+            <EmptyState title="No posts available yet" message="Published articles will appear here." />
           ) : (
             posts.map((post: Post) => (
               <Link key={post.id} href={`/posts/${post.id}`} style={{ textDecoration: "none" }}>
@@ -202,6 +209,7 @@ export default function Home() {
           <SearchIcon size={20} style={{ opacity: 0.5 }} />
           <input
             id="home-search-bar"
+            aria-label="Search posts and files"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}
@@ -216,7 +224,9 @@ export default function Home() {
               padding: "0.5rem 0",
             }}
           />
-          <div
+          <button
+            type="button"
+            aria-label="Submit search"
             onClick={() => {
               if (searchQuery.trim()) {
                 router.push(
@@ -231,10 +241,12 @@ export default function Home() {
               padding: "6px",
               cursor: "pointer",
               transition: "background 0.2s",
+              border: 0,
+              color: "var(--text-primary)",
             }}
           >
             <EnterIcon size={18} />
-          </div>
+          </button>
         </div>
       </div>
     </div>

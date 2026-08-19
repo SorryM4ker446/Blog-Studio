@@ -1,0 +1,106 @@
+.state {
+  display: flex;
+  min-height: 9rem;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.content {
+  display: flex;
+  max-width: 34rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.message {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--accent-red) 32%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-red) 7%, var(--bg-surface));
+}
+
+.error .title {
+  color: var(--accent-red);
+}
+
+.retry {
+  margin-top: 0.35rem;
+  padding: 0.62rem 1.15rem;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.retry:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.skeleton {
+  height: 4.5rem;
+  border-radius: 12px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.status {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.statusSuccess {
+  color: var(--accent-green);
+}
+
+.statusError {
+  color: var(--accent-red);
+}
+
+@media (max-width: 640px) {
+  .state {
+    min-height: 8rem;
+    padding: 1.5rem 1rem;
+  }
+}

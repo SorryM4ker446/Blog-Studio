@@ -36,12 +36,19 @@ func SetupRouter() *gin.Engine {
 		api.POST("/login", middleware.CSRFMiddleware(), handlers.Login)
 		api.GET("/settings", handlers.GetSettings)
 
-		// 受保护接口
+		// Session endpoints are available to every authenticated account so that
+		// non-admin users can restore their identity and end their own session.
+		sessionAuth := api.Group("/admin")
+		sessionAuth.Use(middleware.AuthMiddleware(), middleware.CSRFMiddleware())
+		{
+			sessionAuth.GET("/me", handlers.Me)
+			sessionAuth.POST("/logout", handlers.Logout)
+		}
+
+		// All content-management endpoints still require the administrator role.
 		auth := api.Group("/admin")
 		auth.Use(middleware.AuthMiddleware(), middleware.RequireAdminMiddleware(), middleware.CSRFMiddleware())
 		{
-			auth.GET("/me", handlers.Me)
-			auth.POST("/logout", handlers.Logout)
 			auth.GET("/posts", handlers.AdminGetPosts)
 			auth.GET("/categories", handlers.AdminGetCategories)
 			auth.GET("/files", handlers.AdminGetFiles)

@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { loginUser } from "@/lib/api";
+import { getApiErrorMessage, isApiError, loginUser } from "@/lib/api";
 import { KeyIcon, AlertIcon } from "@/components/Icons";
 
 function LoginPageContent() {
@@ -13,7 +13,14 @@ function LoginPageContent() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [retryAfter, setRetryAfter] = useState(0);
   const { login } = useAuth();
+
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const timer = window.setInterval(() => setRetryAfter((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [retryAfter]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +32,12 @@ function LoginPageContent() {
       login(user);
       router.replace("/");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      if (isApiError(err) && err.status === 429) {
+        setError(err.message || "Too many login attempts.");
+        setRetryAfter(Math.max(1, err.retryAfterSeconds || 60));
+      } else {
+        setError(getApiErrorMessage(err, "Login failed"));
+      }
     } finally {
       setLoading(false);
     }
@@ -92,14 +104,17 @@ function LoginPageContent() {
           Continue to Blog Studio
         </p>
 
-        <form onSubmit={handleLogin} style={{ width: "100%" }}>
+        <form onSubmit={handleLogin} style={{ width: "100%" }} aria-busy={loading}>
           <div style={{ marginBottom: "1.2rem" }}>
+            <label htmlFor="login-username" className="sr-only">Username</label>
             <input
+              id="login-username"
               type="text"
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Username"
+              autoComplete="username"
               style={{
                 width: "100%",
                 padding: "1rem 1.2rem",
@@ -118,12 +133,15 @@ function LoginPageContent() {
           </div>
 
           <div style={{ marginBottom: "1.5rem" }}>
+            <label htmlFor="login-password" className="sr-only">Password</label>
             <input
+              id="login-password"
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
+              autoComplete="current-password"
               style={{
                 width: "100%",
                 padding: "1rem 1.2rem",
@@ -143,6 +161,8 @@ function LoginPageContent() {
 
           {error && (
             <div
+              role="alert"
+              aria-live="assertive"
               style={{
                 color: "var(--accent-red)",
                 fontSize: "0.85rem",
@@ -152,7 +172,7 @@ function LoginPageContent() {
                 gap: "0.5rem",
               }}
             >
-              <AlertIcon size={14} /> {error}
+              <AlertIcon size={14} /> {error}{retryAfter > 0 && ` Try again in ${retryAfter} seconds.`}
             </div>
           )}
 
@@ -178,20 +198,20 @@ function LoginPageContent() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || retryAfter > 0}
               style={{
                 background: "var(--accent-blue)",
-                color: "#fff",
+                color: "var(--accent-contrast-text)",
                 border: "none",
                 padding: "0.7rem 1.5rem",
                 borderRadius: "8px",
                 fontSize: "0.95rem",
                 fontWeight: 500,
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.7 : 1,
+                cursor: loading || retryAfter > 0 ? "not-allowed" : "pointer",
+                opacity: loading || retryAfter > 0 ? 0.7 : 1,
               }}
             >
-              {loading ? "Signing in..." : "Next"}
+              {loading ? "Signing in..." : retryAfter > 0 ? `Try again in ${retryAfter}s` : "Next"}
             </button>
           </div>
         </form>

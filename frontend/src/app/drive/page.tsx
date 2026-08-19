@@ -3,12 +3,13 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { FileRecord } from "@/lib/api";
-import { getFiles, searchResources } from "@/lib/api";
+import { getApiErrorMessage, getFiles, searchResources } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
 import { CloudIcon, FolderIcon } from "@/components/Icons";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
 export default function DrivePage() {
   const router = useRouter();
@@ -16,37 +17,63 @@ export default function DrivePage() {
   const searchQuery = searchParams.get("q") || "";
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const fileRequestIdRef = useRef(0);
   const searchRequestIdRef = useRef(0);
+  const retryRequestRef = useRef<
+    { type: "page"; page: number } | { type: "search"; query: string }
+  >({ type: "page", page: 1 });
 
   const loadFiles = useCallback(async (pageToLoad: number) => {
     const requestId = ++fileRequestIdRef.current;
+    retryRequestRef.current = { type: "page", page: pageToLoad };
     setLoading(true);
-    const result = await getFiles(pageToLoad, 10);
-    if (requestId !== fileRequestIdRef.current) {
-      return;
+    setError("");
+    try {
+      const result = await getFiles(pageToLoad, 10);
+      if (result.error) throw new Error(result.error);
+      if (requestId !== fileRequestIdRef.current) return;
+      setFiles(result.data);
+      setPage(result.page);
+      setTotalPages(Math.max(1, Math.ceil(result.total / result.limit)));
+    } catch (requestError) {
+      if (requestId !== fileRequestIdRef.current) return;
+      setError(getApiErrorMessage(requestError, "Could not load files."));
+    } finally {
+      if (requestId === fileRequestIdRef.current) setLoading(false);
     }
-    setFiles(result.data);
-    setPage(result.page);
-    setTotalPages(Math.ceil(result.total / result.limit));
-    setLoading(false);
   }, []);
 
   const searchFiles = useCallback(async (query: string) => {
     const requestId = ++searchRequestIdRef.current;
+    retryRequestRef.current = { type: "search", query };
     setLoading(true);
-    const res = await searchResources(query, "files");
-    if (requestId !== searchRequestIdRef.current) {
-      return;
+    setError("");
+    try {
+      const res = await searchResources(query, "files");
+      if (requestId !== searchRequestIdRef.current) return;
+      setFiles(res.files || []);
+      setPage(1);
+      setTotalPages(1);
+    } catch (requestError) {
+      if (requestId !== searchRequestIdRef.current) return;
+      setError(getApiErrorMessage(requestError, "Could not search files."));
+    } finally {
+      if (requestId === searchRequestIdRef.current) setLoading(false);
     }
-    setFiles(res.files || []);
-    setPage(1);
-    setTotalPages(1);
-    setLoading(false);
   }, []);
+
+  function retryLastRequest() {
+    const request = retryRequestRef.current;
+    if (request.type === "search") {
+      void searchFiles(request.query);
+    } else {
+      void loadFiles(request.page);
+    }
+  }
 
   function handleSearch(query: string) {
     const normalizedQuery = query.trim();
@@ -97,29 +124,19 @@ export default function DrivePage() {
         />
       </div>
 
-      {/* 文件列表 */}
-      {loading && files.length === 0 ? (
-        <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {[1, 2, 3].map(i => (
-            <div key={i} className="skeleton-pulse" style={{ height: "64px", borderRadius: "12px" }} />
-          ))}
-        </div>
+      <section aria-label="Files" aria-busy={loading}>
+      {error ? (
+        <ErrorState message={error} onRetry={retryLastRequest} retrying={loading} />
+      ) : loading && files.length === 0 ? (
+        <LoadingState label={searchQuery ? "Searching files…" : "Loading files…"} />
       ) : files.length === 0 ? (
-        <div
-          style={{
-            padding: "3rem",
-            textAlign: "center",
-            color: "var(--text-muted)",
-            background: "var(--bg-surface)",
-            borderRadius: "12px",
-            border: "1px solid var(--border-color)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: "1rem", opacity: 0.5 }}>
-            <FolderIcon size={48} />
-          </div>
-          No files uploaded yet.
-        </div>
+        <EmptyState
+          title={searchQuery ? "No matching files" : "No files yet"}
+          message={searchQuery
+            ? `No files match “${searchQuery}”. Try another file name.`
+            : "No public files have been uploaded yet."}
+          icon={<FolderIcon size={48} />}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
           {files.map((file) => (
@@ -127,9 +144,10 @@ export default function DrivePage() {
           ))}
         </div>
       )}
+      </section>
 
       {/* Pagination */}
-      {!loading && files.length > 0 && (
+      {!error && !loading && files.length > 0 && (
         <Pagination 
           currentPage={page} 
           totalPages={totalPages} 

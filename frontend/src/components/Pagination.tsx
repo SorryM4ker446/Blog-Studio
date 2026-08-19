@@ -32,11 +32,13 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
   const pages = getPages();
 
   return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.4rem", marginTop: "2rem" }}>
+    <nav aria-label="Pagination" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.4rem", marginTop: "2rem" }}>
       {/* Prev Button */}
       <button
+        type="button"
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
+        aria-label="Previous page"
         className="fade-in"
         style={{
           display: "flex",
@@ -54,7 +56,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
           boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
@@ -64,7 +66,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
         {pages.map((p, idx) => {
           if (p === "...") {
             return (
-              <span key={`ellipsis-${idx}`} style={{ 
+              <span key={`ellipsis-${idx}`} aria-hidden="true" style={{
                 display: "flex", 
                 alignItems: "center", 
                 justifyContent: "center", 
@@ -80,8 +82,11 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
           const isCurrent = p === currentPage;
           return (
             <button
+              type="button"
               key={`page-${p}`}
               onClick={() => onPageChange(p as number)}
+              aria-label={isCurrent ? `Page ${p}, current page` : `Go to page ${p}`}
+              aria-current={isCurrent ? "page" : undefined}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -91,7 +96,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
                 borderRadius: "10px",
                 border: isCurrent ? "none" : "1px solid transparent", // Use transparent border so it doesn't jump
                 background: isCurrent ? "var(--accent-blue)" : "transparent",
-                color: isCurrent ? "#fff" : "var(--text-primary)",
+                color: isCurrent ? "var(--accent-contrast-text)" : "var(--text-primary)",
                 fontWeight: isCurrent ? 600 : 500,
                 fontSize: "0.9rem",
                 cursor: "pointer",
@@ -119,8 +124,10 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
 
       {/* Next Button */}
       <button
+        type="button"
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
+        aria-label="Next page"
         className="fade-in"
         style={{
           display: "flex",
@@ -138,10 +145,10 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
           boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="9 18 15 12 9 6"></polyline>
         </svg>
       </button>
-    </div>
+    </nav>
   );
 }

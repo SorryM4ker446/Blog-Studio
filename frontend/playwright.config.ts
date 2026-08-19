@@ -16,6 +16,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,
+  forbidOnly: Boolean(process.env.CI),
+  retries: process.env.CI ? 1 : 0,
   globalSetup: "./e2e/global-setup.ts",
   reporter: process.env.CI ? [["html", { open: "never" }], ["github"]] : "list",
   use: {

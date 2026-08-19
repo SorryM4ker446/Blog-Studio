@@ -31,6 +31,23 @@ go test -v ./internal/routes
 
 When `TEST_DB_DSN` is absent, PostgreSQL integration tests are skipped. CI always supplies it, so the integration tests are mandatory there.
 
+## Frontend unit and component tests
+
+Run the deterministic frontend test suite once:
+
+```powershell
+cd frontend
+npm run test:unit
+```
+
+Use watch mode while developing frontend behavior:
+
+```powershell
+npm run test:unit:watch
+```
+
+Vitest and React Testing Library cover pure data transformations and focused client-component behavior in a `jsdom` environment. Browser-dependent layout, computed styles, file downloads, image loading, navigation, and complete user workflows remain Playwright responsibilities.
+
 ## Browser workflow test
 
 Install the Chromium browser once:
@@ -56,7 +73,7 @@ npx playwright show-trace test-results/<result-directory>/trace.zip
 
 ## Continuous integration
 
-GitHub Actions creates a disposable `blog_db_test` PostgreSQL service. The backend job runs the Go integration tests, while the E2E job installs Chromium and runs the Playwright workflow. Failure screenshots, video, trace, and HTML reports are retained as workflow artifacts for seven days.
+GitHub Actions creates a disposable `blog_db_test` PostgreSQL service. The frontend job runs linting, unit and component tests, and a production build. The backend job runs the Go integration tests, while the E2E job installs Chromium and runs the Playwright workflow. Failure screenshots, video, trace, and HTML reports are retained as workflow artifacts for seven days.
 
 The backend integration suite additionally verifies login throttling, password policy, CSRF rejection, session invalidation, JWT signature/algorithm checks, and the production CORS allowlist.
 
