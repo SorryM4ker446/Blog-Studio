@@ -42,9 +42,18 @@ interface EditorListViewProps {
 
 function PostCard({ post, onView, onEdit, onDelete }: { post: Post; onView: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
-    <article className="ai-card editor-post-card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-        <button type="button" onClick={onView} className="editor-post-card-content" aria-label={`Open ${post.title}`}>
+    <article className="ai-card editor-post-card" onClick={onView}>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onView();
+        }}
+        className="editor-post-card-open"
+        aria-label={`Open ${post.title}`}
+      />
+      <div className="editor-post-card-header">
+        <div className="editor-post-card-content">
           <span style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0 }}>
             <span className="editor-post-title">{post.title}</span>
             <span className={post.status === "published" ? "editor-post-status editor-post-published" : "editor-post-status editor-post-draft"}>
@@ -54,17 +63,30 @@ function PostCard({ post, onView, onEdit, onDelete }: { post: Post; onView: () =
           <span className="editor-post-summary">
             {post.summary || <span style={{ opacity: 0.5 }}>No introduction provided.</span>}
           </span>
+        </div>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          className="editor-post-delete"
+          aria-label={`Delete ${post.title}`}
+          title="Delete post"
+        >
+          ×
         </button>
-        <button type="button" onClick={onDelete} className="editor-post-delete" aria-label={`Delete ${post.title}`} title="Delete post">×</button>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "auto" }}>
+      <div className="editor-post-card-footer">
         <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
           <span>{new Date(post.updated_at).toLocaleDateString()}</span>
           <span className={post.category_id == null ? "editor-post-category editor-post-category-empty" : "editor-post-category"}>
             {post.category_id == null ? "无标签" : post.category?.name || "Uncategorized"}
           </span>
         </div>
-        <EditActionButton onClick={onEdit} />
+        <span className="editor-post-card-actions" onClick={(event) => event.stopPropagation()}>
+          <EditActionButton onClick={onEdit} />
+        </span>
       </div>
     </article>
   );

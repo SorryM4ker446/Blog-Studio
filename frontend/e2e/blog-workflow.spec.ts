@@ -62,6 +62,14 @@ async function selectPublicationStatus(page: Page, option: "Draft" | "Published"
   await page.getByRole("option", { name: option, exact: true }).click();
 }
 
+async function clickAtVisibleCenter(page: Page, target: Locator) {
+  await expect(target).toBeVisible();
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+}
+
 function waitForEditorLists(page: Page) {
   const paths = ["/api/admin/categories", "/api/admin/posts", "/api/admin/files"];
   return Promise.all(paths.map((path) => page.waitForResponse((response) => {
@@ -100,7 +108,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   expect(draftSearchResult.posts).toHaveLength(0);
 
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
-  await page.getByText(postTitle, { exact: true }).click();
+  await clickAtVisibleCenter(page, page.getByText(postTitle, { exact: true }));
   await selectPublicationStatus(page, "Published");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
@@ -134,6 +142,10 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page).toHaveURL("/");
 
   await page.goto("/editor");
+  await expect(page.locator(".content-scroll")).toHaveCSS(
+    "scrollbar-color",
+    "rgb(95, 99, 104) rgb(24, 25, 26)",
+  );
   await page.getByRole("tab", { name: /Files \(/ }).click();
   await page.getByRole("button", { name: "Upload File" }).click();
   const uploadDialog = page.getByRole("dialog", { name: "Upload a file" });
@@ -186,6 +198,10 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page.getByRole("button", { name: "Switch to Dark Mode" })).toBeVisible();
 
   await page.goto("/editor");
+  await expect(page.locator(".content-scroll")).toHaveCSS(
+    "scrollbar-color",
+    "rgb(189, 193, 198) rgb(241, 243, 244)",
+  );
   await page.getByRole("tab", { name: /Files \(/ }).click();
   fileCard = page.locator("[data-file-id]").filter({ hasText: displayName });
   await expect(fileCard).toHaveCSS("background-color", "rgb(255, 255, 255)");
@@ -408,7 +424,8 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page).toHaveURL(/\/editor\?tab=posts&q=/);
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue(postTitle);
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
-  await page.getByText(postTitle, { exact: true }).click();
+  await clickAtVisibleCenter(page, searchedPostCard.locator(".editor-post-category"));
+  await expect(page).toHaveURL(/\/posts\/\d+$/);
   await page.getByRole("button", { name: "←", exact: true }).click();
   await expect(page).toHaveURL(/\/editor\?tab=posts&q=/);
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue(postTitle);
