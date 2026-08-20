@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import type { ClipboardEvent, FormEvent } from "react";
 import type { Category, Post } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
+import { createMarkdownParser } from "@/lib/markdown";
 import CategoryField from "@/components/editor/CategoryField";
 import EditorSelect from "@/components/editor/EditorSelect";
 import "react-markdown-editor-lite/lib/index.css";
@@ -12,9 +13,7 @@ const MdEditor = dynamic(() => import("react-markdown-editor-lite"), { ssr: fals
 
 let mdParser: { render: (text: string) => string } | null = null;
 if (typeof window !== "undefined") {
-  const MarkdownIt = require("markdown-it");
-  const { imageSizePlugin } = require("@/lib/md-plugins");
-  mdParser = new MarkdownIt({ html: false }).use(imageSizePlugin);
+  mdParser = createMarkdownParser();
 }
 
 interface PostEditorFormProps {

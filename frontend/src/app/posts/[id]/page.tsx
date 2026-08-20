@@ -9,6 +9,7 @@ import type { Post } from "@/lib/api";
 import { notFound } from "next/navigation";
 import BackButton from "@/components/BackButton";
 import PostAuthorIdentity from "@/components/PostAuthorIdentity";
+import { createMarkdownParser } from "@/lib/markdown";
 
 interface PostPageProps {
   params: Promise<{ id: string }>;
@@ -16,10 +17,8 @@ interface PostPageProps {
 
 export const dynamic = "force-dynamic";
 
-// Pre-initialize markdown-it to avoid repeated require calls during render
-const MarkdownIt = require("markdown-it");
-const { imageSizePlugin } = require("@/lib/md-plugins");
-const md = new MarkdownIt({ html: false }).use(imageSizePlugin);
+// Reuse one parser for requests handled by this server module.
+const md = createMarkdownParser();
 
 export default async function PostPage({ params }: PostPageProps) {
   const { id } = await params;
