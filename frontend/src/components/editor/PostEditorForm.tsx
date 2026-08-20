@@ -5,6 +5,7 @@ import type { ClipboardEvent, FormEvent } from "react";
 import type { Category, Post } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
 import CategoryField from "@/components/editor/CategoryField";
+import EditorSelect from "@/components/editor/EditorSelect";
 import "react-markdown-editor-lite/lib/index.css";
 
 const MdEditor = dynamic(() => import("react-markdown-editor-lite"), { ssr: false });
@@ -79,16 +80,17 @@ export default function PostEditorForm(props: PostEditorFormProps) {
           )}
         </div>
         <div style={{ display: "flex", gap: "0.8rem", alignItems: "center", flexWrap: "wrap" }}>
-          <label htmlFor="post-status" className="sr-only">Publication status</label>
-          <select
-            id="post-status"
+          <EditorSelect
+            ariaLabel="Publication status"
             value={props.status}
-            onChange={(event) => props.onStatusChange(event.target.value)}
-            className="editor-status-select"
-          >
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-          </select>
+            onChange={props.onStatusChange}
+            width="140px"
+            disabled={props.saving}
+            options={[
+              { value: "draft", label: "Draft" },
+              { value: "published", label: "Published" },
+            ]}
+          />
           <button type="submit" disabled={props.saving} className="editor-save-button">
             {props.saving ? "Saving…" : "Save Changes"}
           </button>

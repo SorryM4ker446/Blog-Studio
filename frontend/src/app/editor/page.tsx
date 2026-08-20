@@ -33,6 +33,20 @@ import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 type ViewMode = "list" | "edit";
 type DeleteType = "post" | "file" | "category";
 
+interface PostListSnapshot {
+  data: Post[];
+  page: number;
+  totalPages: number;
+  total: number;
+}
+
+interface FileListSnapshot {
+  data: FileRecord[];
+  page: number;
+  totalPages: number;
+  total: number;
+}
+
 export default function EditorPage() {
   const { user, isLoading, authStatus, authError, refreshAuth } = useAuth();
   const router = useRouter();
@@ -44,6 +58,13 @@ export default function EditorPage() {
   const categoryRequestIdRef = useRef(0);
   const postRequestIdRef = useRef(0);
   const fileRequestIdRef = useRef(0);
+  const postDefaultRequestIdRef = useRef(0);
+  const fileDefaultRequestIdRef = useRef(0);
+  const postDefaultSnapshotRef = useRef<PostListSnapshot | null>(null);
+  const fileDefaultSnapshotRef = useRef<FileListSnapshot | null>(null);
+  const initializedRef = useRef(false);
+  const postViewQueryRef = useRef<string | null>(null);
+  const fileViewQueryRef = useRef<string | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeTab, setActiveTab] = useState<EditorTab>(urlTab);
@@ -57,6 +78,8 @@ export default function EditorPage() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [postsError, setPostsError] = useState("");
   const [filesError, setFilesError] = useState("");
+  const [postCount, setPostCount] = useState<number | null>(null);
+  const [fileCount, setFileCount] = useState<number | null>(null);
 
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -101,16 +124,32 @@ export default function EditorPage() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      initializedRef.current = false;
+      return;
+    }
+
     setActiveTab(urlTab);
-    void loadCategories();
-    if (searchQuery.trim()) {
-      void runSearch(searchQuery.trim(), urlTab);
-    } else {
+
+    const firstLoad = !initializedRef.current;
+    if (firstLoad) {
+      initializedRef.current = true;
+      void loadCategories();
       void loadPosts(1);
       void loadFiles(1);
     }
+
+    const normalizedQuery = searchQuery.trim();
+    const visibleQueryRef = urlTab === "posts" ? postViewQueryRef : fileViewQueryRef;
+    if (normalizedQuery) {
+      if (visibleQueryRef.current !== normalizedQuery) void runSearch(normalizedQuery, urlTab);
+    } else if (!firstLoad) {
+      restoreDefaultView("posts");
+      restoreDefaultView("files");
+    }
     // Requests carry sequence IDs so stale responses cannot overwrite the latest URL state.
+    // Request helpers intentionally read the latest pagination and cache refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, urlTab, user]);
 
   async function loadCategories() {
@@ -130,15 +169,23 @@ export default function EditorPage() {
   }
 
   async function loadPosts(pageToLoad: number) {
+    postViewQueryRef.current = null;
+    const defaultRequestId = ++postDefaultRequestIdRef.current;
     const requestId = ++postRequestIdRef.current;
     setPostsLoading(true);
     setPostsError("");
     try {
       const result = await getAdminPosts(pageToLoad, 10, "admin");
-      if (!isMountedRef.current || requestId !== postRequestIdRef.current) return;
-      setPosts(result.data);
-      setPostPage(result.page);
-      setPostTotalPages(Math.max(1, Math.ceil(result.total / result.limit)));
+      if (!isMountedRef.current) return;
+      const snapshot = {
+        data: result.data,
+        page: result.page,
+        totalPages: Math.max(1, Math.ceil(result.total / result.limit)),
+        total: result.total,
+      };
+      if (defaultRequestId === postDefaultRequestIdRef.current) postDefaultSnapshotRef.current = snapshot;
+      if (requestId !== postRequestIdRef.current) return;
+      showPostSnapshot(snapshot);
     } catch (error) {
       if (isMountedRef.current && requestId === postRequestIdRef.current) {
         setPostsError(getApiErrorMessage(error, "Failed to load posts."));
@@ -149,15 +196,23 @@ export default function EditorPage() {
   }
 
   async function loadFiles(pageToLoad: number) {
+    fileViewQueryRef.current = null;
+    const defaultRequestId = ++fileDefaultRequestIdRef.current;
     const requestId = ++fileRequestIdRef.current;
     setFilesLoading(true);
     setFilesError("");
     try {
       const result = await getAdminFiles(pageToLoad, 10, false);
-      if (!isMountedRef.current || requestId !== fileRequestIdRef.current) return;
-      setFiles(result.data);
-      setFilePage(result.page);
-      setFileTotalPages(Math.max(1, Math.ceil(result.total / result.limit)));
+      if (!isMountedRef.current) return;
+      const snapshot = {
+        data: result.data,
+        page: result.page,
+        totalPages: Math.max(1, Math.ceil(result.total / result.limit)),
+        total: result.total,
+      };
+      if (defaultRequestId === fileDefaultRequestIdRef.current) fileDefaultSnapshotRef.current = snapshot;
+      if (requestId !== fileRequestIdRef.current) return;
+      showFileSnapshot(snapshot);
     } catch (error) {
       if (isMountedRef.current && requestId === fileRequestIdRef.current) {
         setFilesError(getApiErrorMessage(error, "Failed to load files."));
@@ -168,6 +223,8 @@ export default function EditorPage() {
   }
 
   async function runSearch(query: string, tab: EditorTab) {
+    if (tab === "posts") postViewQueryRef.current = query;
+    else fileViewQueryRef.current = query;
     const requestIdRef = tab === "posts" ? postRequestIdRef : fileRequestIdRef;
     const requestId = ++requestIdRef.current;
     const setLoading = tab === "posts" ? setPostsLoading : setFilesLoading;
@@ -178,11 +235,15 @@ export default function EditorPage() {
       const result = await searchAdminResources(query, tab, false);
       if (!isMountedRef.current || requestId !== requestIdRef.current) return;
       if (tab === "posts") {
-        setPosts(filterPostsByVisibleText(result.posts || [], query));
+        const visiblePosts = filterPostsByVisibleText(result.posts || [], query);
+        setPosts(visiblePosts);
+        setPostCount(visiblePosts.length);
         setPostPage(1);
         setPostTotalPages(1);
       } else {
-        setFiles(result.files || []);
+        const matchingFiles = result.files || [];
+        setFiles(matchingFiles);
+        setFileCount(matchingFiles.length);
         setFilePage(1);
         setFileTotalPages(1);
       }
@@ -192,6 +253,35 @@ export default function EditorPage() {
       }
     } finally {
       if (isMountedRef.current && requestId === requestIdRef.current) setLoading(false);
+    }
+  }
+
+  function showPostSnapshot(snapshot: PostListSnapshot) {
+    setPosts(snapshot.data);
+    setPostCount(snapshot.total);
+    setPostPage(snapshot.page);
+    setPostTotalPages(snapshot.totalPages);
+  }
+
+  function showFileSnapshot(snapshot: FileListSnapshot) {
+    setFiles(snapshot.data);
+    setFileCount(snapshot.total);
+    setFilePage(snapshot.page);
+    setFileTotalPages(snapshot.totalPages);
+  }
+
+  function restoreDefaultView(tab: EditorTab) {
+    const viewQueryRef = tab === "posts" ? postViewQueryRef : fileViewQueryRef;
+    if (viewQueryRef.current === null) return;
+
+    if (tab === "posts") {
+      const snapshot = postDefaultSnapshotRef.current;
+      if (snapshot) showPostSnapshot(snapshot);
+      void loadPosts(snapshot?.page || 1);
+    } else {
+      const snapshot = fileDefaultSnapshotRef.current;
+      if (snapshot) showFileSnapshot(snapshot);
+      void loadFiles(snapshot?.page || 1);
     }
   }
 
@@ -215,6 +305,7 @@ export default function EditorPage() {
       else void loadFiles(1);
       return;
     }
+    if (!normalized && searchQuery.trim()) restoreDefaultView(activeTab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", activeTab);
     if (normalized) params.set("q", normalized);
@@ -223,6 +314,8 @@ export default function EditorPage() {
   }
 
   function handleTabChange(tab: EditorTab) {
+    if (tab === activeTab && !searchQuery.trim()) return;
+    if (searchQuery.trim()) restoreDefaultView(activeTab);
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
@@ -402,6 +495,8 @@ export default function EditorPage() {
           searchQuery={searchQuery}
           posts={posts}
           files={files}
+          postCount={postCount}
+          fileCount={fileCount}
           postsLoading={postsLoading}
           filesLoading={filesLoading}
           postsError={postsError}
