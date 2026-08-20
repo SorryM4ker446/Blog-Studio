@@ -14,6 +14,8 @@ interface EditorListViewProps {
   searchQuery: string;
   posts: Post[];
   files: FileRecord[];
+  postCount: number | null;
+  fileCount: number | null;
   postsLoading: boolean;
   filesLoading: boolean;
   postsError: string;
@@ -88,20 +90,24 @@ export default function EditorListView(props: EditorListViewProps) {
           <button
             type="button"
             role="tab"
+            id="editor-posts-tab"
+            aria-controls="editor-resource-panel"
             aria-selected={props.activeTab === "posts"}
             className={props.activeTab === "posts" ? "editor-tab editor-tab-active" : "editor-tab"}
             onClick={() => props.onTabChange("posts")}
           >
-            <FileTextIcon size={18} /> Posts ({props.postsLoading ? "…" : props.posts.length})
+            <FileTextIcon size={18} /> Posts{props.postCount === null ? "" : ` (${props.postCount})`}
           </button>
           <button
             type="button"
             role="tab"
+            id="editor-files-tab"
+            aria-controls="editor-resource-panel"
             aria-selected={props.activeTab === "files"}
             className={props.activeTab === "files" ? "editor-tab editor-tab-active" : "editor-tab"}
             onClick={() => props.onTabChange("files")}
           >
-            <FolderIcon size={18} /> Files ({props.filesLoading ? "…" : props.files.length})
+            <FolderIcon size={18} /> Files{props.fileCount === null ? "" : ` (${props.fileCount})`}
           </button>
         </div>
 
@@ -113,51 +119,61 @@ export default function EditorListView(props: EditorListViewProps) {
         </div>
       </div>
 
-      {loading && !hasItems ? (
-        <LoadingState label={`Loading ${props.activeTab}…`} rows={3} />
-      ) : error ? (
-        <ErrorState
-          title={`Editor ${props.activeTab} could not be loaded`}
-          message={error}
-          onRetry={retry}
-          retrying={loading}
-        />
-      ) : !hasItems ? (
-        <EmptyState
-          title={props.searchQuery ? `No matching ${props.activeTab}` : `No ${props.activeTab} yet`}
-          message={props.searchQuery ? "Try a different search term." : props.activeTab === "posts" ? "Create a post to get started." : "Upload a file to get started."}
-          icon={<InboxIcon size={54} />}
-        />
-      ) : (
-        <div className="editor-resource-grid">
-          {props.activeTab === "posts"
-            ? props.posts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  onView={() => props.onViewPost(post)}
-                  onEdit={() => props.onEditPost(post)}
-                  onDelete={() => props.onDeletePost(post.id)}
-                />
-              ))
-            : props.files.map((file) => (
-                <FileCard
-                  key={file.id}
-                  file={file}
-                  onPreview={props.onPreviewFile}
-                  onEdit={props.onEditFile}
-                  onDelete={(item) => props.onDeleteFile(item.id)}
-                />
-              ))}
-        </div>
-      )}
+      <section
+        id="editor-resource-panel"
+        role="tabpanel"
+        aria-labelledby={`editor-${props.activeTab}-tab`}
+        aria-busy={loading}
+        className="editor-resource-panel"
+      >
+        {loading && hasItems && <span className="sr-only" role="status">Refreshing {props.activeTab}…</span>}
 
-      {!loading && !error && props.activeTab === "posts" && props.posts.length > 0 && (
-        <Pagination currentPage={props.postPage} totalPages={props.postTotalPages} onPageChange={props.onLoadPosts} />
-      )}
-      {!loading && !error && props.activeTab === "files" && props.files.length > 0 && (
-        <Pagination currentPage={props.filePage} totalPages={props.fileTotalPages} onPageChange={props.onLoadFiles} />
-      )}
+        {loading && !hasItems ? (
+          <LoadingState label={`Loading ${props.activeTab}…`} rows={3} />
+        ) : error ? (
+          <ErrorState
+            title={`Editor ${props.activeTab} could not be loaded`}
+            message={error}
+            onRetry={retry}
+            retrying={loading}
+          />
+        ) : !hasItems ? (
+          <EmptyState
+            title={props.searchQuery ? `No matching ${props.activeTab}` : `No ${props.activeTab} yet`}
+            message={props.searchQuery ? "Try a different search term." : props.activeTab === "posts" ? "Create a post to get started." : "Upload a file to get started."}
+            icon={<InboxIcon size={54} />}
+          />
+        ) : (
+          <div className="editor-resource-grid">
+            {props.activeTab === "posts"
+              ? props.posts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    onView={() => props.onViewPost(post)}
+                    onEdit={() => props.onEditPost(post)}
+                    onDelete={() => props.onDeletePost(post.id)}
+                  />
+                ))
+              : props.files.map((file) => (
+                  <FileCard
+                    key={file.id}
+                    file={file}
+                    onPreview={props.onPreviewFile}
+                    onEdit={props.onEditFile}
+                    onDelete={(item) => props.onDeleteFile(item.id)}
+                  />
+                ))}
+          </div>
+        )}
+
+        {!error && props.activeTab === "posts" && props.posts.length > 0 && (
+          <Pagination currentPage={props.postPage} totalPages={props.postTotalPages} onPageChange={props.onLoadPosts} />
+        )}
+        {!error && props.activeTab === "files" && props.files.length > 0 && (
+          <Pagination currentPage={props.filePage} totalPages={props.fileTotalPages} onPageChange={props.onLoadFiles} />
+        )}
+      </section>
     </div>
   );
 }

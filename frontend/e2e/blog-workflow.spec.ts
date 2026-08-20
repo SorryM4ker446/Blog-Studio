@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import {
   E2E_ADMIN_PASS,
   E2E_ADMIN_USER,
@@ -57,6 +57,11 @@ async function submitFileSearchAndWait(
   });
 }
 
+async function selectPublicationStatus(page: Page, option: "Draft" | "Published") {
+  await page.getByRole("combobox", { name: "Publication status" }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
+
 function waitForEditorLists(page: Page) {
   const paths = ["/api/admin/categories", "/api/admin/posts", "/api/admin/files"];
   return Promise.all(paths.map((path) => page.waitForResponse((response) => {
@@ -96,7 +101,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
 
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
   await page.getByText(postTitle, { exact: true }).click();
-  await page.getByLabel("Publication status").selectOption("published");
+  await selectPublicationStatus(page, "Published");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
 
@@ -280,14 +285,29 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page.getByText("Files (0 results)", { exact: true })).toBeVisible();
   await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(`Updated ${fileDescription}`);
 
+  const initialEditorListsPromise = waitForEditorLists(page);
   await page.goto("/editor");
-  const editorFileListsPromise = waitForEditorLists(page);
-  await page.getByRole("tab", { name: /Files \(/ }).click();
+  await initialEditorListsPromise;
+  const postsTab = page.getByRole("tab", { name: /Posts \(\d+\)/ });
+  const filesTab = page.getByRole("tab", { name: /Files \(\d+\)/ });
+  await expect(postsTab).not.toContainText("…");
+  await expect(filesTab).not.toContainText("…");
+  const defaultPostCount = await postsTab.textContent();
+  const defaultFileCount = await filesTab.textContent();
+  const repeatedListRequests: string[] = [];
+  const trackRepeatedListRequests = (request: Request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "GET" && ["/api/admin/categories", "/api/admin/posts", "/api/admin/files"].includes(pathname)) {
+      repeatedListRequests.push(pathname);
+    }
+  };
+  page.on("request", trackRepeatedListRequests);
+  await filesTab.click();
   await expect.poll(() => {
     const url = new URL(page.url());
     return { pathname: url.pathname, tab: url.searchParams.get("tab"), query: url.searchParams.get("q") };
   }).toEqual({ pathname: "/editor", tab: "files", query: null });
-  await editorFileListsPromise;
+  expect(repeatedListRequests).toEqual([]);
   const editorFileSearch = page.getByPlaceholder("Search files...");
   await submitFileSearchAndWait(page, editorFileSearch, `Updated ${fileDescription}`, editorFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
@@ -312,19 +332,28 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(editorFileSearch).toHaveValue(updatedDisplayName);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
 
-  const editorListsPromise = waitForEditorLists(page);
-  await page.getByRole("tab", { name: /Posts \(/ }).click();
+  const defaultFileRefreshPromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === "/api/admin/files";
+  });
+  await postsTab.click();
   await expect.poll(() => {
     const url = new URL(page.url());
     return { pathname: url.pathname, tab: url.searchParams.get("tab"), query: url.searchParams.get("q") };
   }).toEqual({ pathname: "/editor", tab: "posts", query: null });
-  await editorListsPromise;
+  await expect(postsTab).toHaveText(defaultPostCount || "");
+  await expect(filesTab).toHaveText(defaultFileCount || "");
+  await expect(postsTab).not.toContainText("…");
+  await expect(filesTab).not.toContainText("…");
+  expect((await defaultFileRefreshPromise).ok()).toBeTruthy();
+  expect(repeatedListRequests).toEqual(["/api/admin/files"]);
+  page.off("request", trackRepeatedListRequests);
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue("");
   await page.getByRole("button", { name: "+ New Post" }).click();
   await page.getByLabel("POST TITLE").fill(postTitle);
   await page.getByLabel("INTRODUCTION").fill("Image lifecycle verification");
   await page.locator(".custom-editor-wrapper textarea").fill(`![${imageAlt}](${imageViewURL})`);
-  await page.getByLabel("Publication status").selectOption("published");
+  await selectPublicationStatus(page, "Published");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
 

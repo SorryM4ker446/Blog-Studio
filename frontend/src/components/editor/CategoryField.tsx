@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Category } from "@/lib/api";
-import { EditIcon, TrashIcon } from "@/components/Icons";
+import EditorSelect from "@/components/editor/EditorSelect";
 
 interface CategoryFieldProps {
   categories: Category[];
@@ -25,9 +25,7 @@ const fieldStyle = {
 } as const;
 
 export default function CategoryField({ categories, value, loading = false, onChange, onCreate, onRename, onDelete }: CategoryFieldProps) {
-  const selected = categories.find((category) => category.id === value);
-  const [mode, setMode] = useState<"idle" | "create" | "rename">("idle");
-  const [renameTargetId, setRenameTargetId] = useState<number | null>(null);
+  const [mode, setMode] = useState<"idle" | "create">("idle");
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -40,17 +38,8 @@ export default function CategoryField({ categories, value, loading = false, onCh
 
   function startCreate() {
     setName("");
-    setRenameTargetId(null);
     setError("");
     setMode("create");
-  }
-
-  function startRename() {
-    if (!selected) return;
-    setName(selected.name);
-    setRenameTargetId(selected.id);
-    setError("");
-    setMode("rename");
   }
 
   async function submitName() {
@@ -64,18 +53,7 @@ export default function CategoryField({ categories, value, loading = false, onCh
     savingRef.current = true;
     setSaving(true);
     setError("");
-    let message: string | null;
-    if (mode === "rename") {
-      if (renameTargetId === null) {
-        savingRef.current = false;
-        setSaving(false);
-        setError("The category being renamed is no longer available.");
-        return;
-      }
-      message = await onRename(renameTargetId, normalizedName);
-    } else {
-      message = await onCreate(normalizedName);
-    }
+    const message = await onCreate(normalizedName);
     savingRef.current = false;
     setSaving(false);
     if (message) {
@@ -83,51 +61,34 @@ export default function CategoryField({ categories, value, loading = false, onCh
       return;
     }
     setMode("idle");
-    setRenameTargetId(null);
     setName("");
   }
 
   return (
     <div>
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-        <select
-          id="post-category"
-          aria-label="Post category"
-          value={value}
-          disabled={loading || saving || mode === "rename"}
-          onChange={(event) => onChange(Number(event.target.value))}
-          style={{ ...fieldStyle, flex: "1 1 240px" }}
-        >
-          <option value={0}>无标签 (None)</option>
-          {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-        </select>
+        <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+          <EditorSelect
+            ariaLabel="Post category"
+            value={value}
+            disabled={loading || saving || mode !== "idle"}
+            onChange={onChange}
+            options={[
+              { value: 0, label: "无标签 (None)" },
+              ...categories.map((category) => ({ value: category.id, label: category.name })),
+            ]}
+            onRenameOption={onRename}
+            onDeleteOption={onDelete}
+            isOptionManageable={(option) => option.value !== 0}
+          />
+        </div>
         <button type="button" onClick={startCreate} disabled={loading || saving || mode !== "idle"} aria-label="Create category" title="Create category" className="editor-icon-button">+</button>
-        <button
-          type="button"
-          onClick={startRename}
-          disabled={loading || saving || mode !== "idle" || !selected}
-          aria-label={selected ? `Rename ${selected.name}` : "Select a category to rename"}
-          title="Rename selected category"
-          className="editor-icon-button"
-        >
-          <EditIcon size={16} />
-        </button>
-        <button
-          type="button"
-          onClick={() => selected && onDelete(selected.id)}
-          disabled={loading || saving || mode !== "idle" || !selected}
-          aria-label={selected ? `Delete ${selected.name}` : "Select a category to delete"}
-          title="Delete selected category"
-          className="editor-icon-button editor-icon-button-danger"
-        >
-          <TrashIcon size={16} />
-        </button>
       </div>
 
       {mode !== "idle" && (
         <div className="fade-in" style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
           <label htmlFor="category-name" className="sr-only">
-            {mode === "rename" ? "New category name" : "Category name"}
+            Category name
           </label>
           <input
             ref={inputRef}
@@ -141,7 +102,6 @@ export default function CategoryField({ categories, value, loading = false, onCh
               }
               if (event.key === "Escape" && !saving) {
                 setMode("idle");
-                setRenameTargetId(null);
                 setError("");
               }
             }}
@@ -149,17 +109,16 @@ export default function CategoryField({ categories, value, loading = false, onCh
             maxLength={255}
             aria-invalid={Boolean(error)}
             aria-describedby={error ? "category-name-error" : undefined}
-            placeholder={mode === "rename" ? "Rename category…" : "New category name…"}
+            placeholder="New category name…"
             style={{ ...fieldStyle, flex: "1 1 240px" }}
           />
           <button type="button" onClick={() => void submitName()} disabled={saving} className="editor-inline-action">
-            {saving ? "Saving…" : mode === "rename" ? "Rename" : "Create"}
+            {saving ? "Saving…" : "Create"}
           </button>
           <button
             type="button"
             onClick={() => {
               setMode("idle");
-              setRenameTargetId(null);
               setError("");
             }}
             disabled={saving}

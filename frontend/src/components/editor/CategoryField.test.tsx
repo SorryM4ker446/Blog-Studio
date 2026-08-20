@@ -9,7 +9,7 @@ const categories = [
 ];
 
 describe("CategoryField", () => {
-  it("uses a native labelled selection control and reports changes", async () => {
+  it("uses the themed labelled selection control and reports changes", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -23,7 +23,8 @@ describe("CategoryField", () => {
       />,
     );
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Post category" }), "2");
+    await user.click(screen.getByRole("combobox", { name: "Post category" }));
+    await user.click(screen.getByRole("option", { name: "Notes" }));
     expect(onChange).toHaveBeenCalledWith(2);
   });
 
@@ -94,6 +95,7 @@ describe("CategoryField", () => {
       />,
     );
 
+    await user.click(screen.getByRole("combobox", { name: "Post category" }));
     await user.click(screen.getByRole("button", { name: "Rename Engineering" }));
     const input = screen.getByRole("textbox", { name: "New category name" });
     await user.clear(input);
@@ -116,6 +118,7 @@ describe("CategoryField", () => {
     };
     const { rerender } = render(<CategoryField {...props} value={1} />);
 
+    await user.click(screen.getByRole("combobox", { name: "Post category" }));
     await user.click(screen.getByRole("button", { name: "Rename Engineering" }));
     rerender(<CategoryField {...props} value={2} />);
     const input = screen.getByRole("textbox", { name: "New category name" });
