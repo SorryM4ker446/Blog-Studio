@@ -1,5 +1,7 @@
 /* d:\blog\frontend\src\app\globals.css */
 :root {
+  color-scheme: dark;
+
   /* Google AI Studio 经典暗色色调 */
   --bg-sidebar: #000000;
   /* 增强左侧栏对比度的纯黑色 */
@@ -37,6 +39,10 @@
   --file-dialog-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
   --file-primary-text: #101114;
   --file-primary-hover: #b8d2fb;
+  --scrollbar-track: #18191a;
+  --scrollbar-thumb: #5f6368;
+  --scrollbar-thumb-hover: #8e918f;
+  --scrollbar-thumb-active: #a8c7fa;
   --post-meta-rail-inset: 0.6rem;
   --post-updated-right-offset: 5rem;
 
@@ -52,6 +58,8 @@
 }
 
 .theme-light {
+  color-scheme: light;
+
   /* Light mode colors */
   --bg-sidebar: #f8f9fa;
   --bg-base: #ffffff;
@@ -82,6 +90,10 @@
   --file-dialog-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
   --file-primary-text: #ffffff;
   --file-primary-hover: #155fc0;
+  --scrollbar-track: #f1f3f4;
+  --scrollbar-thumb: #bdc1c6;
+  --scrollbar-thumb-hover: #9aa0a6;
+  --scrollbar-thumb-active: #1a73e8;
   --nav-item-hover: rgba(0, 0, 0, 0.05);
 }
 
@@ -97,6 +109,44 @@ body {
   overflow: hidden;
   /* 防止原生滚动条毁坏布局，采用内层滚动 */
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 2px solid var(--scrollbar-track);
+  border-radius: var(--radius-pill);
+  background: var(--scrollbar-thumb);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
 }
 
 input,
@@ -377,10 +427,48 @@ a {
 }
 
 .editor-post-card {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-height: 190px;
   padding: 1.5rem;
+}
+
+.editor-post-card-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.editor-post-card-open:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 3px;
+}
+
+.editor-post-card-header,
+.editor-post-card-footer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: 1rem;
+  pointer-events: none;
+}
+
+.editor-post-card-header {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.editor-post-card-footer {
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
 }
 
 .editor-post-card-content {
@@ -389,11 +477,8 @@ a {
   flex-direction: column;
   min-width: 0;
   padding: 0;
-  border: 0;
-  background: transparent;
   color: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
 .editor-post-title {
@@ -439,6 +524,7 @@ a {
 }
 
 .editor-post-delete {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -450,6 +536,12 @@ a {
   background: rgba(242, 139, 130, 0.1);
   color: var(--accent-red);
   cursor: pointer;
+  pointer-events: auto;
+}
+
+.editor-post-card-actions {
+  position: relative;
+  pointer-events: auto;
 }
 
 .editor-post-category {
