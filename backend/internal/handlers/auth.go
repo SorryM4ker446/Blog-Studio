@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
 	"blog-backend/internal/models"
+	"blog-backend/internal/observability"
 	"blog-backend/internal/security"
 	"blog-backend/internal/session"
 	"github.com/gin-gonic/gin"
@@ -161,7 +161,7 @@ func UpdatePassword(c *gin.Context) {
 
 	newHash, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		log.Println("Error hashing password:", err)
+		observability.FromGin(c).ErrorContext(c.Request.Context(), "password hashing failed", "error", err)
 		apiresponse.Error(c, http.StatusInternalServerError, "password_error", "Failed to hash password")
 		return
 	}

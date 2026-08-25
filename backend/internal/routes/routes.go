@@ -1,19 +1,37 @@
 package routes
 
 import (
+	"fmt"
+	"log/slog"
 	"net/http"
 
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
 	"blog-backend/internal/handlers"
+	"blog-backend/internal/health"
 	"blog-backend/internal/middleware"
+	"blog-backend/internal/observability"
 	"github.com/gin-gonic/gin"
 )
 
 func SetupRouter() *gin.Engine {
-	r := gin.Default()
+	cfg := config.Current()
+	return SetupRouterWithHealth(health.NewChecker(config.DB, cfg.UploadDir, cfg.HealthCheckTimeout))
+}
 
-	r.Use(corsMiddleware(config.Current().AllowedOrigins))
+func SetupRouterWithHealth(healthChecker *health.Checker) *gin.Engine {
+	cfg := config.Current()
+	r := gin.New()
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		panic(fmt.Sprintf("validated trusted proxy configuration was rejected: %v", err))
+	}
+	r.Use(observability.RequestMiddleware(slog.Default()))
+	r.Use(observability.RecoveryMiddleware())
+
+	r.GET("/health/live", health.Liveness)
+	r.GET("/health/ready", healthChecker.Readiness)
+
+	r.Use(corsMiddleware(cfg.AllowedOrigins))
 
 	api := r.Group("/api")
 	{

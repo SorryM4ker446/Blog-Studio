@@ -29,3 +29,5 @@ COOKIE_SECURE=true
 ```
 
 `ALLOWED_ORIGINS` accepts a comma-separated list of exact origins. Wildcards are rejected. Requests without an `Origin` header remain available to trusted command-line clients, while browser requests from an unlisted origin receive `403 Forbidden`.
+
+The backend does not trust forwarded client addresses by default. A production reverse proxy must be listed explicitly in `TRUSTED_PROXIES`; broad public network ranges must not be trusted. This boundary affects both request attribution and login throttling. See [`runtime-operations.md`](runtime-operations.md) for health endpoints, request IDs, structured logging, and operational timeouts.

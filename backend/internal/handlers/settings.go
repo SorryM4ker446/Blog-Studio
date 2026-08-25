@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -12,6 +11,7 @@ import (
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
 	"blog-backend/internal/models"
+	"blog-backend/internal/observability"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -50,7 +50,12 @@ func GetSettings(c *gin.Context) {
 					_ = content.Close()
 					if storageKey != file.Path {
 						if updateErr := config.DB.Model(&file).Update("path", storageKey).Error; updateErr != nil {
-							log.Printf("normalize avatar storage key for file %d: %v", file.ID, updateErr)
+							observability.FromGin(c).WarnContext(
+								c.Request.Context(),
+								"avatar storage key normalization failed",
+								"file_id", file.ID,
+								"error", updateErr,
+							)
 						}
 					}
 				}
