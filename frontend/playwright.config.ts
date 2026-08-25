@@ -59,6 +59,7 @@ export default defineConfig({
       env: {
         ...process.env,
         NEXT_PUBLIC_API_BASE_URL: E2E_API_URL,
+        API_INTERNAL_BASE_URL: E2E_API_URL,
       },
     },
   ],

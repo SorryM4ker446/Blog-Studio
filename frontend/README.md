@@ -16,6 +16,8 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+Copy `.env.example` for local configuration. `NEXT_PUBLIC_API_BASE_URL` is used by browser requests. `API_INTERNAL_BASE_URL` is used only by the Next.js server to load the initial public profile and authenticated identity before the first HTML response, preventing hydration-time shell replacement. Both values normally point to `http://localhost:8080/api` during local development.
+
 You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

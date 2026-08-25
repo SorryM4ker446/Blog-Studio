@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiRequest } from "@/lib/api-client";
 import { AuthProvider, useAuth } from "./AuthContext";
+import TopBar from "@/components/TopBar";
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -22,13 +23,15 @@ vi.mock("@/lib/api", () => ({
 }));
 
 function AuthProbe() {
-  const { user, authStatus, authError, isLoading } = useAuth();
+  const { user, profile, authStatus, authError, isLoading, isProfileLoading } = useAuth();
   return (
     <div>
       <span data-testid="status">{authStatus}</span>
       <span data-testid="user">{user?.username || "none"}</span>
       <span data-testid="loading">{String(isLoading)}</span>
       <span data-testid="error-kind">{authError?.kind || "none"}</span>
+      <span data-testid="profile-name">{profile?.name || "none"}</span>
+      <span data-testid="profile-loading">{String(isProfileLoading)}</span>
     </div>
   );
 }
@@ -40,6 +43,9 @@ function LogoutButton() {
 
 describe("AuthProvider", () => {
   beforeEach(() => {
+    mocks.getCurrentUser.mockReset();
+    mocks.getSettings.mockReset();
+    mocks.logoutUser.mockReset();
     mocks.getSettings.mockResolvedValue({});
     mocks.logoutUser.mockResolvedValue(undefined);
     mocks.replace.mockReset();
@@ -48,6 +54,75 @@ describe("AuthProvider", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("renders a resolved server snapshot without replacing it during hydration", async () => {
+    render(
+      <AuthProvider initialState={{
+        user: { id: 1, username: "admin", role: "admin" },
+        profile: {
+          name: "Ada",
+          description: "Engineer",
+          avatar: "http://localhost:8080/api/files/7/view",
+          tag: "Admin",
+        },
+        profileResolved: true,
+        authStatus: "authenticated",
+        authNeedsClientCheck: false,
+        categories: [],
+        categoriesResolved: true,
+      }}>
+        <AuthProbe />
+        <TopBar />
+      </AuthProvider>,
+    );
+
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+    expect(screen.getByTestId("loading")).toHaveTextContent("false");
+    expect(screen.getByTestId("profile-name")).toHaveTextContent("Ada");
+    expect(screen.getByTestId("profile-loading")).toHaveTextContent("false");
+    expect(screen.getByRole("img", { name: "avatar" })).toHaveAttribute(
+      "src",
+      "http://localhost:8080/api/files/7/view",
+    );
+    expect(document.querySelector(".skeleton-pulse")).toBeNull();
+
+    await act(async () => Promise.resolve());
+    expect(mocks.getCurrentUser).not.toHaveBeenCalled();
+    expect(mocks.getSettings).not.toHaveBeenCalled();
+  });
+
+  it("keeps a legacy session in checking state until the compatibility upgrade completes", async () => {
+    let resolveIdentity: ((value: { id: number; username: string; role: string }) => void) | undefined;
+    mocks.getCurrentUser.mockReturnValue(new Promise((resolve) => {
+      resolveIdentity = resolve;
+    }));
+
+    render(
+      <AuthProvider initialState={{
+        user: null,
+        profile: { name: "Ada", description: "", avatar: "", tag: "" },
+        profileResolved: true,
+        authStatus: "anonymous",
+        authNeedsClientCheck: true,
+        categories: [],
+        categoriesResolved: true,
+      }}>
+        <AuthProbe />
+      </AuthProvider>,
+    );
+
+    expect(screen.getByTestId("status")).toHaveTextContent("checking");
+    expect(screen.getByTestId("loading")).toHaveTextContent("true");
+    expect(screen.getByTestId("profile-name")).toHaveTextContent("Ada");
+    expect(screen.getByTestId("profile-loading")).toHaveTextContent("false");
+
+    await act(async () => {
+      resolveIdentity?.({ id: 1, username: "admin", role: "admin" });
+    });
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+    expect(screen.getByTestId("user")).toHaveTextContent("admin");
+    expect(screen.getByTestId("loading")).toHaveTextContent("false");
   });
 
   it("keeps an authentication-check outage distinct from an anonymous session", async () => {

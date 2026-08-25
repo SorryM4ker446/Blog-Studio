@@ -115,6 +115,9 @@ func Logout(c *gin.Context) {
 }
 
 func Me(c *gin.Context) {
+	if token, err := c.Cookie(session.CookieName); err == nil && token != "" {
+		session.RefreshCookiePath(c.Writer, token)
+	}
 	username, _ := c.Get("username")
 	role, _ := c.Get("role")
 	userID, _ := c.Get("user_id")

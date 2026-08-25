@@ -2,7 +2,9 @@
 
 ## Browser session
 
-The backend signs a 24-hour JWT and stores it only in the `blog_session` HttpOnly Cookie. Frontend JavaScript and local storage never receive the JWT. Each authenticated request also checks the user's current role and `session_version` in PostgreSQL.
+The backend signs a 24-hour JWT and stores it only in the site-scoped `blog_session` HttpOnly Cookie. Frontend JavaScript and local storage never receive the JWT. The Next.js server forwards the incoming Cookie to the backend only when resolving the initial identity for server rendering, which avoids replacing the guest shell after hydration. Each authenticated API request still checks the user's current role and `session_version` in PostgreSQL.
+
+Older `/api`-scoped session Cookies are expired during login, logout, and identity restoration. This compatibility cleanup prevents duplicate same-name Cookies while existing sessions move to the site-scoped path required by server rendering.
 
 Logging out or changing the password increments `session_version`, immediately invalidating copies of the previous Cookie. Password changes require signing in again.
 
@@ -27,6 +29,14 @@ APP_ENV=production
 ALLOWED_ORIGINS=https://blog.example.com
 COOKIE_SECURE=true
 ```
+
+The frontend server also needs an internal API origin for its initial server-rendered profile and identity requests:
+
+```text
+API_INTERNAL_BASE_URL=http://backend:8080/api
+```
+
+This value is a network location, not a credential. It should use the private container or host network when available. `NEXT_PUBLIC_API_BASE_URL` remains the browser-visible API origin.
 
 `ALLOWED_ORIGINS` accepts a comma-separated list of exact origins. Wildcards are rejected. Requests without an `Origin` header remain available to trusted command-line clients, while browser requests from an unlisted origin receive `403 Forbidden`.
 

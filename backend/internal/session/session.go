@@ -16,6 +16,8 @@ import (
 const (
 	CookieName     = "blog_session"
 	CSRFCookieName = "blog_csrf"
+	cookiePath     = "/"
+	legacyPath     = "/api"
 	issuer         = "blog-studio"
 	lifetime       = 24 * time.Hour
 )
@@ -68,12 +70,31 @@ func Parse(tokenString string) (*Claims, error) {
 }
 
 func SetCookie(w http.ResponseWriter, token string) {
+	setSessionCookie(w, token, time.Now().Add(lifetime))
+}
+
+// RefreshCookiePath moves a valid existing session to the site-scoped Cookie
+// without extending the JWT's original expiration time.
+func RefreshCookiePath(w http.ResponseWriter, token string) {
+	claims, err := Parse(token)
+	if err != nil || claims.ExpiresAt == nil || !claims.ExpiresAt.After(time.Now()) {
+		return
+	}
+	setSessionCookie(w, token, claims.ExpiresAt.Time)
+}
+
+func setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
+	expireCookie(w, CookieName, legacyPath, true)
+	maxAge := int(time.Until(expires).Seconds())
+	if maxAge < 1 {
+		maxAge = 1
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,
 		Value:    token,
-		Path:     "/api",
-		MaxAge:   int(lifetime.Seconds()),
-		Expires:  time.Now().Add(lifetime),
+		Path:     cookiePath,
+		MaxAge:   maxAge,
+		Expires:  expires,
 		HttpOnly: true,
 		Secure:   config.Current().CookieSecure,
 		SameSite: http.SameSiteLaxMode,
@@ -82,8 +103,9 @@ func SetCookie(w http.ResponseWriter, token string) {
 
 func ClearCookies(w http.ResponseWriter) {
 	for _, cookie := range []*http.Cookie{
-		{Name: CookieName, Path: "/api", HttpOnly: true},
-		{Name: CSRFCookieName, Path: "/"},
+		{Name: CookieName, Path: cookiePath, HttpOnly: true},
+		{Name: CookieName, Path: legacyPath, HttpOnly: true},
+		{Name: CSRFCookieName, Path: cookiePath},
 	} {
 		cookie.Value = ""
 		cookie.MaxAge = -1
@@ -94,6 +116,19 @@ func ClearCookies(w http.ResponseWriter) {
 	}
 }
 
+func expireCookie(w http.ResponseWriter, name, path string, httpOnly bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     path,
+		MaxAge:   -1,
+		Expires:  time.Unix(1, 0),
+		HttpOnly: httpOnly,
+		Secure:   config.Current().CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 func NewCSRFToken(w http.ResponseWriter) (string, error) {
 	token, err := randomToken(32)
 	if err != nil {
@@ -102,7 +137,7 @@ func NewCSRFToken(w http.ResponseWriter) (string, error) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CSRFCookieName,
 		Value:    token,
-		Path:     "/",
+		Path:     cookiePath,
 		MaxAge:   int(lifetime.Seconds()),
 		Expires:  time.Now().Add(lifetime),
 		HttpOnly: false,

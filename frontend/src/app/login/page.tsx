@@ -54,7 +54,7 @@ function LoginPageContent() {
       }}
     >
       <div
-        className="ai-card fade-in"
+        className="ai-card"
         style={{
           width: "100%",
           maxWidth: "450px",

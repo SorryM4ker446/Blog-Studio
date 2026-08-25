@@ -6,6 +6,7 @@
   place-items: center;
   padding: 24px;
   background: var(--file-dialog-overlay);
+  animation: fileDialogOverlayIn 0.2s ease-out both;
 }
 
 .dialog {
@@ -18,6 +19,24 @@
   border: 1px solid color-mix(in srgb, var(--border-color) 88%, var(--text-primary));
   border-radius: 16px;
   box-shadow: var(--file-dialog-shadow);
+  transform-origin: center;
+  animation: fileDialogPanelIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fileDialogOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fileDialogPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .wideDialog {
@@ -370,6 +389,13 @@
 
 :global(.theme-light) .dialog {
   color-scheme: light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .dialog {
+    animation: none;
+  }
 }
 
 @media (max-width: 640px) {

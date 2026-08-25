@@ -433,8 +433,13 @@ export async function deleteFile(id: number): Promise<FileMutationResult> {
 
 // ==================== 搜索 API ====================
 
-export async function searchResources(query: string, scope: "posts" | "files" | "all" = "all"): Promise<SearchResult> {
+export async function searchResources(
+  query: string,
+  scope: "posts" | "files" | "all" = "all",
+  categoryId = "",
+): Promise<SearchResult> {
   const searchParams = new URLSearchParams({ q: query, scope });
+  if (categoryId) searchParams.set("category_id", categoryId);
   return apiRequest<SearchResult>(`/search?${searchParams.toString()}`, {
     cache: "no-store",
   });

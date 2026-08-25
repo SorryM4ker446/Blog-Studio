@@ -1,15 +1,14 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import SearchPage from "./page";
+import SearchPageClient from "@/components/SearchPageClient";
 
-const { pushMock, searchResourcesMock } = vi.hoisted(() => ({
-  pushMock: vi.fn(),
+const { navigationState, searchResourcesMock } = vi.hoisted(() => ({
+  navigationState: { searchParams: new URLSearchParams("q=existing%20query") },
   searchResourcesMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
-  useSearchParams: () => new URLSearchParams("q=existing%20query"),
+  useSearchParams: () => navigationState.searchParams,
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -23,28 +22,44 @@ vi.mock("@/lib/api", () => ({
 
 describe("advanced search input", () => {
   beforeEach(() => {
+    navigationState.searchParams = new URLSearchParams("q=existing%20query");
+    window.history.replaceState({}, "", "/search?q=existing%20query");
     searchResourcesMock.mockResolvedValue({ posts: [], files: [] });
   });
 
-  it("does not overwrite typing that occurs before URL synchronization", async () => {
-    let pendingFrame: FrameRequestCallback | undefined;
-    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-      pendingFrame = callback;
-      return 1;
-    });
-    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
-
-    render(<SearchPage />);
+  it("starts from the server snapshot without overwriting new input", () => {
+    render(<SearchPageClient initialState={{
+      query: "existing query",
+      posts: [],
+      files: [],
+      searched: true,
+      error: "",
+    }} />);
     const input = screen.getByRole("textbox", { name: "Search posts and files" });
     fireEvent.change(input, { target: { value: "new article" } });
     expect(input).toHaveValue("new article");
+    expect(searchResourcesMock).not.toHaveBeenCalled();
 
-    await act(async () => {
-      pendingFrame?.(performance.now());
-      await Promise.resolve();
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(window.location.search).toBe("?q=new%20article");
+    expect(searchResourcesMock).toHaveBeenCalledWith("new article");
+  });
+
+  it("reconciles a restored URL when the cached server snapshot has an older query", async () => {
+    navigationState.searchParams = new URLSearchParams("q=restored%20article");
+    window.history.replaceState({}, "", "/search?q=restored%20article");
+
+    render(<SearchPageClient initialState={{
+      query: "older file",
+      posts: [],
+      files: [],
+      searched: true,
+      error: "",
+    }} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Search posts and files" })).toHaveValue("restored article");
+      expect(searchResourcesMock).toHaveBeenCalledWith("restored article");
     });
-
-    expect(input).toHaveValue("new article");
-    expect(searchResourcesMock).toHaveBeenCalledWith("existing query");
   });
 });
