@@ -33,6 +33,10 @@ func respondWithSearchResults(c *gin.Context, adminAccess bool, includeSystem bo
 		apiresponse.Error(c, http.StatusBadRequest, "invalid_scope", "scope must be posts, files, or all")
 		return
 	}
+	categoryID, ok := parseCategoryFilter(c)
+	if !ok {
+		return
+	}
 
 	normalizedQuery := strings.ToLower(query)
 	likeQuery := "%" + escapeLikePattern(query) + "%"
@@ -42,6 +46,13 @@ func respondWithSearchResults(c *gin.Context, adminAccess bool, includeSystem bo
 		db := config.DB.Joins("LEFT JOIN categories ON categories.id = posts.category_id").Preload("Category")
 		if !adminAccess {
 			db = db.Where("posts.status = ?", "published")
+		}
+		if categoryID != nil {
+			if *categoryID == 0 {
+				db = db.Where("posts.category_id IS NULL")
+			} else {
+				db = db.Where("posts.category_id = ?", *categoryID)
+			}
 		}
 		db = db.Where(`(posts.title ILIKE ? ESCAPE E'\\' OR posts.summary ILIKE ? ESCAPE E'\\' OR posts.content ILIKE ? ESCAPE E'\\' OR categories.name ILIKE ? ESCAPE E'\\')`, likeQuery, likeQuery, likeQuery, likeQuery)
 		if adminAccess {

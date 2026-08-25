@@ -12,19 +12,20 @@ interface SearchInputProps {
 
 export default function SearchInput({ placeholder = "Search...", onSearch, style, value, ariaLabel }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusKey = ariaLabel || placeholder;
 
   useEffect(() => {
     const input = inputRef.current;
-    if (!input || value === undefined || input.value === value) {
-      return;
-    }
+    if (!input) return;
 
     const isFocused = document.activeElement === input;
-    input.value = value;
-    if (isFocused) {
+    const valueChanged = value !== undefined && input.value !== value;
+    if (valueChanged) input.value = value;
+
+    if (isFocused && valueChanged && value !== undefined) {
       input.setSelectionRange(value.length, value.length);
     }
-  }, [value]);
+  }, [focusKey, value]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
@@ -46,7 +47,7 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
       <input
         ref={inputRef}
         type="text"
-        aria-label={ariaLabel || placeholder}
+        aria-label={focusKey}
         enterKeyHint="search"
         defaultValue={value || ""}
         onChange={handleChange}

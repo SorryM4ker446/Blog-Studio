@@ -1001,7 +1001,12 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-footer {
 }
 
 .nav-posts-row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--nav-item-hover);
+  color: var(--text-primary);
+}
+
+.nav-posts-row.active {
+  background: var(--nav-active);
   color: var(--text-primary);
 }
 
@@ -1036,7 +1041,137 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-footer {
 
 .nav-posts-chevron:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--nav-item-hover);
+}
+
+.nav-posts-chevron-icon {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: rotate(0deg);
+}
+
+.nav-posts-chevron[aria-expanded="true"] .nav-posts-chevron-icon {
+  transform: rotate(180deg);
+}
+
+.sidebar-categories {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-left: 2.2rem;
+  opacity: 0;
+  transform: translateY(-10px);
+  visibility: hidden;
+  pointer-events: none;
+  will-change: grid-template-rows, opacity, transform;
+  transition:
+    grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.24s ease,
+    transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s linear 0.4s;
+}
+
+.sidebar-categories.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.sidebar-categories-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.sidebar-categories-inner > * {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-categories.expanded .sidebar-categories-inner > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.sidebar-category-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sidebar-category-link:hover {
+  background: var(--nav-item-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-category-link.active {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-blue) 16%, var(--bg-surface));
+  box-shadow: inset 3px 0 0 var(--accent-blue);
+  font-weight: 600;
+}
+
+.sidebar-category-link.active .sidebar-category-count {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 28%, transparent);
+}
+
+.sidebar-category-name {
+  min-width: 0;
+  margin-right: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-category-count {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--accent-blue);
+  color: var(--accent-contrast-text);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.sidebar-categories-more {
+  border: 0;
+  background: transparent;
+  padding: 0.3rem;
+  color: var(--accent-blue);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: color 0.18s ease, opacity 0.18s ease;
+}
+
+.sidebar-categories-more:hover {
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.nav-cloud-drive {
+  margin-top: 0;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    margin-top 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nav-cloud-drive.categories-expanded {
+  margin-top: 0.25rem;
 }
 
 /* --- 右侧主要内容区 --- */
@@ -1222,6 +1357,12 @@ body.theme-light .post-category {
 }
 
 /* --- Smooth Transitions --- */
+.route-transition-frame {
+  width: 100%;
+  min-height: 100%;
+}
+
+.route-transition-active,
 .fade-in {
   animation: fadeIn 0.35s ease-out;
 }
@@ -1235,6 +1376,21 @@ body.theme-light .post-category {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-transition-active,
+  .fade-in {
+    animation: none;
+  }
+
+  .nav-posts-chevron-icon,
+  .sidebar-categories,
+  .sidebar-categories-inner > *,
+  .sidebar-category-link,
+  .nav-cloud-drive {
+    transition: none;
   }
 }
 

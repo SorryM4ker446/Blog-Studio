@@ -14,6 +14,7 @@
   npm run dev
   ```
 - 打开浏览器访问：`http://localhost:3000`
+- 前端浏览器请求通过 `NEXT_PUBLIC_API_BASE_URL` 访问 API；Next.js 服务端首屏通过 `API_INTERNAL_BASE_URL` 获取公开资料和当前身份。本地开发时两者通常都是 `http://localhost:8080/api`。容器部署时，后者应指向容器网络内的后端地址，不能包含真实凭据。
 
 ## 3. 后端服务运行及数据库配置
 *目前前端设置了优雅降级（Fallback）展示 Mock 数据，因此不启动后端也不会导致前端崩溃报错。*但如果您准备好管理真实数据，请执行以下操作：
@@ -45,7 +46,7 @@ go run ./cmd/seed
 ```
 种子命令不会覆盖已经存在的同名用户。密码为 12–128 个字符且不能超过 72 个 UTF-8 字节，不能使用常见弱密码，也不能包含用户名。
 
-浏览器登录使用 HttpOnly Cookie，会话不会写入 localStorage。退出登录或修改密码会立即使旧会话失效。运行时健康检查、请求日志和关闭行为请参阅 [`docs/runtime-operations.md`](docs/runtime-operations.md)，生产安全配置请参阅 [`docs/security.md`](docs/security.md)，文件上传与存储规则请参阅 [`docs/file-storage.md`](docs/file-storage.md)，自动化测试说明请参阅 [`docs/testing.md`](docs/testing.md)。
+浏览器登录使用站点级 HttpOnly Cookie，会话不会写入 localStorage。Next.js 服务端只用该 Cookie 获取首屏身份快照，浏览器 JavaScript 仍无法读取会话。退出登录或修改密码会立即使旧会话失效。运行时健康检查、请求日志和关闭行为请参阅 [`docs/runtime-operations.md`](docs/runtime-operations.md)，生产安全配置请参阅 [`docs/security.md`](docs/security.md)，文件上传与存储规则请参阅 [`docs/file-storage.md`](docs/file-storage.md)，自动化测试说明请参阅 [`docs/testing.md`](docs/testing.md)。
 
 ## 4. 样式拓展
 全站样式位于 `frontend/src/app/globals.css` 中：

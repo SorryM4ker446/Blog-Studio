@@ -100,12 +100,63 @@ func TestQueryParameterValidation(t *testing.T) {
 		{"/api/files?page=0", "invalid_page"},
 		{"/api/search?q=%20%20", "missing_query"},
 		{"/api/search?q=test&scope=unknown", "invalid_scope"},
+		{"/api/search?q=test&scope=posts&category_id=-1", "invalid_category_id"},
 	}
 	for _, test := range tests {
 		t.Run(test.code+test.path, func(t *testing.T) {
 			response := performJSONRequest(t, router, http.MethodGet, test.path, nil, nil, false)
 			requireAPIError(t, response.Code, response.Body.Bytes(), http.StatusBadRequest, test.code)
 		})
+	}
+}
+
+func TestPublicSearchFiltersPostsByCategory(t *testing.T) {
+	db := requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+
+	categories := []models.Category{
+		{Name: "Search category one"},
+		{Name: "Search category two"},
+	}
+	if err := db.Create(&categories).Error; err != nil {
+		t.Fatalf("create categories: %v", err)
+	}
+	publishedAt := time.Now().UTC()
+	posts := []models.Post{
+		{
+			Title: "Shared search term one", Slug: "shared-search-term-one", Content: "visible content",
+			CategoryID: &categories[0].ID, Status: "published", PublishedAt: &publishedAt,
+		},
+		{
+			Title: "Shared search term two", Slug: "shared-search-term-two", Content: "visible content",
+			CategoryID: &categories[1].ID, Status: "published", PublishedAt: &publishedAt,
+		},
+	}
+	if err := db.Create(&posts).Error; err != nil {
+		t.Fatalf("create posts: %v", err)
+	}
+
+	router := SetupRouter()
+	response := performJSONRequest(
+		t,
+		router,
+		http.MethodGet,
+		fmt.Sprintf("/api/search?q=shared&scope=posts&category_id=%d", categories[0].ID),
+		nil,
+		nil,
+		false,
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("search status = %d; body=%s", response.Code, response.Body.String())
+	}
+	var result struct {
+		Posts []models.Post `json:"posts"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode search response: %v", err)
+	}
+	if len(result.Posts) != 1 || result.Posts[0].ID != posts[0].ID {
+		t.Fatalf("filtered posts = %+v, want only post %d", result.Posts, posts[0].ID)
 	}
 }
 

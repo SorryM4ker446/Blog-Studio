@@ -11,10 +11,10 @@ const onePixelPNG = Buffer.from(
   "base64",
 );
 
-const driveFileSearchRoute = { apiPath: "/api/search", pagePath: "/drive" };
+const driveFileSearchRoute = { pagePath: "/drive", apiPath: "/api/search" };
 const editorFileSearchRoute = {
-  apiPath: "/api/admin/search",
   pagePath: "/editor",
+  apiPath: "/api/admin/search",
   tab: "files" as const,
 };
 
@@ -22,7 +22,7 @@ async function submitFileSearchAndWait(
   page: Page,
   input: Locator,
   query: string,
-  expected: { apiPath: string; pagePath: string; tab?: "files" },
+  expected: { pagePath: string; apiPath: string; tab?: "files" },
 ) {
   await input.fill(query);
   const responsePromise = page.waitForResponse((response) => {
@@ -70,17 +70,69 @@ async function clickAtVisibleCenter(page: Page, target: Locator) {
   await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 }
 
-function waitForEditorLists(page: Page) {
-  const paths = ["/api/admin/categories", "/api/admin/posts", "/api/admin/files"];
-  return Promise.all(paths.map((path) => page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return response.request().method() === "GET" && url.pathname === path;
-  }))).then((responses) => {
-    for (const response of responses) {
-      expect(response.ok()).toBeTruthy();
-    }
-  });
+async function readEditActionPresentation(button: Locator) {
+  let presentation = {
+    backgroundColor: "",
+    border: "",
+    borderRadius: "",
+    color: "",
+    height: "",
+    padding: "",
+  };
+  await expect(button).toBeVisible();
+  await expect.poll(async () => {
+    presentation = await button.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        backgroundColor: style.backgroundColor,
+        border: style.border,
+        borderRadius: style.borderRadius,
+        color: style.color,
+        height: style.height,
+        padding: style.padding,
+      };
+    });
+    return Object.values(presentation).every(Boolean);
+  }).toBe(true);
+  return presentation;
 }
+
+test("sidebar page links use a shared content transition", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".route-transition-frame")).not.toHaveClass(/route-transition-active/);
+
+  await page.evaluate(() => {
+    const trackedWindow = window as typeof window & { routeTransitionCount?: number };
+    trackedWindow.routeTransitionCount = 0;
+    document.addEventListener("animationstart", (event) => {
+      if (
+        event.animationName === "fadeIn"
+        && event.target instanceof HTMLElement
+        && event.target.classList.contains("route-transition-active")
+      ) {
+        trackedWindow.routeTransitionCount = (trackedWindow.routeTransitionCount || 0) + 1;
+      }
+    });
+  });
+
+  await page.getByRole("link", { name: "All Posts", exact: true }).click();
+  await expect(page).toHaveURL(/\/posts$/);
+  await expect.poll(() => page.evaluate(
+    () => (window as typeof window & { routeTransitionCount?: number }).routeTransitionCount || 0,
+  )).toBe(1);
+
+  await page.getByRole("link", { name: "Cloud Drive", exact: true }).click();
+  await expect(page).toHaveURL(/\/drive$/);
+  await expect.poll(() => page.evaluate(
+    () => (window as typeof window & { routeTransitionCount?: number }).routeTransitionCount || 0,
+  )).toBe(2);
+
+  await page.getByRole("link", { name: "Advanced Search", exact: true }).click();
+  await expect(page).toHaveURL(/\/search$/);
+  await expect.poll(() => page.evaluate(
+    () => (window as typeof window & { routeTransitionCount?: number }).routeTransitionCount || 0,
+  )).toBe(3);
+});
 
 test("administrator can draft, publish, and log out", async ({ page, request }) => {
   const postTitle = `E2E workflow ${Date.now()}`;
@@ -91,12 +143,69 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page).toHaveURL("/");
 
-  await page.goto("/editor");
+  const editorResponse = await page.goto("/editor");
+  expect(editorResponse).not.toBeNull();
+  const editorHTML = await editorResponse!.text();
+  expect(editorHTML).toContain("Content Editor");
+  expect(editorHTML).not.toContain("Checking editor access");
   await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+
+  const browserShellRequests: string[] = [];
+  const trackBrowserShellRequests = (request: Request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "GET" && ["/api/settings", "/api/admin/me"].includes(pathname)) {
+      browserShellRequests.push(pathname);
+    }
+  };
+  page.on("request", trackBrowserShellRequests);
+  const reloadResponse = await page.reload();
+  expect(reloadResponse).not.toBeNull();
+  expect(await reloadResponse!.text()).not.toContain("Checking editor access");
+  await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+  expect(browserShellRequests).toEqual([]);
+  page.off("request", trackBrowserShellRequests);
+
+  const currentSession = (await page.context().cookies()).find(
+    (cookie) => cookie.name === "blog_session" && cookie.path === "/",
+  );
+  expect(currentSession).toBeDefined();
+  await page.context().clearCookies({ name: "blog_session" });
+  await page.context().addCookies([{
+    name: "blog_session",
+    value: currentSession!.value,
+    domain: currentSession!.domain,
+    path: "/api",
+    expires: currentSession!.expires,
+    httpOnly: true,
+    secure: currentSession!.secure,
+    sameSite: currentSession!.sameSite,
+  }]);
+
+  const compatibilityRequests: string[] = [];
+  page.on("request", trackBrowserShellRequests);
+  const compatibilityResponse = await page.reload();
+  expect(compatibilityResponse).not.toBeNull();
+  expect(await compatibilityResponse!.text()).toContain("Checking editor access");
+  await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+  await expect(page).toHaveURL(/\/editor$/);
+  await expect(page.getByText("Editor posts could not be loaded", { exact: true })).toHaveCount(0);
+  compatibilityRequests.push(...browserShellRequests);
+  expect(compatibilityRequests).toContain("/api/admin/me");
+  expect((await page.context().cookies()).some(
+    (cookie) => cookie.name === "blog_session" && cookie.path === "/" && cookie.value !== "",
+  )).toBeTruthy();
+  page.off("request", trackBrowserShellRequests);
+
   await page.getByRole("button", { name: "+ New Post" }).click();
   await page.getByLabel("POST TITLE").fill(postTitle);
   await page.getByLabel("INTRODUCTION").fill("Automated workflow summary");
   await page.locator(".custom-editor-wrapper textarea").fill("# Automated workflow\n\nCreated by Playwright.");
+  const retryCategoriesButton = page.getByRole("button", { name: "Try again" });
+  if (await retryCategoriesButton.isVisible()) {
+    await retryCategoriesButton.click();
+  }
+  await page.getByRole("combobox", { name: "Post category" }).click();
+  await page.getByRole("option", { name: "General", exact: true }).click();
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
 
@@ -115,6 +224,60 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
 
   await page.goto("/posts");
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
+  const postsSearch = page.getByPlaceholder("Search posts...");
+  await postsSearch.fill(postTitle);
+  await postsSearch.press("Enter");
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(postTitle);
+  await postsSearch.fill("");
+  await expect.poll(() => new URL(page.url()).searchParams.has("q")).toBe(false);
+  await expect.poll(() => postsSearch.evaluate((element: HTMLInputElement) => ({
+    focused: document.activeElement === element,
+    selectionStart: element.selectionStart,
+    selectionEnd: element.selectionEnd,
+  }))).toEqual({ focused: true, selectionStart: 0, selectionEnd: 0 });
+
+  await page.addStyleTag({
+    content: "html.e2e-tall-post-list section[aria-label='Posts'] { padding-top: 1600px !important; }",
+  });
+  await page.evaluate(() => document.documentElement.classList.add("e2e-tall-post-list"));
+  const postsScrollContainer = page.locator(".content-scroll");
+  const postLink = page.getByText(postTitle, { exact: true });
+  await postLink.scrollIntoViewIfNeeded();
+  const postsScrollPosition = await postsScrollContainer.evaluate((element) => element.scrollTop);
+  expect(postsScrollPosition).toBeGreaterThan(500);
+
+  await postLink.click();
+  await expect(page.getByRole("heading", { name: postTitle })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Object.entries(window.sessionStorage)
+    .filter(([key]) => key.startsWith("blogStudio:contentScroll:"))
+    .map(([, value]) => value))).toContain(postsScrollPosition.toString());
+  await page.getByRole("button", { name: "←", exact: true }).click();
+  await expect(page).toHaveURL(/\/posts$/);
+  await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
+  await expect.poll(() => postsScrollContainer.evaluate((element) => element.scrollTop)).toBe(postsScrollPosition);
+  await page.evaluate(() => document.documentElement.classList.remove("e2e-tall-post-list"));
+
+  const homeResponse = await page.goto("/");
+  expect(homeResponse).not.toBeNull();
+  expect(await homeResponse!.text()).toContain(postTitle);
+  const categoryToggle = page.getByRole("button", { name: "Toggle categories" });
+  await categoryToggle.click();
+  await expect(categoryToggle).toHaveAttribute("aria-expanded", "true");
+
+  const browserRecentPostRequests: string[] = [];
+  const trackRecentPostRequests = (request: Request) => {
+    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/posts") {
+      browserRecentPostRequests.push(request.url());
+    }
+  };
+  page.on("request", trackRecentPostRequests);
+  const expandedHomeResponse = await page.reload();
+  expect(expandedHomeResponse).not.toBeNull();
+  expect(await expandedHomeResponse!.text()).toContain(postTitle);
+  await expect(page.getByRole("button", { name: "Toggle categories" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("link", { name: "Content Editor" })).toBeVisible();
+  expect(browserRecentPostRequests).toEqual([]);
+  page.off("request", trackRecentPostRequests);
 
   await page.goto("/settings");
   await page.getByRole("button", { name: "Log Out Securely" }).click();
@@ -203,21 +366,19 @@ test("administrator can publish an uploaded image and safely remove it after ref
     "rgb(189, 193, 198) rgb(241, 243, 244)",
   );
   await page.getByRole("tab", { name: /Files \(/ }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("files");
   fileCard = page.locator("[data-file-id]").filter({ hasText: displayName });
+  await expect(fileCard.getByRole("button", { name: "Edit" })).toBeVisible();
   await expect(fileCard).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  const fileEditPresentation = await fileCard.getByRole("button", { name: "Edit" }).evaluate((element) => {
-    const style = window.getComputedStyle(element);
-    return {
-      backgroundColor: style.backgroundColor,
-      border: style.border,
-      borderRadius: style.borderRadius,
-      color: style.color,
-      height: style.height,
-      padding: style.padding,
-    };
-  });
+  const fileEditPresentation = await readEditActionPresentation(fileCard.getByRole("button", { name: "Edit" }));
   await fileCard.getByRole("button", { name: `Preview ${displayName}` }).click();
   let previewDialog = page.getByRole("dialog", { name: displayName });
+  const previewAnimationDurations = await previewDialog.evaluate((dialog) => (
+    dialog.parentElement?.getAnimations({ subtree: true }).map((animation) => (
+      Number((animation.effect as KeyframeEffect | null)?.getTiming().duration) || 0
+    )) || []
+  ));
+  expect(previewAnimationDurations.some((duration) => duration >= 200)).toBeTruthy();
   await expect(previewDialog).toHaveCSS("background-color", "rgb(255, 255, 255)");
   const previewImage = previewDialog.getByRole("img", { name: displayName });
   await expect(previewImage.locator("..")).toHaveCSS("background-color", "rgb(246, 247, 248)");
@@ -301,9 +462,9 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page.getByText("Files (0 results)", { exact: true })).toBeVisible();
   await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(`Updated ${fileDescription}`);
 
-  const initialEditorListsPromise = waitForEditorLists(page);
-  await page.goto("/editor");
-  await initialEditorListsPromise;
+  const initialEditorResponse = await page.goto("/editor");
+  expect(initialEditorResponse).not.toBeNull();
+  expect(await initialEditorResponse!.text()).not.toContain("Loading posts");
   const postsTab = page.getByRole("tab", { name: /Posts \(\d+\)/ });
   const filesTab = page.getByRole("tab", { name: /Files \(\d+\)/ });
   await expect(postsTab).not.toContainText("…");
@@ -311,19 +472,26 @@ test("administrator can publish an uploaded image and safely remove it after ref
   const defaultPostCount = await postsTab.textContent();
   const defaultFileCount = await filesTab.textContent();
   const repeatedListRequests: string[] = [];
+  let editorRouteRequests = 0;
   const trackRepeatedListRequests = (request: Request) => {
     const pathname = new URL(request.url()).pathname;
     if (request.method() === "GET" && ["/api/admin/categories", "/api/admin/posts", "/api/admin/files"].includes(pathname)) {
       repeatedListRequests.push(pathname);
     }
+    if (request.method() === "GET" && pathname === "/editor") {
+      editorRouteRequests += 1;
+    }
   };
   page.on("request", trackRepeatedListRequests);
+  await postsTab.evaluate((tab) => { tab.dataset.stabilityMarker = "preserved"; });
   await filesTab.click();
   await expect.poll(() => {
     const url = new URL(page.url());
     return { pathname: url.pathname, tab: url.searchParams.get("tab"), query: url.searchParams.get("q") };
   }).toEqual({ pathname: "/editor", tab: "files", query: null });
   expect(repeatedListRequests).toEqual([]);
+  expect(editorRouteRequests).toBe(0);
+  await expect(postsTab).toHaveAttribute("data-stability-marker", "preserved");
   const editorFileSearch = page.getByPlaceholder("Search files...");
   await submitFileSearchAndWait(page, editorFileSearch, `Updated ${fileDescription}`, editorFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
@@ -331,6 +499,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
   await submitFileSearchAndWait(page, editorFileSearch, updatedDisplayName, editorFileSearchRoute);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toBeVisible();
+  expect(editorRouteRequests).toBe(0);
 
   fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   await fileCard.getByRole("button", { name: "Edit" }).click();
@@ -363,6 +532,8 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(filesTab).not.toContainText("…");
   expect((await defaultFileRefreshPromise).ok()).toBeTruthy();
   expect(repeatedListRequests).toEqual(["/api/admin/files"]);
+  expect(editorRouteRequests).toBe(0);
+  await expect(postsTab).toHaveAttribute("data-stability-marker", "preserved");
   page.off("request", trackRepeatedListRequests);
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue("");
   await page.getByRole("button", { name: "+ New Post" }).click();
@@ -494,17 +665,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   const postCard = page.locator(".ai-card").filter({ hasText: postTitle });
   const postEditButton = postCard.getByRole("button", { name: "Edit" });
   await expect(postEditButton.locator("svg")).toHaveCount(1);
-  expect(await postEditButton.evaluate((element) => {
-    const style = window.getComputedStyle(element);
-    return {
-      backgroundColor: style.backgroundColor,
-      border: style.border,
-      borderRadius: style.borderRadius,
-      color: style.color,
-      height: style.height,
-      padding: style.padding,
-    };
-  })).toEqual(fileEditPresentation);
+  expect(await readEditActionPresentation(postEditButton)).toEqual(fileEditPresentation);
   await postEditButton.click();
   await page.locator(".custom-editor-wrapper textarea").fill("# Image reference removed");
   await page.getByRole("button", { name: "Save Changes" }).click();
@@ -522,4 +683,33 @@ test("administrator can publish an uploaded image and safely remove it after ref
   deleteResponse = await deleteResponsePromise;
   expect(deleteResponse.status()).toBe(200);
   await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
+
+  const categoryToggle = page.getByRole("button", { name: "Toggle categories" });
+  const categoryMenu = page.locator(".sidebar-categories");
+  await categoryToggle.click();
+  await expect(categoryToggle).toHaveAttribute("aria-expanded", "true");
+  const categoryAnimationDurations = await categoryMenu.evaluate((menu) => (
+    menu.getAnimations({ subtree: true }).map((animation) => (
+      Number((animation.effect as KeyframeEffect | null)?.getTiming().duration) || 0
+    ))
+  ));
+  expect(categoryAnimationDurations.some((duration) => duration >= 300)).toBeTruthy();
+  const generalCategory = page.locator(".sidebar-category-link").filter({ hasText: "General" });
+  const generalCategoryHref = await generalCategory.getAttribute("href");
+  expect(generalCategoryHref).toBeTruthy();
+  const generalCategoryId = new URL(generalCategoryHref!, page.url()).searchParams.get("category");
+  await generalCategory.click();
+  await expect(page).toHaveURL(/\/posts\?category=\d+$/);
+  await expect(generalCategory).toHaveClass(/active/);
+  await expect(generalCategory).toHaveAttribute("aria-current", "page");
+
+  const categorySearch = page.getByPlaceholder("Search posts...");
+  await categorySearch.fill("E2E");
+  await categorySearch.press("Enter");
+  await expect.poll(() => {
+    const url = new URL(page.url());
+    return { category: url.searchParams.get("category"), query: url.searchParams.get("q") };
+  }).toEqual({ category: generalCategoryId, query: "E2E" });
+  await expect(page.getByText(/^E2E workflow /)).toBeVisible();
+  await expect(page.getByText(postTitle, { exact: true })).toHaveCount(0);
 });

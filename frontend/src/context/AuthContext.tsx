@@ -2,28 +2,21 @@
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser, logoutUser, normalizeFileViewUrl } from "@/lib/api";
+import { getCurrentUser, getSettings, logoutUser, normalizeFileViewUrl } from "@/lib/api";
 import { ApiError, clearCSRFToken, isApiError, subscribeSessionExpired } from "@/lib/api-client";
+import type {
+  AuthStatus,
+  AuthUser,
+  InitialAppShellState,
+  PublicProfile,
+} from "@/lib/app-shell-state";
 
-interface User {
-  id: number;
-  username: string;
-  role: string;
-}
-
-interface Profile {
-  name: string;
-  description: string;
-  avatar: string;
-  tag: string;
-}
-
-export type AuthStatus = "checking" | "authenticated" | "anonymous" | "unavailable";
+export type { AuthStatus } from "@/lib/app-shell-state";
 
 interface AuthContextType {
-  user: User | null;
-  profile: Profile | null;
-  login: (user: User) => void;
+  user: AuthUser | null;
+  profile: PublicProfile | null;
+  login: (user: AuthUser) => void;
   logout: () => Promise<void>;
   completeLogout: () => void;
   refreshAuth: () => Promise<void>;
@@ -36,22 +29,34 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isProfileLoading, setIsProfileLoading] = useState(false);
-  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
+export function AuthProvider({
+  children,
+  initialState,
+}: {
+  children: ReactNode;
+  initialState?: InitialAppShellState;
+}) {
+  const requiresInitialAuthCheck = initialState?.authNeedsClientCheck || false;
+  const [user, setUser] = useState<AuthUser | null>(initialState?.user || null);
+  const [profile, setProfile] = useState<PublicProfile | null>(initialState?.profile || null);
+  const [isLoading, setIsLoading] = useState(!initialState || requiresInitialAuthCheck);
+  const [isProfileLoading, setIsProfileLoading] = useState(!initialState?.profileResolved);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(
+    requiresInitialAuthCheck ? "checking" : initialState?.authStatus || "checking",
+  );
   const [authError, setAuthError] = useState<ApiError | null>(null);
   const router = useRouter();
+  const initialStateRef = useRef(initialState);
   const isMountedRef = useRef(true);
   const profileRequestIdRef = useRef(0);
   const sessionExpiryHandledRef = useRef(false);
 
-  async function refreshAuth() {
-    setIsLoading(true);
-    setAuthStatus("checking");
-    setAuthError(null);
+  async function verifyAuth(silent = false) {
+    if (!silent) {
+      setIsLoading(true);
+      setAuthStatus("checking");
+      setAuthError(null);
+    }
     try {
       const currentUser = await getCurrentUser();
       if (isMountedRef.current) {
@@ -73,17 +78,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(authCheckError);
       }
     } finally {
-      if (isMountedRef.current) setIsLoading(false);
+      if (isMountedRef.current && !silent) setIsLoading(false);
     }
+  }
+
+  async function refreshAuth() {
+    await verifyAuth();
   }
 
   // Load auth state and the public profile on mount.
   useEffect(() => {
+    const initialSnapshot = initialStateRef.current;
     isMountedRef.current = true;
-    void fetchProfile();
+    if (!initialSnapshot?.profileResolved) {
+      void fetchProfile();
+    }
     localStorage.removeItem("blog_token");
     localStorage.removeItem("blog_user");
-    void refreshAuth();
+    if (initialSnapshot?.authNeedsClientCheck) {
+      void verifyAuth();
+    } else if (!initialSnapshot) {
+      void verifyAuth();
+    }
 
     return () => {
       isMountedRef.current = false;
@@ -117,7 +133,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function fetchProfile() {
     const requestId = ++profileRequestIdRef.current;
-    const { getSettings } = await import("@/lib/api");
     if (isMountedRef.current) {
       setIsProfileLoading(true);
     }
@@ -145,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const login = (newUser: User) => {
+  const login = (newUser: AuthUser) => {
     sessionExpiryHandledRef.current = false;
     setUser(newUser);
     setIsLoading(false);

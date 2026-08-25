@@ -1,283 +1,70 @@
-"use client";
+import PostsPageClient, { type PostsPageInitialState } from "@/components/PostsPageClient";
+import type { Category, PaginatedResponse, Post, SearchResult } from "@/lib/api";
+import { requestServerJSON } from "@/lib/server-api";
 
-import { useCallback, useState, useEffect, Suspense, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { getApiErrorMessage, getPostTimeline, getPosts, searchResources, getCategories } from "@/lib/api";
-import type { Post } from "@/lib/api";
-import Link from "next/link";
-import SearchInput from "@/components/SearchInput";
-import Pagination from "@/components/Pagination";
-import { FolderIcon, ClipboardIcon, InboxIcon, FileTextIcon } from "@/components/Icons";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
-
-function PostsListContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const categoryId = searchParams.get("category");
-  const searchQuery = searchParams.get("q") || "";
-
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [currentCategoryName, setCurrentCategoryName] = useState<string | null>(null);
-  const postRequestIdRef = useRef(0);
-  const searchRequestIdRef = useRef(0);
-  const retryRequestRef = useRef<
-    | { type: "page"; page: number; categoryId: string }
-    | { type: "search"; query: string; categoryId: string }
-  >({ type: "page", page: 1, categoryId: categoryId || "" });
-
-  const loadPosts = useCallback(async (pageToLoad: number, catId: string = categoryId || "") => {
-    const requestId = ++postRequestIdRef.current;
-    retryRequestRef.current = { type: "page", page: pageToLoad, categoryId: catId };
-    setLoading(true);
-    setError("");
-    try {
-      const result = await getPosts(pageToLoad, 10, false, "", catId);
-      if (result.error) throw new Error(result.error);
-      if (requestId !== postRequestIdRef.current) return;
-      setPosts(result.data);
-      setPage(result.page);
-      setTotalPages(Math.max(1, Math.ceil(result.total / result.limit)));
-
-      if (catId) {
-        const cats = await getCategories();
-        if (requestId !== postRequestIdRef.current) return;
-        const cat = cats.find((item) => item.id.toString() === catId);
-        setCurrentCategoryName(cat ? cat.name : null);
-      } else {
-        setCurrentCategoryName(null);
-      }
-    } catch (requestError) {
-      if (requestId !== postRequestIdRef.current) return;
-      setError(getApiErrorMessage(requestError, "Could not load posts."));
-    } finally {
-      if (requestId === postRequestIdRef.current) setLoading(false);
-    }
-  }, [categoryId]);
-
-  const searchPosts = useCallback(async (query: string) => {
-    const requestId = ++searchRequestIdRef.current;
-    retryRequestRef.current = { type: "search", query, categoryId: categoryId || "" };
-    setLoading(true);
-    setError("");
-    try {
-      const res = await searchResources(query, "posts");
-      if (requestId !== searchRequestIdRef.current) return;
-      setPosts(res.posts || []);
-      setPage(1);
-      setTotalPages(1);
-      if (categoryId) {
-        const cats = await getCategories();
-        if (requestId !== searchRequestIdRef.current) return;
-        const category = cats.find((item) => item.id.toString() === categoryId);
-        setCurrentCategoryName(category ? category.name : null);
-      } else {
-        setCurrentCategoryName(null);
-      }
-    } catch (requestError) {
-      if (requestId !== searchRequestIdRef.current) return;
-      setError(getApiErrorMessage(requestError, "Could not search posts."));
-    } finally {
-      if (requestId === searchRequestIdRef.current) setLoading(false);
-    }
-  }, [categoryId]);
-
-  function retryLastRequest() {
-    const request = retryRequestRef.current;
-    if (request.type === "search") {
-      void searchPosts(request.query);
-    } else {
-      void loadPosts(request.page, request.categoryId);
-    }
-  }
-
-  function handleSearch(query: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    const normalizedQuery = query.trim();
-    if (normalizedQuery) {
-      params.set("q", normalizedQuery);
-    } else {
-      params.delete("q");
-    }
-    const nextQuery = params.toString();
-    router.push(nextQuery ? `/posts?${nextQuery}` : "/posts");
-  }
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      if (searchQuery.trim()) {
-        searchPosts(searchQuery.trim());
-      } else {
-        loadPosts(1, categoryId || "");
-      }
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      postRequestIdRef.current += 1;
-      searchRequestIdRef.current += 1;
-    };
-  }, [categoryId, loadPosts, searchPosts, searchQuery]);
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
-        <div>
-          <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.8rem" }}>
-            {currentCategoryName ? (
-              <>
-                <FolderIcon size={28} />
-                {currentCategoryName}
-              </>
-            ) : (
-              <>
-                <ClipboardIcon size={28} style={{ color: "var(--text-primary)" }} />
-                All Posts
-              </>
-            )}
-          </h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: 0 }}>
-            {currentCategoryName 
-              ? `Browsing articles in the ${currentCategoryName} category.` 
-              : "Browse all published articles across every category."
-            }
-          </p>
-        </div>
-        <SearchInput
-          placeholder="Search posts..."
-          onSearch={handleSearch}
-          style={{ width: "250px" }}
-          value={searchQuery}
-        />
-      </div>
-
-      <section aria-label="Posts" aria-busy={loading}>
-      {error ? (
-        <ErrorState message={error} onRetry={retryLastRequest} retrying={loading} />
-      ) : loading && posts.length === 0 ? (
-        <LoadingState label={searchQuery ? "Searching posts…" : "Loading posts…"} />
-      ) : posts.length === 0 ? (
-        <EmptyState
-          title={searchQuery ? "No matching posts" : "No posts yet"}
-          message={searchQuery
-            ? `No posts match “${searchQuery}”. Try another keyword.`
-            : currentCategoryName
-              ? `There are no published posts in ${currentCategoryName}.`
-              : "No published posts are available yet."}
-          icon={<InboxIcon size={48} />}
-        />
-      ) : (
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}
-        >
-          {posts.map((post: Post) => (
-            <Link key={post.id} href={`/posts/${post.id}`} style={{ textDecoration: "none" }}>
-              <div
-                className="ai-card"
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  padding: "1.2rem 1.5rem",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                <div
-                  className="card-icon"
-                  style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    color: "var(--text-secondary)",
-                    marginRight: "1.2rem",
-                    flexShrink: 0,
-                  }}
-                >
-                  <FileTextIcon size={14} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h4
-                    style={{
-                      margin: 0,
-                      fontWeight: 500,
-                      fontSize: "1.05rem",
-                      color: "var(--text-primary)",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {post.title}
-                  </h4>
-                  {post.summary && (
-                    <div
-                      style={{
-                        fontSize: "0.9rem",
-                        color: "var(--text-secondary)",
-                        marginTop: "0.4rem",
-                        lineHeight: 1.5,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis"
-                      }}
-                    >
-                      {post.summary}
-                    </div>
-                  )}
-                  <div
-                    style={{
-                      fontSize: "0.82rem",
-                      color: "var(--text-muted)",
-                      marginTop: post.summary ? "0.6rem" : "0.3rem",
-                      display: "flex",
-                      gap: "0.8rem",
-                      flexWrap: "wrap",
-                      alignItems: "center"
-                    }}
-                    >
-                      <span>
-                      {getPostTimeline(post).label} on{" "}
-                      {new Date(getPostTimeline(post).timestamp).toLocaleDateString()}
-                    </span>
-                    <span
-                      style={{
-                        background: post.category_id == null ? "rgba(128,128,128,0.15)" : "rgba(109, 214, 140, 0.12)",
-                        color: post.category_id == null ? "var(--text-muted)" : "var(--accent-green)",
-                        padding: "2px 8px",
-                        borderRadius: "4px",
-                        fontSize: "0.75rem",
-                      }}
-                    >
-                      {post.category_id == null ? "无标签" : (post.category ? post.category.name : "Uncategorized")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-      </section>
-
-      {/* Pagination component */}
-      {!error && !loading && posts.length > 0 && (
-        <Pagination 
-          currentPage={page} 
-          totalPages={totalPages} 
-          onPageChange={(p) => loadPosts(p, categoryId || "")} 
-        />
-      )}
-
-    </div>
-  );
+interface PostsPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default function AllPostsPage() {
+function readParam(value: string | string[] | undefined): string {
+  return typeof value === "string" ? value : "";
+}
+
+function readPage(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+async function loadInitialState(query: string, categoryId: string, page: number): Promise<PostsPageInitialState> {
+  const categoryPromise = categoryId
+    ? requestServerJSON<Category[]>("/categories")
+    : Promise.resolve(null);
+  const dataPromise = query
+    ? requestServerJSON<SearchResult>(`/search?${new URLSearchParams({
+        q: query,
+        scope: "posts",
+        ...(categoryId ? { category_id: categoryId } : {}),
+      }).toString()}`)
+    : requestServerJSON<PaginatedResponse<Post>>(`/posts?${new URLSearchParams({
+        page: page.toString(),
+        limit: "10",
+        ...(categoryId ? { category_id: categoryId } : {}),
+      }).toString()}`);
+  const [dataResult, categoryResult] = await Promise.all([dataPromise, categoryPromise]);
+
+  const currentCategoryName = categoryResult?.ok
+    ? categoryResult.data.find((category) => category.id.toString() === categoryId)?.name || null
+    : null;
+
+  if (!dataResult.ok) {
+    return { query, posts: [], page, totalPages: 1, currentCategoryName, error: "Could not load posts." };
+  }
+  if (query) {
+    const result = dataResult.data as SearchResult;
+    return { query, posts: result.posts || [], page: 1, totalPages: 1, currentCategoryName, error: "" };
+  }
+  const result = dataResult.data as PaginatedResponse<Post>;
+  return {
+    query,
+    posts: Array.isArray(result.data) ? result.data : [],
+    page: result.page || page,
+    totalPages: Math.max(1, Math.ceil(result.total / result.limit)),
+    currentCategoryName,
+    error: Array.isArray(result.data) ? "" : "Could not load posts.",
+  };
+}
+
+export default async function AllPostsPage({ searchParams }: PostsPageProps) {
+  const params = await searchParams;
+  const query = readParam(params.q).trim();
+  const categoryId = readParam(params.category);
+  const page = readPage(readParam(params.page));
+  const initialState = await loadInitialState(query, categoryId, page);
+
   return (
-    <Suspense fallback={<div className="skeleton-pulse" style={{ height: "400px", borderRadius: "16px" }} />}>
-      <PostsListContent />
-    </Suspense>
+    <PostsPageClient
+      key={categoryId || "all"}
+      initialState={initialState}
+    />
   );
 }

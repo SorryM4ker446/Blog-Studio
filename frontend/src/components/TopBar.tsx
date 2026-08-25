@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 
 export default function TopBar() {
-  const { profile, isProfileLoading } = useAuth();
+  const { profile } = useAuth();
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
   const avatarFailed = !!profile?.avatar && failedAvatarUrl === profile.avatar;
 
@@ -19,11 +19,10 @@ export default function TopBar() {
             <img
               src={profile.avatar}
               alt="avatar"
+              fetchPriority="high"
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
               onError={() => setFailedAvatarUrl(profile.avatar)}
             />
-          ) : isProfileLoading ? (
-            <div className="skeleton-pulse" style={{ width: "100%", height: "100%", borderRadius: "50%" }} />
           ) : (
             <div
               style={{

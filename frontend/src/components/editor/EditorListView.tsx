@@ -99,7 +99,7 @@ export default function EditorListView(props: EditorListViewProps) {
   const retry = props.activeTab === "posts" ? props.onRetryPosts : props.onRetryFiles;
 
   return (
-    <div className="fade-in">
+    <div>
       <header style={{ marginBottom: "2rem" }}>
         <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "0.5rem" }}>
           <EditIcon size={28} /> Content Editor

@@ -126,7 +126,13 @@ func loginAs(t *testing.T, router http.Handler, username, password string) *requ
 	if result.CSRFToken == "" {
 		t.Fatal("login response did not include a CSRF token")
 	}
-	return &requestAuth{cookies: response.Result().Cookies(), csrfToken: result.CSRFToken, remoteIP: auth.remoteIP}
+	activeCookies := make([]*http.Cookie, 0, len(response.Result().Cookies()))
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Value != "" && cookie.MaxAge >= 0 {
+			activeCookies = append(activeCookies, cookie)
+		}
+	}
+	return &requestAuth{cookies: activeCookies, csrfToken: result.CSRFToken, remoteIP: auth.remoteIP}
 }
 
 func signedToken(t *testing.T, user models.User, secret string, expiresAt time.Time, method jwt.SigningMethod) string {
@@ -153,7 +159,7 @@ func signedToken(t *testing.T, user models.User, secret string, expiresAt time.T
 }
 
 func cookieAuth(token string) *requestAuth {
-	return &requestAuth{cookies: []*http.Cookie{{Name: session.CookieName, Value: token, Path: "/api"}}}
+	return &requestAuth{cookies: []*http.Cookie{{Name: session.CookieName, Value: token, Path: "/"}}}
 }
 
 func TestAuthenticationAndAdminAuthorization(t *testing.T) {
@@ -168,6 +174,15 @@ func TestAuthenticationAndAdminAuthorization(t *testing.T) {
 		response := performJSONRequest(t, router, http.MethodGet, "/api/admin/me", nil, auth, false)
 		if response.Code != http.StatusOK {
 			t.Fatalf("admin /me status = %d, want %d", response.Code, http.StatusOK)
+		}
+		var siteSessionFound bool
+		for _, cookie := range response.Result().Cookies() {
+			if cookie.Name == session.CookieName && cookie.Path == "/" && cookie.Value != "" && cookie.HttpOnly {
+				siteSessionFound = true
+			}
+		}
+		if !siteSessionFound {
+			t.Fatal("admin /me did not preserve the session on the site-scoped Cookie path")
 		}
 	})
 
