@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { AppearancePanel, ProfileForm, ProfileSummary, SecurityForm, SessionPanel } from "./SettingsSections";
+import { ProfileForm, ProfileSummary, SecurityForm, SessionPanel } from "./SettingsSections";
 
 describe("settings sections", () => {
   it("announces avatar feedback independently from the profile form", () => {
@@ -59,18 +59,6 @@ describe("settings sections", () => {
     expect(screen.getByLabelText("New Password")).toHaveAttribute("autocomplete", "new-password");
     expect(screen.getByLabelText("New Password")).toHaveAttribute("minlength", "12");
     expect(screen.getByLabelText("New Password")).toBeRequired();
-  });
-
-  it("announces the theme action and toggles from the keyboard", async () => {
-    const user = userEvent.setup();
-    const onToggle = vi.fn();
-    render(<AppearancePanel theme="dark" onToggle={onToggle} />);
-
-    const button = screen.getByRole("button", { name: "Switch to Light Mode" });
-    expect(button).toHaveAttribute("aria-pressed", "true");
-    await user.tab();
-    await user.keyboard("{Enter}");
-    expect(onToggle).toHaveBeenCalledOnce();
   });
 
   it("keeps a failed logout retryable and announces the error", async () => {

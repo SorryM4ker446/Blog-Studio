@@ -263,15 +263,16 @@ export function SidebarFooter() {
         </Link>
       )}
 
-      {/* Settings — always visible at the bottom */}
-      <Link
-        href="/settings"
-        className="nav-item"
-        data-tooltip={isCollapsed ? `Settings${user?.role === "admin" ? " (Admin)" : ""}` : undefined}
-      >
-        <SettingsIcon className="nav-icon" />
-        <span className="nav-item-label">Settings{user?.role === "admin" && " (Admin)"}</span>
-      </Link>
+      {user && (
+        <Link
+          href="/settings"
+          className="nav-item"
+          data-tooltip={isCollapsed ? `Settings${user.role === "admin" ? " (Admin)" : ""}` : undefined}
+        >
+          <SettingsIcon className="nav-icon" />
+          <span className="nav-item-label">Settings{user.role === "admin" && " (Admin)"}</span>
+        </Link>
+      )}
     </div>
   );
 }

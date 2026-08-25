@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
 import {
   getSettings,
   getApiErrorMessage,
@@ -18,7 +17,6 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { SettingsIcon } from "@/components/Icons";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 import {
-  AppearancePanel,
   ProfileForm,
   ProfileSummary,
   SecurityForm,
@@ -33,7 +31,6 @@ export default function SettingsPageClient({
   initialSettingsError?: string;
 }) {
   const { user, logout, completeLogout, isLoading, refreshProfile, authStatus, authError, refreshAuth } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
   const [profileName, setProfileName] = useState(initialSettings.profile_name || "");
@@ -257,7 +254,6 @@ export default function SettingsPageClient({
             onNewPasswordChange={setNewPass}
             onSubmit={handleChangePassword}
           />
-          <AppearancePanel theme={theme} onToggle={toggleTheme} />
           <SessionPanel
             onLogout={() => setShowLogoutModal(true)}
             loading={logoutLoading}

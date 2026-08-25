@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiRequest } from "@/lib/api-client";
 import { AuthProvider, useAuth } from "./AuthContext";
 import TopBar from "@/components/TopBar";
+import { ThemeProvider } from "@/context/ThemeContext";
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -73,7 +74,7 @@ describe("AuthProvider", () => {
         categoriesResolved: true,
       }}>
         <AuthProbe />
-        <TopBar />
+        <ThemeProvider><TopBar /></ThemeProvider>
       </AuthProvider>,
     );
 

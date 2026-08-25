@@ -2,11 +2,15 @@
 
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
+import { MoonIcon, SunIcon } from "@/components/Icons";
 
 export default function TopBar() {
   const { profile } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
   const avatarFailed = !!profile?.avatar && failedAvatarUrl === profile.avatar;
+  const targetTheme = theme === "dark" ? "Light" : "Dark";
 
   // If globally loading for the first time, we can show a minimal placeholder
   // but once loaded, it stays in sync without flickering on navigation.
@@ -54,21 +58,33 @@ export default function TopBar() {
           )}
         </div>
       </div>
-      <div
-        style={{
-          marginLeft: "auto",
-          display: "flex",
-          gap: "1rem",
-        }}
-      >
-        <span 
-          style={{ opacity: 0.5, cursor: "pointer" }} 
+      <div className="top-bar-actions">
+        <button
+          type="button"
+          className="top-bar-action"
           onClick={() => window.location.reload()}
           title="Refresh page"
+          aria-label="Refresh page"
         >
-          ⟳
-        </span>
-        <span style={{ opacity: 0.5, cursor: "pointer" }}>⋮</span>
+          <span aria-hidden="true">⟳</span>
+        </button>
+        <button
+          type="button"
+          className="top-bar-action"
+          onClick={toggleTheme}
+          title={`Switch to ${targetTheme} Mode`}
+          aria-label={`Switch to ${targetTheme} Mode`}
+        >
+          {theme === "dark" ? <SunIcon size={15} /> : <MoonIcon size={15} />}
+        </button>
+        <button
+          type="button"
+          className="top-bar-action"
+          title="More options"
+          aria-label="More options"
+        >
+          <span aria-hidden="true">⋮</span>
+        </button>
       </div>
     </header>
   );
