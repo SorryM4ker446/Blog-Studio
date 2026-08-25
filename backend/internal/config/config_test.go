@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadFromEnvRejectsMissingOrWeakSecrets(t *testing.T) {
@@ -71,6 +72,83 @@ func TestLoadFromEnvAcceptsValidatedConfiguration(t *testing.T) {
 	if !strings.HasSuffix(cfg.UploadDir, "uploads") {
 		t.Fatalf("UploadDir = %q, want an absolute uploads directory", cfg.UploadDir)
 	}
+	if cfg.DBMaxOpenConnections != 10 || cfg.DBMaxIdleConnections != 5 {
+		t.Fatalf("database pool defaults = open %d idle %d", cfg.DBMaxOpenConnections, cfg.DBMaxIdleConnections)
+	}
+	if cfg.HTTPReadHeaderTimeout != 5*time.Second || cfg.HTTPShutdownTimeout != 20*time.Second {
+		t.Fatalf("HTTP timeout defaults = header %s shutdown %s", cfg.HTTPReadHeaderTimeout, cfg.HTTPShutdownTimeout)
+	}
+	if len(cfg.TrustedProxies) != 0 {
+		t.Fatalf("TrustedProxies = %v, want none by default", cfg.TrustedProxies)
+	}
+}
+
+func TestLoadFromEnvValidatesOperationalConfiguration(t *testing.T) {
+	t.Setenv("DB_DSN", "host=localhost dbname=unit_test")
+	t.Setenv("JWT_SECRET", "12345678901234567890123456789012")
+	t.Setenv("TRUSTED_PROXIES", "127.0.0.1, 10.20.0.0/16,127.0.0.1")
+	t.Setenv("DB_MAX_OPEN_CONNECTIONS", "12")
+	t.Setenv("DB_MAX_IDLE_CONNECTIONS", "4")
+	t.Setenv("DB_CONNECTION_MAX_LIFETIME", "45m")
+	t.Setenv("DB_CONNECTION_MAX_IDLE_TIME", "3m")
+	t.Setenv("HTTP_READ_HEADER_TIMEOUT", "7s")
+	t.Setenv("HTTP_READ_TIMEOUT", "90s")
+	t.Setenv("HTTP_WRITE_TIMEOUT", "4m")
+	t.Setenv("HTTP_IDLE_TIMEOUT", "75s")
+	t.Setenv("HTTP_SHUTDOWN_TIMEOUT", "25s")
+	t.Setenv("HEALTH_CHECK_TIMEOUT", "1500ms")
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv() error = %v", err)
+	}
+	if len(cfg.TrustedProxies) != 2 || cfg.TrustedProxies[0] != "127.0.0.1" || cfg.TrustedProxies[1] != "10.20.0.0/16" {
+		t.Fatalf("TrustedProxies = %v", cfg.TrustedProxies)
+	}
+	if cfg.DBMaxOpenConnections != 12 || cfg.DBMaxIdleConnections != 4 {
+		t.Fatalf("database pool = open %d idle %d", cfg.DBMaxOpenConnections, cfg.DBMaxIdleConnections)
+	}
+	if cfg.DBConnectionLifetime != 45*time.Minute || cfg.DBConnectionIdleTime != 3*time.Minute {
+		t.Fatalf("database durations = lifetime %s idle %s", cfg.DBConnectionLifetime, cfg.DBConnectionIdleTime)
+	}
+	if cfg.HTTPReadHeaderTimeout != 7*time.Second || cfg.HTTPReadTimeout != 90*time.Second ||
+		cfg.HTTPWriteTimeout != 4*time.Minute || cfg.HTTPIdleTimeout != 75*time.Second ||
+		cfg.HTTPShutdownTimeout != 25*time.Second || cfg.HealthCheckTimeout != 1500*time.Millisecond {
+		t.Fatalf("operational timeouts were not loaded: %+v", cfg)
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidOperationalConfiguration(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{"TRUSTED_PROXIES", "not-a-network"},
+		{"DB_MAX_OPEN_CONNECTIONS", "0"},
+		{"DB_CONNECTION_MAX_LIFETIME", "0s"},
+		{"HTTP_READ_HEADER_TIMEOUT", "31m"},
+		{"HTTP_SHUTDOWN_TIMEOUT", "invalid"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("DB_DSN", "host=localhost dbname=unit_test")
+			t.Setenv("JWT_SECRET", "12345678901234567890123456789012")
+			t.Setenv(test.name, test.value)
+			if _, err := LoadFromEnv(); err == nil || !strings.Contains(err.Error(), test.name) {
+				t.Fatalf("%s=%q error = %v", test.name, test.value, err)
+			}
+		})
+	}
+
+	t.Run("idle connections exceed open connections", func(t *testing.T) {
+		t.Setenv("DB_DSN", "host=localhost dbname=unit_test")
+		t.Setenv("JWT_SECRET", "12345678901234567890123456789012")
+		t.Setenv("DB_MAX_OPEN_CONNECTIONS", "2")
+		t.Setenv("DB_MAX_IDLE_CONNECTIONS", "3")
+		if _, err := LoadFromEnv(); err == nil || !strings.Contains(err.Error(), "DB_MAX_IDLE_CONNECTIONS") {
+			t.Fatalf("idle/open connection error = %v", err)
+		}
+	})
 }
 
 func TestLoadFromEnvValidatesUploadLimit(t *testing.T) {

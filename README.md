@@ -27,6 +27,7 @@
    $env:APP_ENV = "development"
    $env:ALLOWED_ORIGINS = "http://localhost:3000"
    $env:COOKIE_SECURE = "false"
+   $env:TRUSTED_PROXIES = ""
    $env:UPLOAD_DIR = "uploads"
    $env:MAX_UPLOAD_BYTES = "10485760"
    ```
@@ -44,7 +45,7 @@ go run ./cmd/seed
 ```
 种子命令不会覆盖已经存在的同名用户。密码为 12–128 个字符且不能超过 72 个 UTF-8 字节，不能使用常见弱密码，也不能包含用户名。
 
-浏览器登录使用 HttpOnly Cookie，会话不会写入 localStorage。退出登录或修改密码会立即使旧会话失效。生产部署配置请参阅 [`docs/security.md`](docs/security.md)，文件上传与存储规则请参阅 [`docs/file-storage.md`](docs/file-storage.md)，自动化测试说明请参阅 [`docs/testing.md`](docs/testing.md)。
+浏览器登录使用 HttpOnly Cookie，会话不会写入 localStorage。退出登录或修改密码会立即使旧会话失效。运行时健康检查、请求日志和关闭行为请参阅 [`docs/runtime-operations.md`](docs/runtime-operations.md)，生产安全配置请参阅 [`docs/security.md`](docs/security.md)，文件上传与存储规则请参阅 [`docs/file-storage.md`](docs/file-storage.md)，自动化测试说明请参阅 [`docs/testing.md`](docs/testing.md)。
 
 ## 4. 样式拓展
 全站样式位于 `frontend/src/app/globals.css` 中：

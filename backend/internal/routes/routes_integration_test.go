@@ -409,3 +409,23 @@ func TestDraftVisibilityIsSeparatedFromPublicPosts(t *testing.T) {
 		t.Fatalf("admin post total = %d, data length = %d; want 2", adminResult.Total, len(adminResult.Data))
 	}
 }
+
+func TestHealthEndpointsUseLiveDependencies(t *testing.T) {
+	t.Setenv("UPLOAD_DIR", t.TempDir())
+	requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+	router := SetupRouter()
+
+	for _, endpoint := range []string{"/health/live", "/health/ready"} {
+		response := performJSONRequest(t, router, http.MethodGet, endpoint, nil, nil, false)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d; body=%s", endpoint, response.Code, http.StatusOK, response.Body.String())
+		}
+		if response.Header().Get("X-Request-ID") == "" {
+			t.Fatalf("%s response is missing X-Request-ID", endpoint)
+		}
+		if response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("%s Cache-Control = %q", endpoint, response.Header().Get("Cache-Control"))
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -22,7 +23,14 @@ func main() {
 	}
 
 	// Initialize database
-	config.InitDB()
+	if err := config.InitDB(context.Background()); err != nil {
+		log.Fatalf("Initialize database: %v", err)
+	}
+	defer func() {
+		if err := config.CloseDB(); err != nil {
+			log.Printf("Close database: %v", err)
+		}
+	}()
 
 	username := strings.TrimSpace(os.Getenv("ADMIN_USER"))
 	if username == "" {

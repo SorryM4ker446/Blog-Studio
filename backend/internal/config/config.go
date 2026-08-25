@@ -3,18 +3,33 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
-	minimumJWTSecretLength = 32
-	defaultMaxUploadBytes  = int64(10 * 1024 * 1024)
-	maximumMaxUploadBytes  = int64(100 * 1024 * 1024)
+	minimumJWTSecretLength      = 32
+	defaultMaxUploadBytes       = int64(10 * 1024 * 1024)
+	maximumMaxUploadBytes       = int64(100 * 1024 * 1024)
+	defaultDBMaxOpenConnections = 10
+	defaultDBMaxIdleConnections = 5
+	maximumDBConnections        = 100
+	defaultDBConnectionLifetime = 30 * time.Minute
+	defaultDBConnectionIdleTime = 5 * time.Minute
+	defaultReadHeaderTimeout    = 5 * time.Second
+	defaultReadTimeout          = 2 * time.Minute
+	defaultWriteTimeout         = 5 * time.Minute
+	defaultIdleTimeout          = 2 * time.Minute
+	defaultShutdownTimeout      = 20 * time.Second
+	defaultHealthCheckTimeout   = 2 * time.Second
+	maximumOperationalDuration  = 30 * time.Minute
+	maximumConnectionDuration   = 24 * time.Hour
 )
 
 // AppConfig contains the process-wide configuration required by the server.
@@ -29,6 +44,19 @@ type AppConfig struct {
 	CookieSecure   bool
 	MaxUploadBytes int64
 	UploadDir      string
+	TrustedProxies []string
+
+	DBMaxOpenConnections int
+	DBMaxIdleConnections int
+	DBConnectionLifetime time.Duration
+	DBConnectionIdleTime time.Duration
+
+	HTTPReadHeaderTimeout time.Duration
+	HTTPReadTimeout       time.Duration
+	HTTPWriteTimeout      time.Duration
+	HTTPIdleTimeout       time.Duration
+	HTTPShutdownTimeout   time.Duration
+	HealthCheckTimeout    time.Duration
 }
 
 var (
@@ -109,6 +137,75 @@ func LoadFromEnv() (AppConfig, error) {
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
 		return AppConfig{}, fmt.Errorf("UPLOAD_DIR cannot be inspected: %w", statErr)
 	}
+	trustedProxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		return AppConfig{}, err
+	}
+	dbMaxOpenConnections, err := parseInteger(
+		"DB_MAX_OPEN_CONNECTIONS",
+		defaultDBMaxOpenConnections,
+		1,
+		maximumDBConnections,
+	)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	dbMaxIdleConnections, err := parseInteger(
+		"DB_MAX_IDLE_CONNECTIONS",
+		defaultDBMaxIdleConnections,
+		0,
+		maximumDBConnections,
+	)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	if dbMaxIdleConnections > dbMaxOpenConnections {
+		return AppConfig{}, errors.New("DB_MAX_IDLE_CONNECTIONS must not exceed DB_MAX_OPEN_CONNECTIONS")
+	}
+	dbConnectionLifetime, err := parseDuration(
+		"DB_CONNECTION_MAX_LIFETIME",
+		defaultDBConnectionLifetime,
+		maximumConnectionDuration,
+	)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	dbConnectionIdleTime, err := parseDuration(
+		"DB_CONNECTION_MAX_IDLE_TIME",
+		defaultDBConnectionIdleTime,
+		maximumConnectionDuration,
+	)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	httpReadHeaderTimeout, err := parseDuration(
+		"HTTP_READ_HEADER_TIMEOUT",
+		defaultReadHeaderTimeout,
+		maximumOperationalDuration,
+	)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	httpReadTimeout, err := parseDuration("HTTP_READ_TIMEOUT", defaultReadTimeout, maximumOperationalDuration)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	httpWriteTimeout, err := parseDuration("HTTP_WRITE_TIMEOUT", defaultWriteTimeout, maximumOperationalDuration)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	httpIdleTimeout, err := parseDuration("HTTP_IDLE_TIMEOUT", defaultIdleTimeout, maximumOperationalDuration)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	httpShutdownTimeout, err := parseDuration("HTTP_SHUTDOWN_TIMEOUT", defaultShutdownTimeout, maximumOperationalDuration)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	healthCheckTimeout, err := parseDuration("HEALTH_CHECK_TIMEOUT", defaultHealthCheckTimeout, maximumOperationalDuration)
+	if err != nil {
+		return AppConfig{}, err
+	}
 
 	cfg := AppConfig{
 		DatabaseDSN:    databaseDSN,
@@ -119,6 +216,19 @@ func LoadFromEnv() (AppConfig, error) {
 		CookieSecure:   cookieSecure,
 		MaxUploadBytes: maxUploadBytes,
 		UploadDir:      filepath.Clean(uploadDir),
+		TrustedProxies: trustedProxies,
+
+		DBMaxOpenConnections: dbMaxOpenConnections,
+		DBMaxIdleConnections: dbMaxIdleConnections,
+		DBConnectionLifetime: dbConnectionLifetime,
+		DBConnectionIdleTime: dbConnectionIdleTime,
+
+		HTTPReadHeaderTimeout: httpReadHeaderTimeout,
+		HTTPReadTimeout:       httpReadTimeout,
+		HTTPWriteTimeout:      httpWriteTimeout,
+		HTTPIdleTimeout:       httpIdleTimeout,
+		HTTPShutdownTimeout:   httpShutdownTimeout,
+		HealthCheckTimeout:    healthCheckTimeout,
 	}
 
 	configMu.Lock()
@@ -127,6 +237,58 @@ func LoadFromEnv() (AppConfig, error) {
 	configMu.Unlock()
 
 	return cfg, nil
+}
+
+func parseTrustedProxies(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	seen := make(map[string]struct{})
+	proxies := make([]string, 0)
+	for _, value := range strings.Split(raw, ",") {
+		proxy := strings.TrimSpace(value)
+		if proxy == "" {
+			return nil, errors.New("TRUSTED_PROXIES must not contain empty entries")
+		}
+		if ip := net.ParseIP(proxy); ip != nil {
+			proxy = ip.String()
+		} else if _, network, parseErr := net.ParseCIDR(proxy); parseErr == nil {
+			proxy = network.String()
+		} else {
+			return nil, fmt.Errorf("TRUSTED_PROXIES contains invalid address or CIDR %q", value)
+		}
+		if _, exists := seen[proxy]; exists {
+			continue
+		}
+		seen[proxy] = struct{}{}
+		proxies = append(proxies, proxy)
+	}
+	return proxies, nil
+}
+
+func parseInteger(name string, fallback, minimum, maximum int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < minimum || value > maximum {
+		return 0, fmt.Errorf("%s must be an integer from %d through %d", name, minimum, maximum)
+	}
+	return value, nil
+}
+
+func parseDuration(name string, fallback, maximum time.Duration) (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil || value <= 0 || value > maximum {
+		return 0, fmt.Errorf("%s must be a positive duration no greater than %s", name, maximum)
+	}
+	return value, nil
 }
 
 func parseAllowedOrigins(raw, environment string) ([]string, error) {

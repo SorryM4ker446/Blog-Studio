@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"blog-backend/internal/config"
 	"blog-backend/internal/filestore"
 	"blog-backend/internal/models"
+	"blog-backend/internal/observability"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -162,7 +162,7 @@ func UploadFile(c *gin.Context) {
 	}
 	if err := config.DB.Create(&record).Error; err != nil {
 		if removeErr := store.Remove(storedName); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			log.Printf("rollback uploaded content %q: %v", storedName, removeErr)
+			observability.FromGin(c).ErrorContext(c.Request.Context(), "uploaded content rollback failed", "error", removeErr)
 		}
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not record uploaded file")
 		return
@@ -250,7 +250,7 @@ func serveStoredFile(c *gin.Context, forceAttachment bool) {
 	defer content.Close()
 	if storageKey != record.Path {
 		if err := config.DB.Model(&record).Update("path", storageKey).Error; err != nil {
-			log.Printf("normalize storage key for file %d: %v", record.ID, err)
+			observability.FromGin(c).WarnContext(c.Request.Context(), "file storage key normalization failed", "file_id", record.ID, "error", err)
 		}
 	}
 
@@ -262,7 +262,7 @@ func serveStoredFile(c *gin.Context, forceAttachment bool) {
 		inline = fileType.Inline
 		if record.MimeType != contentType {
 			if err := config.DB.Model(&record).Update("mime_type", contentType).Error; err != nil {
-				log.Printf("normalize MIME type for file %d: %v", record.ID, err)
+				observability.FromGin(c).WarnContext(c.Request.Context(), "file MIME type normalization failed", "file_id", record.ID, "error", err)
 			}
 		}
 	}
@@ -340,7 +340,7 @@ func DeleteFile(c *gin.Context) {
 	if result.Error != nil || result.RowsAffected == 0 {
 		if quarantineKey != "" {
 			if restoreErr := store.Restore(quarantineKey, storageKey); restoreErr != nil {
-				log.Printf("restore file %d after database delete failure: %v", id, restoreErr)
+				observability.FromGin(c).ErrorContext(c.Request.Context(), "file restore compensation failed", "file_id", id, "error", restoreErr)
 			}
 		}
 		if result.Error != nil {
@@ -352,7 +352,7 @@ func DeleteFile(c *gin.Context) {
 	}
 	if quarantineKey != "" {
 		if err := store.Remove(quarantineKey); err != nil && !errors.Is(err, os.ErrNotExist) {
-			log.Printf("remove quarantined content for file %d: %v", id, err)
+			observability.FromGin(c).WarnContext(c.Request.Context(), "quarantined file cleanup failed", "file_id", id, "error", err)
 		}
 	}
 	apiresponse.Message(c, http.StatusOK, "File deleted")
