@@ -29,6 +29,7 @@ function SearchContent() {
   const searchRequestIdRef = useRef(0);
   const retryQueryRef = useRef(initialQuery);
   const isMountedRef = useRef(true);
+  const inputRevisionRef = useRef(0);
 
   const doSearch = useCallback(async (q: string) => {
     const normalizedQuery = q.trim();
@@ -72,12 +73,14 @@ function SearchContent() {
   }
 
   useEffect(() => {
+    const inputRevision = inputRevisionRef.current;
     const frame = window.requestAnimationFrame(() => {
-      if (initialQuery) {
+      if (inputRevisionRef.current === inputRevision) {
         setQuery(initialQuery);
+      }
+      if (initialQuery) {
         doSearch(initialQuery);
       } else {
-        setQuery("");
         setPosts([]);
         setFiles([]);
         setSearched(false);
@@ -130,7 +133,10 @@ function SearchContent() {
         <input
           id="search-input"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            inputRevisionRef.current += 1;
+            setQuery(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Type your search query and press Enter..."
           aria-label="Search posts and files"
