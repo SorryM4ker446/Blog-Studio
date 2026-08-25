@@ -99,6 +99,18 @@ async function readEditActionPresentation(button: Locator) {
 
 test("sidebar page links use a shared content transition", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("link", { name: /Settings/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Login" })).toBeVisible();
+  const topBarActions = page.locator(".top-bar-actions > button");
+  await expect(topBarActions).toHaveCount(3);
+  await expect(topBarActions.nth(0)).toHaveAccessibleName("Refresh page");
+  await expect(topBarActions.nth(1)).toHaveAccessibleName("Switch to Light Mode");
+  await expect(topBarActions.nth(2)).toHaveAccessibleName("More options");
+  await topBarActions.nth(1).click();
+  await expect(page.locator("html")).toHaveClass(/theme-light/);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Switch to Dark Mode" })).toBeVisible();
+  await expect(page.locator("html")).toHaveClass(/theme-light/);
   await expect(page.locator(".route-transition-frame")).not.toHaveClass(/route-transition-active/);
 
   await page.evaluate(() => {
@@ -142,6 +154,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   await page.getByPlaceholder("Password").fill(E2E_ADMIN_PASS);
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page).toHaveURL("/");
+  await expect(page.getByRole("link", { name: "Settings (Admin)" })).toBeVisible();
 
   const editorResponse = await page.goto("/editor");
   expect(editorResponse).not.toBeNull();

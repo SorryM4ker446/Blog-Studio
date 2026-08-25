@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InitialAppShellState } from "@/lib/app-shell-state";
-import { Providers, SidebarContent } from "./Providers";
+import { Providers, SidebarContent, SidebarFooter } from "./Providers";
 
 const { getCategoriesMock, replaceMock, navigationState } = vi.hoisted(() => ({
   getCategoriesMock: vi.fn(),
@@ -36,6 +36,12 @@ const initialState: InitialAppShellState = {
     { id: 2, name: "Go", post_count: 3 },
   ],
   categoriesResolved: true,
+};
+
+const anonymousState: InitialAppShellState = {
+  ...initialState,
+  user: null,
+  authStatus: "anonymous",
 };
 
 describe("sidebar first render state", () => {
@@ -107,5 +113,26 @@ describe("sidebar first render state", () => {
     expect(screen.getByRole("link", { name: /Go/ })).toHaveClass("active");
     expect(screen.getByRole("link", { name: /Go/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: /TypeScript/ })).not.toHaveClass("active");
+  });
+
+  it("shows settings only to authenticated users", () => {
+    const authenticatedView = render(
+      <Providers initialAppShellState={initialState}>
+        <SidebarFooter />
+      </Providers>,
+    );
+
+    expect(screen.getByRole("link", { name: "Settings (Admin)" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Login" })).not.toBeInTheDocument();
+
+    authenticatedView.unmount();
+    render(
+      <Providers initialAppShellState={anonymousState}>
+        <SidebarFooter />
+      </Providers>,
+    );
+
+    expect(screen.getByRole("link", { name: "Login" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: /Settings/ })).not.toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import type { AuthUser } from "@/lib/api";
-import { CameraIcon, MoonIcon, SunIcon } from "@/components/Icons";
+import { CameraIcon } from "@/components/Icons";
 
 const cardStyle = { padding: "2rem" } as const;
 const labelStyle = {
@@ -339,30 +339,6 @@ export function SecurityForm({
           )}
         </div>
       </form>
-    </section>
-  );
-}
-
-export function AppearancePanel({ theme, onToggle }: { theme: "dark" | "light"; onToggle: () => void }) {
-  const targetTheme = theme === "dark" ? "Light" : "Dark";
-  return (
-    <section className="ai-card" style={cardStyle} aria-labelledby="appearance-heading">
-      <h2 id="appearance-heading" style={{ margin: "0 0 1.5rem", fontSize: "1.2rem", fontWeight: 600 }}>Appearance</h2>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
-        <div>
-          <div style={{ fontWeight: 500 }}>System Theme</div>
-          <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "4px" }}>Toggle between dark and light modes.</div>
-        </div>
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-pressed={theme === "dark"}
-          style={{ ...actionButtonStyle, background: "var(--bg-base)", color: "var(--text-primary)" }}
-        >
-          {theme === "dark" ? <SunIcon size={18} /> : <MoonIcon size={18} />}
-          Switch to {targetTheme} Mode
-        </button>
-      </div>
     </section>
   );
 }
