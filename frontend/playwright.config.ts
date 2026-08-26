@@ -34,7 +34,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "go run ./cmd/server",
+      command: "go run ./cmd/migrate up && go run ./cmd/server",
       cwd: path.resolve(__dirname, "../backend"),
       url: `${E2E_API_URL}/settings`,
       reuseExistingServer: false,

@@ -32,11 +32,12 @@
    $env:UPLOAD_DIR = "uploads"
    $env:MAX_UPLOAD_BYTES = "10485760"
    ```
-4. 启动 Go 进程指令：
+4. 首次运行或后端版本包含数据库变更时，先执行独立迁移，再启动 Go 进程：
    ```bash
+   go run ./cmd/migrate up
    go run ./cmd/server
    ```
-系统将在启动的瞬间，依靠 GORM 框架自动向数据库推入所有关联表（`users`、`categories`、`posts`），此后您便能在前后端真实联调！
+迁移命令使用 PostgreSQL 锁和版本历史安全建立或升级表结构；API 启动时只检查版本，不会自动修改数据库。
 
 首次创建管理员时还需要显式提供管理员账号和不少于 12 个字符的强密码：
 ```powershell
@@ -46,7 +47,7 @@ go run ./cmd/seed
 ```
 种子命令不会覆盖已经存在的同名用户。密码为 12–128 个字符且不能超过 72 个 UTF-8 字节，不能使用常见弱密码，也不能包含用户名。
 
-浏览器登录使用站点级 HttpOnly Cookie，会话不会写入 localStorage。Next.js 服务端只用该 Cookie 获取首屏身份快照，浏览器 JavaScript 仍无法读取会话。退出登录或修改密码会立即使旧会话失效。运行时健康检查、请求日志和关闭行为请参阅 [`docs/runtime-operations.md`](docs/runtime-operations.md)，生产安全配置请参阅 [`docs/security.md`](docs/security.md)，文件上传与存储规则请参阅 [`docs/file-storage.md`](docs/file-storage.md)，自动化测试说明请参阅 [`docs/testing.md`](docs/testing.md)。
+浏览器登录使用站点级 HttpOnly Cookie，会话不会写入 localStorage。Next.js 服务端只用该 Cookie 获取首屏身份快照，浏览器 JavaScript 仍无法读取会话。退出登录或修改密码会立即使旧会话失效。运行时健康检查、请求日志和关闭行为请参阅 [`docs/runtime-operations.md`](docs/runtime-operations.md)，数据库迁移及成套备份恢复请参阅 [`docs/backup-restore.md`](docs/backup-restore.md)，生产安全配置请参阅 [`docs/security.md`](docs/security.md)，文件上传与存储规则请参阅 [`docs/file-storage.md`](docs/file-storage.md)，自动化测试说明请参阅 [`docs/testing.md`](docs/testing.md)。
 
 ## 4. 样式拓展
 全站样式位于 `frontend/src/app/globals.css` 中：

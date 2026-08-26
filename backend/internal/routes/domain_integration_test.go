@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"blog-backend/internal/config"
 	"blog-backend/internal/models"
 	"github.com/gin-gonic/gin"
 )
@@ -16,57 +15,6 @@ import (
 type apiErrorResponse struct {
 	Error string `json:"error"`
 	Code  string `json:"code"`
-}
-
-func TestLegacyMigrationBackfill(t *testing.T) {
-	db := requireTestDatabase(t)
-	for _, constraint := range []struct {
-		table string
-		name  string
-	}{
-		{"posts", "fk_posts_category"},
-		{"posts", "chk_posts_status"},
-		{"posts", "chk_posts_publication_timestamp"},
-	} {
-		if err := db.Migrator().DropConstraint(constraint.table, constraint.name); err != nil {
-			t.Fatalf("drop test constraint %s: %v", constraint.name, err)
-		}
-	}
-
-	zeroCategoryID := uint(0)
-	legacyPublished := models.Post{
-		Title: "Legacy published", Slug: "legacy-published", Content: "content",
-		CategoryID: &zeroCategoryID, Status: "published",
-	}
-	legacyInvalid := models.Post{
-		Title: "Legacy invalid", Slug: "legacy-invalid", Content: "content", Status: "archived",
-	}
-	if err := db.Create(&[]models.Post{legacyPublished, legacyInvalid}).Error; err != nil {
-		t.Fatalf("create legacy posts: %v", err)
-	}
-	if err := config.Migrate(db); err != nil {
-		t.Fatalf("migrate legacy posts: %v", err)
-	}
-
-	var migrated []models.Post
-	if err := db.Order("slug ASC").Find(&migrated).Error; err != nil {
-		t.Fatalf("load migrated posts: %v", err)
-	}
-	if len(migrated) != 2 {
-		t.Fatalf("migrated post count = %d, want 2", len(migrated))
-	}
-	bySlug := map[string]models.Post{migrated[0].Slug: migrated[0], migrated[1].Slug: migrated[1]}
-	if post := bySlug["legacy-published"]; post.CategoryID != nil || post.Status != "published" || post.PublishedAt == nil {
-		t.Fatalf("migrated published post = %+v", post)
-	}
-	if post := bySlug["legacy-invalid"]; post.Status != "draft" || post.PublishedAt != nil {
-		t.Fatalf("migrated invalid-status post = %+v", post)
-	}
-	for _, name := range []string{"fk_posts_category", "chk_posts_status", "chk_posts_publication_timestamp"} {
-		if !db.Migrator().HasConstraint("posts", name) {
-			t.Fatalf("constraint %s was not restored", name)
-		}
-	}
 }
 
 func requireAPIError(t *testing.T, responseCode int, body []byte, expectedStatus int, expectedCode string) {

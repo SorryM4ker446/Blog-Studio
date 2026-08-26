@@ -2,15 +2,21 @@
 
 ## Database migration
 
-The backend still uses GORM `AutoMigrate` for additive model changes, followed by an idempotent compatibility migration in `internal/config/db.go`. The compatibility step runs in a transaction and:
+The API process does not modify the database schema. Operators run the versioned migration command before starting a backend release:
+
+```text
+go run ./cmd/migrate up
+```
+
+The runner obtains a PostgreSQL advisory lock, applies pending versions transactionally, and records them in `blog_schema_migrations`. The current baseline creates an empty database or safely normalizes a database created by earlier releases. It:
 
 - converts legacy `category_id = 0` and dangling category references to `NULL`;
 - normalizes unsupported post statuses to `draft`;
 - backfills a missing publication time from `updated_at`, `created_at`, or the migration time;
-- clears publication times from draft posts;
+- preserves first-publication history while clearing timestamps attached to invalid legacy statuses;
 - creates the post/category foreign key, check constraints, and query indexes.
 
-Production deployments should run one application migration process at a time. A future deployment phase should replace startup migration with versioned, separately executed migrations before multiple application instances start.
+Repeated execution is idempotent. Concurrent commands serialize on the database lock, while the API and seed processes perform a read-only version check and refuse to start against an empty, pending, incompatible, or newer schema. Backup and isolated restore procedures are documented in [`backup-restore.md`](backup-restore.md).
 
 ## Domain rules
 
