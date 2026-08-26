@@ -28,6 +28,10 @@ const (
 	defaultIdleTimeout          = 2 * time.Minute
 	defaultShutdownTimeout      = 20 * time.Second
 	defaultHealthCheckTimeout   = 2 * time.Second
+	defaultPublicSearchRate     = 120
+	defaultPublicSearchBurst    = 30
+	maximumPublicSearchRate     = 60_000
+	maximumPublicSearchBurst    = 1_000
 	maximumOperationalDuration  = 30 * time.Minute
 	maximumConnectionDuration   = 24 * time.Hour
 )
@@ -57,6 +61,9 @@ type AppConfig struct {
 	HTTPIdleTimeout       time.Duration
 	HTTPShutdownTimeout   time.Duration
 	HealthCheckTimeout    time.Duration
+
+	PublicSearchRatePerMinute int
+	PublicSearchBurst         int
 }
 
 var (
@@ -210,6 +217,24 @@ func LoadFromEnv() (AppConfig, error) {
 	if err != nil {
 		return AppConfig{}, err
 	}
+	publicSearchRate, err := parseInteger(
+		"PUBLIC_SEARCH_RATE_PER_MINUTE",
+		defaultPublicSearchRate,
+		1,
+		maximumPublicSearchRate,
+	)
+	if err != nil {
+		return AppConfig{}, err
+	}
+	publicSearchBurst, err := parseInteger(
+		"PUBLIC_SEARCH_BURST",
+		defaultPublicSearchBurst,
+		1,
+		maximumPublicSearchBurst,
+	)
+	if err != nil {
+		return AppConfig{}, err
+	}
 
 	cfg := AppConfig{
 		DatabaseDSN:    databaseDSN,
@@ -233,6 +258,9 @@ func LoadFromEnv() (AppConfig, error) {
 		HTTPIdleTimeout:       httpIdleTimeout,
 		HTTPShutdownTimeout:   httpShutdownTimeout,
 		HealthCheckTimeout:    healthCheckTimeout,
+
+		PublicSearchRatePerMinute: publicSearchRate,
+		PublicSearchBurst:         publicSearchBurst,
 	}
 
 	configMu.Lock()

@@ -14,6 +14,7 @@ import (
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
 	"blog-backend/internal/filestore"
+	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"blog-backend/internal/observability"
 	"github.com/gin-gonic/gin"
@@ -36,7 +37,7 @@ type missingFileContent struct {
 	OrigName string `json:"orig_name"`
 }
 
-func respondWithFiles(c *gin.Context, includeSystem bool) {
+func respondWithFiles(c *gin.Context, includeSystem, publicRead bool) {
 	page, limit, ok := parsePagination(c)
 	if !ok {
 		return
@@ -55,11 +56,14 @@ func respondWithFiles(c *gin.Context, includeSystem bool) {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load files")
 		return
 	}
+	if publicRead {
+		httpcache.PublicRead(c)
+	}
 	c.JSON(http.StatusOK, gin.H{"data": files, "total": total, "page": page, "limit": limit})
 }
 
 func GetFiles(c *gin.Context) {
-	respondWithFiles(c, false)
+	respondWithFiles(c, false, true)
 }
 
 func AdminGetFiles(c *gin.Context) {
@@ -68,7 +72,7 @@ func AdminGetFiles(c *gin.Context) {
 		apiresponse.Error(c, http.StatusBadRequest, "invalid_include_system", "include_system must be true or false")
 		return
 	}
-	respondWithFiles(c, includeSystem)
+	respondWithFiles(c, includeSystem, false)
 }
 
 func UploadFile(c *gin.Context) {
@@ -288,6 +292,8 @@ func serveStoredFile(c *gin.Context, forceAttachment bool) {
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Content-Security-Policy", "sandbox; default-src 'none'")
 	c.Header("Referrer-Policy", "no-referrer")
+	httpcache.PublicFile(c)
+	c.Header("ETag", httpcache.WeakFileETag(storageKey, info.Size(), info.ModTime()))
 	http.ServeContent(c.Writer, c.Request, downloadName, info.ModTime(), content)
 }
 

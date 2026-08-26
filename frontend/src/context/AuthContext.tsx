@@ -138,7 +138,7 @@ export function AuthProvider({
     }
 
     try {
-      const data = await getSettings();
+      const data = await getSettings({ fresh: true });
       if (!isMountedRef.current || requestId !== profileRequestIdRef.current) {
         return;
       }

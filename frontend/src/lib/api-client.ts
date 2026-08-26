@@ -339,4 +339,24 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   return performRequest<T>(path, options, true);
 }
 
+type PublicApiRequestOptions = Omit<
+  ApiRequestOptions,
+  "auth" | "csrf" | "forceCSRFRefresh" | "credentials"
+>;
+
+export async function publicApiRequest<T>(
+  path: string,
+  options: PublicApiRequestOptions = {},
+): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    throw new TypeError("publicApiRequest only supports GET and HEAD requests");
+  }
+  return performRequest<T>(path, {
+    ...options,
+    cache: options.cache ?? "default",
+    credentials: "omit",
+  }, true);
+}
+
 export { API_BASE };

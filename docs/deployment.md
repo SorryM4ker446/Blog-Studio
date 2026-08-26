@@ -18,6 +18,8 @@ This deployment layout does not replace native development. The existing `npm ru
 
 Browser requests use `/api`, so session and CSRF Cookies stay on the public site origin. Server-rendered Next.js requests use `API_INTERNAL_BASE_URL=http://backend:8080/api`; this address is private and is never bundled for the browser. Caddy also routes `/health/live` and `/health/ready` to the backend for external monitoring.
 
+The backend also exposes Prometheus data at `/internal/metrics` only on its private container listener. Caddy does not route this path. The baseline does not add a Prometheus container; [`runtime-operations.md`](runtime-operations.md) documents how to connect separately managed monitoring and use the committed example rules.
+
 ## Host prerequisites
 
 - A Linux host with the Docker Engine and Docker Compose plugin 2.20 or newer.
@@ -122,6 +124,7 @@ docker compose --env-file deploy/.env logs --tail 200 migrate backend frontend c
 - If `backend` is unhealthy, call `/health/ready` from the host and inspect PostgreSQL and upload-volume permissions. The response stays generic; the correlated cause is in backend logs.
 - If Caddy cannot issue a certificate, verify DNS, public ports, system time, and persistence/write access for its data volume.
 - If forwarded client addresses are wrong, confirm that `CADDY_TRUSTED_IP` matches Caddy's assigned address. Do not trust the whole internet or a broad host network.
+- If legitimate public searches receive `429`, inspect the search rejection metric before adjusting `PUBLIC_SEARCH_RATE_PER_MINUTE` or `PUBLIC_SEARCH_BURST`. The limiter is per backend process and is not shared across replicas.
 - If the configured subnet overlaps another Docker or host network, stop the project and change `APP_NETWORK_SUBNET`, `APP_NETWORK_IP_RANGE`, and `CADDY_TRUSTED_IP` together before recreating services. The dynamic range must be contained by the subnet and must exclude Caddy's fixed address.
 - Do not change the PostgreSQL image to another major release as an ordinary application upgrade. Use a documented PostgreSQL major-upgrade or dump/restore procedure.
 

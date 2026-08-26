@@ -5,6 +5,7 @@ import (
 
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
+	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"github.com/gin-gonic/gin"
 )
@@ -36,6 +37,9 @@ func respondWithCategories(c *gin.Context, includeDrafts bool) {
 	if err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load categories")
 		return
+	}
+	if !includeDrafts {
+		httpcache.PublicRead(c)
 	}
 	c.JSON(http.StatusOK, categories)
 }
