@@ -10,6 +10,7 @@ describe("loadInitialAppShellState", () => {
 
   it("loads the public profile and authenticated identity for the first render", async () => {
     vi.stubEnv("API_INTERNAL_BASE_URL", "http://backend.test/api");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "/api");
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/settings")) {
@@ -36,7 +37,7 @@ describe("loadInitialAppShellState", () => {
       profile: {
         name: "Ada",
         description: "Engineer",
-        avatar: "http://backend.test/api/files/7/view",
+        avatar: "/api/files/7/view",
         tag: "Admin",
       },
       profileResolved: true,

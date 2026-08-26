@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestLoadFromEnvRejectsMissingOrWeakSecrets(t *testing.T) {
@@ -80,6 +82,71 @@ func TestLoadFromEnvAcceptsValidatedConfiguration(t *testing.T) {
 	}
 	if len(cfg.TrustedProxies) != 0 {
 		t.Fatalf("TrustedProxies = %v, want none by default", cfg.TrustedProxies)
+	}
+}
+
+func TestLoadFromEnvReadsMountedSecretsAndDatabaseFields(t *testing.T) {
+	secretDir := t.TempDir()
+	databasePasswordFile := filepath.Join(secretDir, "database-password")
+	jwtSecretFile := filepath.Join(secretDir, "jwt-secret")
+	if err := os.WriteFile(databasePasswordFile, []byte("password with symbols/+\n"), 0o600); err != nil {
+		t.Fatalf("write database password fixture: %v", err)
+	}
+	if err := os.WriteFile(jwtSecretFile, []byte("12345678901234567890123456789012\n"), 0o600); err != nil {
+		t.Fatalf("write JWT secret fixture: %v", err)
+	}
+
+	t.Setenv("DB_DSN", "")
+	t.Setenv("DB_HOST", "postgres")
+	t.Setenv("DB_PORT", "5433")
+	t.Setenv("DB_USER", "blog_app")
+	t.Setenv("DB_NAME", "blog_studio")
+	t.Setenv("DB_PASSWORD_FILE", databasePasswordFile)
+	t.Setenv("DB_SSLMODE", "disable")
+	t.Setenv("DB_TIMEZONE", "Asia/Shanghai")
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("JWT_SECRET_FILE", jwtSecretFile)
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv() error = %v", err)
+	}
+	parsed, err := pgx.ParseConfig(cfg.DatabaseDSN)
+	if err != nil {
+		t.Fatalf("parse assembled database URL: %v", err)
+	}
+	if parsed.Host != "postgres" || parsed.Port != 5433 || parsed.User != "blog_app" ||
+		parsed.Database != "blog_studio" || parsed.Password != "password with symbols/+" {
+		t.Fatalf("assembled database configuration was not preserved")
+	}
+	if parsed.RuntimeParams["timezone"] != "Asia/Shanghai" || parsed.TLSConfig != nil {
+		t.Fatalf("database runtime parameters = %#v, TLS configured = %v", parsed.RuntimeParams, parsed.TLSConfig != nil)
+	}
+	if string(cfg.JWTSecret) != "12345678901234567890123456789012" {
+		t.Fatal("JWT secret was not read from JWT_SECRET_FILE")
+	}
+}
+
+func TestReadEnvironmentValueRejectsAmbiguousAndUnsafeFiles(t *testing.T) {
+	secretFile := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(secretFile, []byte("file-value\n"), 0o600); err != nil {
+		t.Fatalf("write secret fixture: %v", err)
+	}
+	t.Setenv("EXAMPLE_SECRET", "direct-value")
+	t.Setenv("EXAMPLE_SECRET_FILE", secretFile)
+	if _, err := ReadEnvironmentValue("EXAMPLE_SECRET"); err == nil || !strings.Contains(err.Error(), "must not both be set") {
+		t.Fatalf("ambiguous secret error = %v", err)
+	}
+
+	t.Setenv("EXAMPLE_SECRET", "")
+	value, err := ReadEnvironmentValue("EXAMPLE_SECRET")
+	if err != nil || value != "file-value" {
+		t.Fatalf("file secret = %q, error = %v", value, err)
+	}
+
+	t.Setenv("EXAMPLE_SECRET_FILE", t.TempDir())
+	if _, err := ReadEnvironmentValue("EXAMPLE_SECRET"); err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("directory secret error = %v", err)
 	}
 }
 

@@ -51,7 +51,7 @@ export default defineConfig({
       },
     },
     {
-      command: "npm run build && npm run start -- --hostname 127.0.0.1 --port 3100",
+      command: "npm run build && node -e \"const fs=require('node:fs');fs.cpSync('public','.next/standalone/public',{recursive:true});fs.cpSync('.next/static','.next/standalone/.next/static',{recursive:true})\" && node .next/standalone/server.js",
       cwd: __dirname,
       url: E2E_APP_URL,
       reuseExistingServer: false,
@@ -60,6 +60,8 @@ export default defineConfig({
         ...process.env,
         NEXT_PUBLIC_API_BASE_URL: E2E_API_URL,
         API_INTERNAL_BASE_URL: E2E_API_URL,
+        HOSTNAME: "127.0.0.1",
+        PORT: "3100",
       },
     },
   ],

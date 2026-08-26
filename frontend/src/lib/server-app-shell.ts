@@ -4,7 +4,8 @@ import type {
   PublicProfile,
   SidebarCategory,
 } from "@/lib/app-shell-state";
-import { requestServerJSON } from "@/lib/server-api";
+import { rebaseFileViewURLs } from "@/lib/file-url";
+import { getBrowserAPIBase, requestServerJSON } from "@/lib/server-api";
 
 function readStringRecord(value: unknown): Record<string, string> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -42,10 +43,6 @@ function readUser(value: unknown): AuthUser | null {
   };
 }
 
-function normalizeFileViewURL(value: string): string {
-  return value.replace(/\/api\/files\/(\d+)\/download\b/g, "/api/files/$1/view");
-}
-
 function readProfile(value: unknown): PublicProfile | null {
   const settings = readStringRecord(value);
   if (!settings) {
@@ -54,7 +51,7 @@ function readProfile(value: unknown): PublicProfile | null {
   return {
     name: settings.profile_name || "",
     description: settings.profile_description || "",
-    avatar: normalizeFileViewURL(settings.profile_avatar || ""),
+    avatar: rebaseFileViewURLs(settings.profile_avatar || "", getBrowserAPIBase()),
     tag: settings.profile_tag || "",
   };
 }

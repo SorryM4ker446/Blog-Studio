@@ -32,6 +32,12 @@ backend/.env*
 !backend/.env.example
 backend/*.log
 
+# Deployment runtime state and secrets
+deploy/.env
+deploy/secrets/*
+!deploy/secrets/README.md
+deploy/backups/
+
 # Global
 .codex-runtime/
 .DS_Store

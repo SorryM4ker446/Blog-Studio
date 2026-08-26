@@ -110,4 +110,12 @@ For a restore drill:
 4. Verify public reads, administrator reads, file previews, and downloads.
 5. Record the backup identifier, elapsed time, verification result, and cleanup decision without recording credentials.
 
-Docker Compose and VPS-specific execution are documented separately when those deployment artifacts are introduced. The commands in this document work with native development tools and are also exercised by the PostgreSQL integration suite in GitHub Actions.
+The commands in this document work with native development tools and are also exercised by the PostgreSQL integration suite in GitHub Actions. Docker Compose execution is documented in [`deployment.md`](deployment.md); domain and host-level validation remains a deployment-host responsibility.
+
+For the Compose topology, the tools image includes matching PostgreSQL 18 clients and mounts uploads read-only during backup creation. Stop Caddy, the frontend, and the backend before running:
+
+```bash
+docker compose --env-file deploy/.env --profile tools run --rm maintenance /app/backup create /backups
+```
+
+The host-visible backup directory and complete release procedure are documented in [`deployment.md`](deployment.md). Isolated restore safety rules in this document still apply; the active PostgreSQL and uploads volumes must never be selected as restore targets.

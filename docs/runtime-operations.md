@@ -26,6 +26,8 @@ TRUSTED_PROXIES=127.0.0.1
 TRUSTED_PROXIES=172.30.0.0/24
 ```
 
+The Compose deployment assigns Caddy a stable private address and configures the backend to trust that exact address rather than the entire application subnet. If the Compose subnet is changed, update both `APP_NETWORK_SUBNET` and `CADDY_TRUSTED_IP` together. See [`deployment.md`](deployment.md).
+
 ## Operational configuration
 
 | Variable | Default | Constraint |
@@ -48,3 +50,5 @@ Go duration syntax is used, for example `1500ms`, `20s`, or `5m`. The HTTP read 
 The backend handles interrupt and termination signals by immediately making readiness fail, stopping new traffic, and waiting up to `HTTP_SHUTDOWN_TIMEOUT` for active requests. If the deadline expires, remaining connections are closed. The database connection pool closes after the HTTP server has stopped.
 
 The API only verifies migration history while opening the database and never changes the schema. Run `go run ./cmd/migrate up` before starting a backend release. Versioning, advisory locking, matched backups, and isolated restore drills are documented in [`backup-restore.md`](backup-restore.md).
+
+In the production Compose topology, Caddy exposes both health routes without exposing the backend container port. Compose uses PostgreSQL health, successful migration completion, backend readiness, and frontend health to order startup. Container lifecycle and rollback procedures are documented in [`deployment.md`](deployment.md).

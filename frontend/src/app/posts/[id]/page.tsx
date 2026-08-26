@@ -1,7 +1,5 @@
 import {
-  getPost,
   getPostTimeline,
-  getSettings,
   normalizeFileViewUrl,
   normalizeMarkdownFileUrls,
 } from "@/lib/api";
@@ -10,6 +8,7 @@ import { notFound } from "next/navigation";
 import BackButton from "@/components/BackButton";
 import PostAuthorIdentity from "@/components/PostAuthorIdentity";
 import { createMarkdownParser } from "@/lib/markdown";
+import { requestServerJSON } from "@/lib/server-api";
 
 interface PostPageProps {
   params: Promise<{ id: string }>;
@@ -22,11 +21,19 @@ const md = createMarkdownParser();
 
 export default async function PostPage({ params }: PostPageProps) {
   const { id } = await params;
-  const [post, settings] = await Promise.all([getPost(id), getSettings()]);
+  const [postResult, settingsResult] = await Promise.all([
+    requestServerJSON<Post>(`/posts/${encodeURIComponent(id)}`),
+    requestServerJSON<Record<string, string>>("/settings"),
+  ]);
 
-  if (!post) {
+  if ("status" in postResult && postResult.status === 404) {
     notFound();
   }
+  if (!postResult.ok || !settingsResult.ok) {
+    throw new Error("Post details could not be loaded");
+  }
+  const post = postResult.data;
+  const settings = settingsResult.data;
 
   const timeline = getPostTimeline(post);
   const displayDate = new Date(timeline.timestamp);

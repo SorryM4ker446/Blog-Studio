@@ -1,0 +1,12 @@
+.env*
+!.env.example
+.next/
+node_modules/
+out/
+build/
+test-results/
+playwright-report/
+blob-report/
+*.log
+*.pem
+*.tsbuildinfo
