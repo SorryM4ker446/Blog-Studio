@@ -47,4 +47,4 @@ Go duration syntax is used, for example `1500ms`, `20s`, or `5m`. The HTTP read 
 
 The backend handles interrupt and termination signals by immediately making readiness fail, stopping new traffic, and waiting up to `HTTP_SHUTDOWN_TIMEOUT` for active requests. If the deadline expires, remaining connections are closed. The database connection pool closes after the HTTP server has stopped.
 
-The application still runs its existing compatibility schema migration while opening the database. Deployment work will move schema changes into a separate versioned command before the production topology is considered complete.
+The API only verifies migration history while opening the database and never changes the schema. Run `go run ./cmd/migrate up` before starting a backend release. Versioning, advisory locking, matched backups, and isolated restore drills are documented in [`backup-restore.md`](backup-restore.md).

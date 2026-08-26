@@ -61,5 +61,5 @@ The response lists database records whose content is missing and stored content 
 
 - Keep `UPLOAD_DIR` outside publicly served frontend directories.
 - Give the backend process read and write access only to that directory.
-- Back up the database and upload directory together so record/content pairs remain consistent.
+- Back up the database and upload directory together while application writes are stopped; use the matched bundle and isolated restore procedure in [`backup-restore.md`](backup-restore.md).
 - Review the storage health report before and after restoring a backup or migrating storage.
