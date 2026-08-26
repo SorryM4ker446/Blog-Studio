@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"github.com/gin-gonic/gin"
 )
@@ -112,6 +113,19 @@ func TestFileUploadStorageAndServingSecurity(t *testing.T) {
 	}
 	if view.Header().Get("X-Content-Type-Options") != "nosniff" || view.Header().Get("Content-Security-Policy") == "" {
 		t.Fatalf("missing hardened view headers: %v", view.Header())
+	}
+	if view.Header().Get("Cache-Control") != httpcache.PublicFilePolicy || view.Header().Get("ETag") == "" || view.Header().Get("Last-Modified") == "" {
+		t.Fatalf("missing file cache validators: %v", view.Header())
+	}
+	revalidate := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/files/%d/view", fileID), nil)
+	revalidate.Header.Set("If-None-Match", view.Header().Get("ETag"))
+	revalidated := httptest.NewRecorder()
+	router.ServeHTTP(revalidated, revalidate)
+	if revalidated.Code != http.StatusNotModified || revalidated.Body.Len() != 0 {
+		t.Fatalf("conditional view status=%d body-bytes=%d", revalidated.Code, revalidated.Body.Len())
+	}
+	if revalidated.Header().Get("Cache-Control") != httpcache.PublicFilePolicy || revalidated.Header().Get("ETag") != view.Header().Get("ETag") {
+		t.Fatalf("conditional view lost cache validators: %v", revalidated.Header())
 	}
 	download := performJSONRequest(t, router, http.MethodGet, fmt.Sprintf("/api/files/%d/download", fileID), nil, nil, false)
 	if download.Code != http.StatusOK || !strings.HasPrefix(download.Header().Get("Content-Disposition"), "attachment") {

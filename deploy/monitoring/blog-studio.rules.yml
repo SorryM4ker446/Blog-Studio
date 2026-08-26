@@ -1,0 +1,49 @@
+groups:
+  - name: blog-studio-runtime
+    rules:
+      - alert: BlogStudioBackendUnavailable
+        expr: up{job="blog-studio-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Blog Studio backend is unavailable
+          description: Prometheus has been unable to scrape the backend for two minutes.
+
+      - alert: BlogStudioElevatedServerErrorRate
+        expr: |
+          (
+            sum(rate(blog_studio_http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(blog_studio_http_requests_total[5m])), 0.001)
+          ) > 0.05
+          and sum(rate(blog_studio_http_requests_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Blog Studio server error rate is elevated
+          description: More than 5% of requests are returning 5xx responses during sustained traffic.
+
+      - alert: BlogStudioHighRequestLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(blog_studio_http_request_duration_seconds_bucket[5m]))
+          ) > 1
+          and sum(rate(blog_studio_http_requests_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Blog Studio request latency is elevated
+          description: The estimated 95th percentile request latency has exceeded one second during sustained traffic.
+
+      - alert: BlogStudioPublicSearchRateLimitActive
+        expr: increase(blog_studio_public_search_rate_limit_rejections_total[10m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Blog Studio public search throttling is persistently active
+          description: Anonymous search traffic is repeatedly exceeding the configured in-process limit.

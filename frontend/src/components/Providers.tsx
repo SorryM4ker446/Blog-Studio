@@ -108,7 +108,7 @@ export function SidebarContent() {
 
   const refreshCategories = useCallback(async () => {
     try {
-      const cats: Category[] = await getCategories();
+      const cats: Category[] = await getCategories({ fresh: true });
       setCategories(
         cats
           .filter((c) => (c.post_count || 0) > 0)

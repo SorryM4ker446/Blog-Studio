@@ -83,6 +83,9 @@ func TestLoadFromEnvAcceptsValidatedConfiguration(t *testing.T) {
 	if len(cfg.TrustedProxies) != 0 {
 		t.Fatalf("TrustedProxies = %v, want none by default", cfg.TrustedProxies)
 	}
+	if cfg.PublicSearchRatePerMinute != 120 || cfg.PublicSearchBurst != 30 {
+		t.Fatalf("public search limit defaults = rate %d burst %d", cfg.PublicSearchRatePerMinute, cfg.PublicSearchBurst)
+	}
 }
 
 func TestLoadFromEnvReadsMountedSecretsAndDatabaseFields(t *testing.T) {
@@ -164,6 +167,8 @@ func TestLoadFromEnvValidatesOperationalConfiguration(t *testing.T) {
 	t.Setenv("HTTP_IDLE_TIMEOUT", "75s")
 	t.Setenv("HTTP_SHUTDOWN_TIMEOUT", "25s")
 	t.Setenv("HEALTH_CHECK_TIMEOUT", "1500ms")
+	t.Setenv("PUBLIC_SEARCH_RATE_PER_MINUTE", "240")
+	t.Setenv("PUBLIC_SEARCH_BURST", "45")
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -183,6 +188,9 @@ func TestLoadFromEnvValidatesOperationalConfiguration(t *testing.T) {
 		cfg.HTTPShutdownTimeout != 25*time.Second || cfg.HealthCheckTimeout != 1500*time.Millisecond {
 		t.Fatalf("operational timeouts were not loaded: %+v", cfg)
 	}
+	if cfg.PublicSearchRatePerMinute != 240 || cfg.PublicSearchBurst != 45 {
+		t.Fatalf("public search limit = rate %d burst %d", cfg.PublicSearchRatePerMinute, cfg.PublicSearchBurst)
+	}
 }
 
 func TestLoadFromEnvRejectsInvalidOperationalConfiguration(t *testing.T) {
@@ -195,6 +203,8 @@ func TestLoadFromEnvRejectsInvalidOperationalConfiguration(t *testing.T) {
 		{"DB_CONNECTION_MAX_LIFETIME", "0s"},
 		{"HTTP_READ_HEADER_TIMEOUT", "31m"},
 		{"HTTP_SHUTDOWN_TIMEOUT", "invalid"},
+		{"PUBLIC_SEARCH_RATE_PER_MINUTE", "0"},
+		{"PUBLIC_SEARCH_BURST", "1001"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

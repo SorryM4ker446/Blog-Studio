@@ -8,6 +8,7 @@ import (
 
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
+	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"github.com/gin-gonic/gin"
 )
@@ -79,6 +80,9 @@ func respondWithSearchResults(c *gin.Context, adminAccess bool, includeSystem bo
 			apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not search files")
 			return
 		}
+	}
+	if !adminAccess {
+		httpcache.PublicRead(c)
 	}
 	c.JSON(http.StatusOK, gin.H{"posts": posts, "files": files})
 }

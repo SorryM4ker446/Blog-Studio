@@ -18,7 +18,9 @@ Before login or another state-changing request, the frontend obtains a CSRF toke
 - Passwords must contain 12–128 Unicode characters, fit within bcrypt's 72-byte input limit, must not be on the built-in common-password list, and must not contain the username.
 - Login failures use a single error message and perform a password-hash comparison even when the username does not exist.
 
-The login limiter is process-local. A future multi-instance deployment should replace it with a shared store such as Redis so all instances enforce one limit.
+Public search uses a separate token bucket with a default burst of 30 and a refill rate of 120 requests per minute. It returns `429`, `Retry-After`, and `search_rate_limited` without affecting administrator search. Both limiters are process-local. A future multi-instance deployment should replace them with a shared store such as Redis so all instances enforce one limit.
+
+Public browser `fetch` calls omit credentials, and public handlers do not read session identity. Administrator, authentication, mutation, error, health, and metrics responses use `Cache-Control: no-store`; successful public representations opt into their documented cache policy explicitly.
 
 ## Deployment configuration
 
@@ -42,4 +44,6 @@ This value is a network location, not a credential. It should use the private co
 
 The Compose deployment mounts PostgreSQL, JWT, and initial administrator secrets as files under `/run/secrets`. Backend configuration supports `DB_PASSWORD_FILE`, `JWT_SECRET_FILE`, and `ADMIN_PASS_FILE` for this purpose and rejects simultaneous direct and file forms. The browser-facing frontend image contains no secret; `NEXT_PUBLIC_API_BASE_URL` is intentionally compiled as the public same-origin `/api` path.
 
-The backend does not trust forwarded client addresses by default. A production reverse proxy must be listed explicitly in `TRUSTED_PROXIES`; broad public network ranges must not be trusted. This boundary affects both request attribution and login throttling. See [`runtime-operations.md`](runtime-operations.md) for health endpoints, request IDs, structured logging, and operational timeouts.
+The backend does not trust forwarded client addresses by default. A production reverse proxy must be listed explicitly in `TRUSTED_PROXIES`; broad public network ranges must not be trusted. This boundary affects request attribution and both rate limiters.
+
+The Prometheus endpoint is intentionally unauthenticated on the backend's private listener. Caddy does not route it and Compose does not publish the backend port. Do not expose that listener to an untrusted network. See [`runtime-operations.md`](runtime-operations.md) for health endpoints, request IDs, cache policy, metrics, structured logging, and operational timeouts.

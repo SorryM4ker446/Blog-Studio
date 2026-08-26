@@ -10,6 +10,7 @@ import (
 
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
+	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"blog-backend/internal/observability"
 	"github.com/gin-gonic/gin"
@@ -62,6 +63,7 @@ func GetSettings(c *gin.Context) {
 			}
 		}
 	}
+	httpcache.PublicRead(c)
 	c.JSON(http.StatusOK, settingsMap)
 }
 

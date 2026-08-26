@@ -11,6 +11,7 @@ import (
 
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
+	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -83,6 +84,9 @@ func respondWithPosts(c *gin.Context, includeDrafts bool) {
 		return
 	}
 
+	if !includeDrafts {
+		httpcache.PublicRead(c)
+	}
 	c.JSON(http.StatusOK, gin.H{"data": posts, "total": total, "page": page, "limit": limit})
 }
 
@@ -109,6 +113,7 @@ func GetPost(c *gin.Context) {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load post")
 		return
 	}
+	httpcache.PublicRead(c)
 	c.JSON(http.StatusOK, post)
 }
 

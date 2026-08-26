@@ -6,6 +6,7 @@ import {
   clearCSRFToken,
   ensureCSRFToken,
   isApiError,
+  publicApiRequest,
   setCSRFToken,
 } from "@/lib/api-client";
 import { rebaseFileViewURLs } from "@/lib/file-url";
@@ -205,9 +206,7 @@ export async function getPosts(page = 1, limit = 10, _useAuth = false, sort = ""
   if (sort) query.append("sort", sort);
   if (categoryId) query.append("category_id", categoryId);
 
-  return apiRequest<PaginatedResponse<Post>>(`/posts?${query.toString()}`, {
-    cache: "no-store",
-  });
+  return publicApiRequest<PaginatedResponse<Post>>(`/posts?${query.toString()}`);
 }
 
 export async function getAdminPosts(
@@ -230,7 +229,7 @@ export async function getAdminPosts(
 
 export async function getPost(id: string): Promise<Post | null> {
   try {
-    return await apiRequest<Post>(`/posts/${encodeURIComponent(id)}`, { cache: "no-store" });
+    return await publicApiRequest<Post>(`/posts/${encodeURIComponent(id)}`);
   } catch (error) {
     if (isApiError(error) && error.status === 404) {
       return null;
@@ -277,8 +276,10 @@ export async function deletePost(id: number): Promise<boolean> {
 
 // ==================== Category API ====================
 
-export async function getCategories(): Promise<Category[]> {
-  return apiRequest<Category[]>("/categories", { cache: "no-store" });
+export async function getCategories(options: { fresh?: boolean } = {}): Promise<Category[]> {
+  return publicApiRequest<Category[]>("/categories", {
+    cache: options.fresh ? "no-store" : "default",
+  });
 }
 
 export async function getAdminCategories(): Promise<Category[]> {
@@ -325,9 +326,7 @@ export async function deleteCategory(id: number): Promise<boolean> {
 
 export async function getFiles(page = 1, limit = 10): Promise<PaginatedResponse<FileRecord>> {
   const query = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
-  return apiRequest<PaginatedResponse<FileRecord>>(`/files?${query.toString()}`, {
-    cache: "no-store",
-  });
+  return publicApiRequest<PaginatedResponse<FileRecord>>(`/files?${query.toString()}`);
 }
 
 export async function getAdminFiles(page = 1, limit = 10, includeSystem = true): Promise<PaginatedResponse<FileRecord>> {
@@ -435,9 +434,7 @@ export async function searchResources(
 ): Promise<SearchResult> {
   const searchParams = new URLSearchParams({ q: query, scope });
   if (categoryId) searchParams.set("category_id", categoryId);
-  return apiRequest<SearchResult>(`/search?${searchParams.toString()}`, {
-    cache: "no-store",
-  });
+  return publicApiRequest<SearchResult>(`/search?${searchParams.toString()}`);
 }
 
 export async function searchAdminResources(
@@ -458,8 +455,10 @@ export async function searchAdminResources(
 
 // ==================== Settings API ====================
 
-export async function getSettings(): Promise<Record<string, string>> {
-  return apiRequest<Record<string, string>>("/settings", { cache: "no-store" });
+export async function getSettings(options: { fresh?: boolean } = {}): Promise<Record<string, string>> {
+  return publicApiRequest<Record<string, string>>("/settings", {
+    cache: options.fresh ? "no-store" : "default",
+  });
 }
 
 export async function getCurrentUser(): Promise<{ id: number; username: string; role: string } | null> {

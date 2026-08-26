@@ -4,6 +4,7 @@ import {
   apiRequest,
   clearCSRFToken,
   getApiErrorMessage,
+  publicApiRequest,
   setCSRFToken,
   subscribeSessionExpired,
 } from "./api-client";
@@ -92,6 +93,28 @@ describe("apiRequest", () => {
       status: null,
       code: "request_aborted",
     });
+  });
+
+  it("omits credentials and honors HTTP caching for public reads", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await publicApiRequest("/posts");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/posts",
+      expect.objectContaining({ credentials: "omit", cache: "default" }),
+    );
+  });
+
+  it("rejects mutations through the public request boundary", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(publicApiRequest("/posts", { method: "POST" })).rejects.toThrow(
+      "publicApiRequest only supports GET and HEAD requests",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("notifies listeners for protected 401 responses only", async () => {

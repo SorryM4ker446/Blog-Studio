@@ -74,7 +74,7 @@ export default function SettingsPageClient({
     setSettingsLoading(true);
     setSettingsError("");
     try {
-      const data = await getSettings();
+      const data = await getSettings({ fresh: true });
       if (!isMountedRef.current || requestId !== settingsRequestIdRef.current) return;
       setProfileName(data.profile_name || "");
       setProfileDesc(data.profile_description || "");
