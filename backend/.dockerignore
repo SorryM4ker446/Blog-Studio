@@ -1,0 +1,10 @@
+.env*
+!.env.example
+.test-uploads/
+uploads/
+bin/
+dist/
+vendor/
+*.log
+*.exe
+*_test.go

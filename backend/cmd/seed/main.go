@@ -36,9 +36,12 @@ func main() {
 	if username == "" {
 		log.Fatal("ADMIN_USER is required")
 	}
-	password := os.Getenv("ADMIN_PASS")
+	password, err := config.ReadEnvironmentValue("ADMIN_PASS")
+	if err != nil {
+		log.Fatalf("Load administrator password: %v", err)
+	}
 	if password == "" {
-		log.Fatal("ADMIN_PASS is required")
+		log.Fatal("ADMIN_PASS or ADMIN_PASS_FILE is required")
 	}
 	if err := security.ValidatePassword(password, username); err != nil {
 		log.Fatalf("ADMIN_PASS is invalid: %v", err)

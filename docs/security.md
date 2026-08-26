@@ -40,4 +40,6 @@ This value is a network location, not a credential. It should use the private co
 
 `ALLOWED_ORIGINS` accepts a comma-separated list of exact origins. Wildcards are rejected. Requests without an `Origin` header remain available to trusted command-line clients, while browser requests from an unlisted origin receive `403 Forbidden`.
 
+The Compose deployment mounts PostgreSQL, JWT, and initial administrator secrets as files under `/run/secrets`. Backend configuration supports `DB_PASSWORD_FILE`, `JWT_SECRET_FILE`, and `ADMIN_PASS_FILE` for this purpose and rejects simultaneous direct and file forms. The browser-facing frontend image contains no secret; `NEXT_PUBLIC_API_BASE_URL` is intentionally compiled as the public same-origin `/api` path.
+
 The backend does not trust forwarded client addresses by default. A production reverse proxy must be listed explicitly in `TRUSTED_PROXIES`; broad public network ranges must not be trusted. This boundary affects both request attribution and login throttling. See [`runtime-operations.md`](runtime-operations.md) for health endpoints, request IDs, structured logging, and operational timeouts.

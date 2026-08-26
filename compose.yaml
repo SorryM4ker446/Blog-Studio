@@ -1,0 +1,222 @@
+name: blog-studio
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-blog_studio}
+      POSTGRES_USER: ${POSTGRES_USER:-blog_studio}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      TZ: ${TIMEZONE:-UTC}
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - app
+
+  migrate:
+    image: blog-studio-backend:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./backend
+      target: runtime
+    command: ["/app/migrate", "up"]
+    restart: "no"
+    environment: &database-environment
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-blog_studio}
+      DB_NAME: ${POSTGRES_DB:-blog_studio}
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+      DB_SSLMODE: disable
+      DB_TIMEZONE: ${TIMEZONE:-UTC}
+    secrets:
+      - postgres_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app
+
+  backend:
+    image: blog-studio-backend:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./backend
+      target: runtime
+    restart: unless-stopped
+    environment:
+      <<: *database-environment
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      SERVER_ADDRESS: :8080
+      APP_ENV: production
+      ALLOWED_ORIGINS: ${SITE_ORIGIN:?Set SITE_ORIGIN to the public HTTPS origin}
+      COOKIE_SECURE: "true"
+      TRUSTED_PROXIES: ${CADDY_TRUSTED_IP:-172.30.0.2}
+      UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
+      DB_MAX_OPEN_CONNECTIONS: ${DB_MAX_OPEN_CONNECTIONS:-10}
+      DB_MAX_IDLE_CONNECTIONS: ${DB_MAX_IDLE_CONNECTIONS:-5}
+      DB_CONNECTION_MAX_LIFETIME: ${DB_CONNECTION_MAX_LIFETIME:-30m}
+      DB_CONNECTION_MAX_IDLE_TIME: ${DB_CONNECTION_MAX_IDLE_TIME:-5m}
+      HTTP_READ_HEADER_TIMEOUT: ${HTTP_READ_HEADER_TIMEOUT:-5s}
+      HTTP_READ_TIMEOUT: ${HTTP_READ_TIMEOUT:-2m}
+      HTTP_WRITE_TIMEOUT: ${HTTP_WRITE_TIMEOUT:-5m}
+      HTTP_IDLE_TIMEOUT: ${HTTP_IDLE_TIMEOUT:-2m}
+      HTTP_SHUTDOWN_TIMEOUT: ${HTTP_SHUTDOWN_TIMEOUT:-20s}
+      HEALTH_CHECK_TIMEOUT: ${HEALTH_CHECK_TIMEOUT:-2s}
+    secrets:
+      - postgres_password
+      - jwt_secret
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+
+  frontend:
+    image: blog-studio-frontend:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./frontend
+      target: runtime
+      args:
+        NEXT_PUBLIC_API_BASE_URL: /api
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_BASE_URL: http://backend:8080/api
+    volumes:
+      - frontend_cache:/app/.next/cache
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS to the public domain}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      app:
+        ipv4_address: ${CADDY_TRUSTED_IP:-172.30.0.2}
+
+  seed:
+    profiles: ["tools"]
+    image: blog-studio-backend:${APP_IMAGE_TAG:-local}
+    command: ["/app/seed"]
+    environment:
+      <<: *database-environment
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASS_FILE: /run/secrets/admin_password
+      APP_ENV: production
+      ALLOWED_ORIGINS: ${SITE_ORIGIN:?Set SITE_ORIGIN to the public HTTPS origin}
+      COOKIE_SECURE: "true"
+      UPLOAD_DIR: /data/uploads
+    secrets:
+      - postgres_password
+      - jwt_secret
+      - admin_password
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app
+
+  maintenance:
+    profiles: ["tools"]
+    image: blog-studio-maintenance:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./backend
+      target: maintenance
+    environment:
+      <<: *database-environment
+      UPLOAD_DIR: /data/uploads
+    secrets:
+      - postgres_password
+    volumes:
+      - uploads_data:/data/uploads:ro
+      - ${BACKUP_DIR:-./deploy/backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app
+
+volumes:
+  postgres_data:
+  uploads_data:
+  frontend_cache:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_SECRET_PATH:-./deploy/secrets/postgres_password}
+  jwt_secret:
+    file: ${JWT_SECRET_PATH:-./deploy/secrets/jwt_secret}
+  admin_password:
+    file: ${ADMIN_PASSWORD_SECRET_PATH:-./deploy/secrets/admin_password}
+
+networks:
+  app:
+    ipam:
+      config:
+        - subnet: ${APP_NETWORK_SUBNET:-172.30.0.0/24}

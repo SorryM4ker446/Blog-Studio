@@ -5,9 +5,9 @@ import (
 	"errors"
 	"log"
 	"os"
-	"strings"
 	"time"
 
+	"blog-backend/internal/config"
 	"blog-backend/internal/migrations"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -18,9 +18,9 @@ func main() {
 	if len(os.Args) != 2 || os.Args[1] != "up" {
 		log.Fatal("Usage: go run ./cmd/migrate up")
 	}
-	dsn := strings.TrimSpace(os.Getenv("DB_DSN"))
-	if dsn == "" {
-		log.Fatal("DB_DSN is required")
+	dsn, err := config.DatabaseDSNFromEnv()
+	if err != nil {
+		log.Fatalf("Load database configuration: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

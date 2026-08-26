@@ -17,6 +17,22 @@ export function getServerAPIBase(): string {
   }
 }
 
+export function getBrowserAPIBase(): string {
+  const configuredBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || DEFAULT_API_BASE;
+  if (/^\/(?!\/)/.test(configuredBase) && !/[?#]/.test(configuredBase)) {
+    return configuredBase.replace(/\/$/, "");
+  }
+  try {
+    const parsed = new URL(configuredBase);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return DEFAULT_API_BASE;
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return DEFAULT_API_BASE;
+  }
+}
+
 export async function requestServerJSON<T = unknown>(
   path: string,
   options: {

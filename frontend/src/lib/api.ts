@@ -8,6 +8,7 @@ import {
   isApiError,
   setCSRFToken,
 } from "@/lib/api-client";
+import { rebaseFileViewURLs } from "@/lib/file-url";
 
 export { API_BASE, ApiError, getApiErrorMessage, isApiError } from "@/lib/api-client";
 export type { ApiErrorKind } from "@/lib/api-client";
@@ -96,17 +97,11 @@ export function getFileViewUrl(fileId: number): string {
 }
 
 export function normalizeFileViewUrl(url: string): string {
-  if (!url) {
-    return url;
-  }
-  return url.replace(/\/api\/files\/(\d+)\/download\b/g, "/api/files/$1/view");
+  return rebaseFileViewURLs(url, API_BASE);
 }
 
 export function normalizeMarkdownFileUrls(markdown: string): string {
-  if (!markdown) {
-    return markdown;
-  }
-  return markdown.replace(/\/api\/files\/(\d+)\/download\b/g, "/api/files/$1/view");
+  return rebaseFileViewURLs(markdown, API_BASE);
 }
 
 export function extractSearchablePostContent(markdown: string): string {

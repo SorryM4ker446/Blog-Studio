@@ -9,6 +9,7 @@ import {
   type Post,
 } from "./api";
 import { clearCSRFToken, setCSRFToken } from "./api-client";
+import { rebaseFileViewURLs } from "./file-url";
 
 function makePost(overrides: Partial<Post> = {}): Post {
   return {
@@ -32,6 +33,15 @@ describe("file URL normalization", () => {
   it("uses the validated view endpoint for file download URLs", () => {
     expect(normalizeFileViewUrl("http://localhost:8080/api/files/42/download?inline=1"))
       .toBe("http://localhost:8080/api/files/42/view?inline=1");
+  });
+
+  it("rebases stored file URLs from an earlier deployment to the current API", () => {
+    expect(normalizeFileViewUrl("https://old.example.test/api/files/42/view"))
+      .toBe("http://localhost:8080/api/files/42/view");
+    expect(normalizeFileViewUrl("/api/files/42/download"))
+      .toBe("/api/files/42/view");
+    expect(rebaseFileViewURLs("https://old.example.test/api/files/42/download", "/api"))
+      .toBe("/api/files/42/view");
   });
 
   it("normalizes every file download URL in markdown without changing unrelated URLs", () => {

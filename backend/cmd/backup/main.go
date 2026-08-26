@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"blog-backend/internal/backup"
+	"blog-backend/internal/config"
 	"blog-backend/internal/migrations"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -32,9 +33,9 @@ func main() {
 		return
 	}
 
-	dsn := strings.TrimSpace(os.Getenv("DB_DSN"))
-	if dsn == "" {
-		log.Fatal("DB_DSN is required")
+	dsn, err := config.DatabaseDSNFromEnv()
+	if err != nil {
+		log.Fatalf("Load database configuration: %v", err)
 	}
 	uploadDir := strings.TrimSpace(os.Getenv("UPLOAD_DIR"))
 	if uploadDir == "" {

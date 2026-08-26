@@ -69,14 +69,18 @@ var (
 // packages that handle requests. It must run before the database or router is
 // initialized.
 func LoadFromEnv() (AppConfig, error) {
-	databaseDSN := strings.TrimSpace(os.Getenv("DB_DSN"))
-	if databaseDSN == "" {
-		return AppConfig{}, errors.New("DB_DSN is required")
+	databaseDSN, err := DatabaseDSNFromEnv()
+	if err != nil {
+		return AppConfig{}, err
 	}
 
-	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	jwtSecret, err := ReadEnvironmentValue("JWT_SECRET")
+	if err != nil {
+		return AppConfig{}, err
+	}
+	jwtSecret = strings.TrimSpace(jwtSecret)
 	if jwtSecret == "" {
-		return AppConfig{}, errors.New("JWT_SECRET is required")
+		return AppConfig{}, errors.New("JWT_SECRET is required unless JWT_SECRET_FILE is configured")
 	}
 	if len([]byte(jwtSecret)) < minimumJWTSecretLength {
 		return AppConfig{}, fmt.Errorf("JWT_SECRET must be at least %d bytes", minimumJWTSecretLength)

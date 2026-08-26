@@ -49,7 +49,11 @@ go run ./cmd/seed
 
 浏览器登录使用站点级 HttpOnly Cookie，会话不会写入 localStorage。Next.js 服务端只用该 Cookie 获取首屏身份快照，浏览器 JavaScript 仍无法读取会话。退出登录或修改密码会立即使旧会话失效。运行时健康检查、请求日志和关闭行为请参阅 [`docs/runtime-operations.md`](docs/runtime-operations.md)，数据库迁移及成套备份恢复请参阅 [`docs/backup-restore.md`](docs/backup-restore.md)，生产安全配置请参阅 [`docs/security.md`](docs/security.md)，文件上传与存储规则请参阅 [`docs/file-storage.md`](docs/file-storage.md)，自动化测试说明请参阅 [`docs/testing.md`](docs/testing.md)。
 
-## 4. 样式拓展
+## 4. 生产部署
+
+推荐的生产基线是单台 Linux 主机上的 Docker Compose：Caddy 提供同源 HTTPS 入口，Next.js 与 Go API 使用非 root 多阶段镜像，PostgreSQL、上传内容和证书状态使用独立持久化卷。首次部署、Secret 准备、升级和回滚步骤请参阅 [`docs/deployment.md`](docs/deployment.md)。这些文件不会改变上述原生本地开发方式。
+
+## 5. 样式拓展
 全站样式位于 `frontend/src/app/globals.css` 中：
 - `var(--bg-sidebar)` 和 `var(--nav-active)` 控制着侧边栏明暗基调。
 - 如需更改系统强调色，可修改 CSS 中的 `var(--accent-*)` 系列色卡。
