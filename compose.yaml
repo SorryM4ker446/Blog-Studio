@@ -220,3 +220,4 @@ networks:
     ipam:
       config:
         - subnet: ${APP_NETWORK_SUBNET:-172.30.0.0/24}
+          ip_range: ${APP_NETWORK_IP_RANGE:-172.30.0.128/25}

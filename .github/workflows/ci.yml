@@ -120,6 +120,9 @@ jobs:
       SITE_ADDRESS: :80
       SITE_ORIGIN: http://127.0.0.1:18000
       APP_IMAGE_TAG: ci
+      APP_NETWORK_SUBNET: 172.30.0.0/24
+      APP_NETWORK_IP_RANGE: 172.30.0.128/25
+      CADDY_TRUSTED_IP: 172.30.0.2
       HTTP_PORT: "18000"
       HTTPS_PORT: "18443"
     steps:
@@ -131,7 +134,37 @@ jobs:
           printf '%s' 'ci-jwt-secret-with-at-least-thirty-two-bytes' > deploy/secrets/jwt_secret
           printf '%s' 'ci-admin-password-strong-value' > deploy/secrets/admin_password
       - name: Validate Compose configuration
-        run: docker compose --profile tools config --quiet
+        run: |
+          docker compose --profile tools config --quiet
+          docker compose --profile tools config --format json > "$RUNNER_TEMP/compose-config.json"
+          python3 - "$RUNNER_TEMP/compose-config.json" <<'PY'
+          import ipaddress
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as config_file:
+              config = json.load(config_file)
+
+          network_config = config["networks"]["app"]["ipam"]["config"]
+          if len(network_config) != 1:
+              raise SystemExit("the app network must define exactly one IPAM range")
+
+          subnet = ipaddress.ip_network(network_config[0]["subnet"])
+          dynamic_range = ipaddress.ip_network(network_config[0]["ip_range"])
+          caddy_address = ipaddress.ip_address(
+              config["services"]["caddy"]["networks"]["app"]["ipv4_address"]
+          )
+          trusted_proxy = config["services"]["backend"]["environment"]["TRUSTED_PROXIES"]
+
+          if not dynamic_range.subnet_of(subnet):
+              raise SystemExit("the dynamic address range must be contained by the app subnet")
+          if caddy_address not in subnet:
+              raise SystemExit("the Caddy address must be contained by the app subnet")
+          if caddy_address in dynamic_range:
+              raise SystemExit("the Caddy address must be outside the dynamic address range")
+          if trusted_proxy != str(caddy_address):
+              raise SystemExit("the backend trusted proxy must match the Caddy address")
+          PY
       - name: Build deployment images
         run: docker compose --profile tools build
       - name: Start deployment topology

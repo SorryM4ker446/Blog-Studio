@@ -37,7 +37,7 @@ cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
 ```
 
-For example, `SITE_ADDRESS=blog.example.com` pairs with `SITE_ORIGIN=https://blog.example.com`. Set `APP_IMAGE_TAG` to an immutable release identifier such as a Git commit SHA. If the default Docker subnet conflicts with a host network, change `APP_NETWORK_SUBNET` and choose `CADDY_TRUSTED_IP` inside that subnet.
+For example, `SITE_ADDRESS=blog.example.com` pairs with `SITE_ORIGIN=https://blog.example.com`. Set `APP_IMAGE_TAG` to an immutable release identifier such as a Git commit SHA. The default network keeps Caddy's fixed trusted address outside the dynamic container pool. If the subnet conflicts with a host network, change `APP_NETWORK_SUBNET`, choose `APP_NETWORK_IP_RANGE` inside that subnet, and choose `CADDY_TRUSTED_IP` inside the subnet but outside the dynamic range.
 
 Create the three secret files as described in [`deploy/secrets/README.md`](../deploy/secrets/README.md). Compose mounts a secret only into services that declare it. The backend accepts either the existing direct variables or their `_FILE` alternatives; when both forms of the same value are set, startup fails instead of choosing one silently.
 
@@ -122,7 +122,7 @@ docker compose --env-file deploy/.env logs --tail 200 migrate backend frontend c
 - If `backend` is unhealthy, call `/health/ready` from the host and inspect PostgreSQL and upload-volume permissions. The response stays generic; the correlated cause is in backend logs.
 - If Caddy cannot issue a certificate, verify DNS, public ports, system time, and persistence/write access for its data volume.
 - If forwarded client addresses are wrong, confirm that `CADDY_TRUSTED_IP` matches Caddy's assigned address. Do not trust the whole internet or a broad host network.
-- If the configured subnet overlaps another Docker or host network, stop the project and change both `APP_NETWORK_SUBNET` and `CADDY_TRUSTED_IP` before recreating services.
+- If the configured subnet overlaps another Docker or host network, stop the project and change `APP_NETWORK_SUBNET`, `APP_NETWORK_IP_RANGE`, and `CADDY_TRUSTED_IP` together before recreating services. The dynamic range must be contained by the subnet and must exclude Caddy's fixed address.
 - Do not change the PostgreSQL image to another major release as an ordinary application upgrade. Use a documented PostgreSQL major-upgrade or dump/restore procedure.
 
-The committed CI workflow builds this topology, starts it with disposable secrets and volumes, and probes the public Caddy routes. That job is an ordinary repository check; branch-protection requirements remain a repository-administration decision.
+The committed CI workflow validates that the fixed proxy address is separated from the dynamic container pool, builds this topology, starts it with disposable secrets and volumes, and probes the public Caddy routes. That job is an ordinary repository check; branch-protection requirements remain a repository-administration decision.
