@@ -61,6 +61,9 @@ func TestQueryAnalysis(t *testing.T) {
 	db := openReadAnalysisDatabase(t)
 	t.Log("seeding the isolated long-body fixture")
 	fixture := seedReadAnalysis(t, db, 2400)
+	// Keep the historical experiment reproducible after the application adopts its selected indexes.
+	analysisExec(t, db, "DROP INDEX idx_posts_search_text, idx_posts_admin_order, idx_files_public_order")
+	analysisExec(t, db, "ALTER TABLE posts DROP COLUMN search_text")
 	report := queryAnalysisReport{
 		FixtureVersion: "long-body-v1", CreatedAt: time.Now().UTC().Format(time.RFC3339),
 		Posts: fixture.Posts, Files: fixture.Files, Categories: fixture.Categories, BodyBytes: fixture.BodyBytes,

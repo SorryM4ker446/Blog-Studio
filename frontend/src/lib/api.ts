@@ -10,6 +10,7 @@ import {
   setCSRFToken,
 } from "@/lib/api-client";
 import { rebaseFileViewURLs } from "@/lib/file-url";
+import { searchAPIParams, type ResourceQuery } from "@/lib/resource-query";
 
 export { API_BASE, ApiError, getApiErrorMessage, isApiError } from "@/lib/api-client";
 export type { ApiErrorKind } from "@/lib/api-client";
@@ -50,6 +51,11 @@ interface FileRecord {
 interface SearchResult {
   posts: PostSummary[];
   files: FileRecord[];
+  posts_total: number;
+  files_total: number;
+  total: number;
+  page: number;
+  limit: number;
 }
 
 interface PaginatedResponse<T> {
@@ -180,12 +186,11 @@ export async function logoutUser(): Promise<void> {
 
 // ==================== Post API ====================
 
-export async function getPosts(page = 1, limit = 10, _useAuth = false, sort = "", categoryId = ""): Promise<PaginatedResponse<PostSummary>> {
+export async function getPosts(page = 1, limit = 10, categoryId = ""): Promise<PaginatedResponse<PostSummary>> {
   const query = new URLSearchParams({
     page: page.toString(),
     limit: limit.toString(),
   });
-  if (sort) query.append("sort", sort);
   if (categoryId) query.append("category_id", categoryId);
 
   return publicApiRequest<PaginatedResponse<PostSummary>>(`/posts?${query.toString()}`);
@@ -419,30 +424,14 @@ export async function deleteFile(id: number): Promise<FileMutationResult> {
 
 // ==================== 搜索 API ====================
 
-export async function searchResources(
-  query: string,
-  scope: "posts" | "files" | "all" = "all",
-  categoryId = "",
-): Promise<SearchResult> {
-  const searchParams = new URLSearchParams({ q: query, scope });
-  if (categoryId) searchParams.set("category_id", categoryId);
-  return publicApiRequest<SearchResult>(`/search?${searchParams.toString()}`);
+export async function searchResources(query: ResourceQuery, limit = 10): Promise<SearchResult> {
+  return publicApiRequest<SearchResult>(`/search?${searchAPIParams(query, limit).toString()}`);
 }
 
-export async function searchAdminResources(
-  query: string,
-  scope: "posts" | "files" | "all" = "all",
-  includeSystem = true
-): Promise<SearchResult> {
-  const searchParams = new URLSearchParams({
-    q: query,
-    scope,
-    include_system: includeSystem ? "true" : "false",
-  });
-  return apiRequest<SearchResult>(`/admin/search?${searchParams.toString()}`, {
-    cache: "no-store",
-    auth: true,
-  });
+export async function searchAdminResources(query: ResourceQuery, includeSystem = true, limit = 10): Promise<SearchResult> {
+  const params = searchAPIParams(query, limit);
+  params.set("include_system", String(includeSystem));
+  return apiRequest<SearchResult>(`/admin/search?${params.toString()}`, { cache: "no-store", auth: true });
 }
 
 // ==================== Settings API ====================

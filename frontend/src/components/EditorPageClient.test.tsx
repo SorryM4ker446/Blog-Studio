@@ -107,9 +107,8 @@ const emptySnapshot = { data: [], page: 1, totalPages: 1, total: 0 };
 
 const readyState: EditorPageInitialState = {
   posts: { ...emptySnapshot, data: [recoveredPost, { ...recoveredPost, id: 8, title: "Another article" }], total: 2 },
-  files: emptySnapshot, postDefault: emptySnapshot, fileDefault: emptySnapshot,
+  files: emptySnapshot, postQuery: { query: "", categoryId: "", scope: "posts", page: 1 }, fileQuery: { query: "", categoryId: "", scope: "files", page: 1 },
   categories: [], postsError: "", filesError: "", categoriesError: "",
-  postViewQuery: null, fileViewQuery: null,
 };
 const fullPost: PostDetail = { ...recoveredPost, title: "Fresh server title", content: "Full body from the detail endpoint" };
 
@@ -236,21 +235,19 @@ describe("EditorPageClient initial request recovery", () => {
     const initialState: EditorPageInitialState = {
       posts: emptySnapshot,
       files: emptySnapshot,
-      postDefault: emptySnapshot,
-      fileDefault: emptySnapshot,
+      postQuery: { query: "", categoryId: "", scope: "posts", page: 1 },
+      fileQuery: { query: "", categoryId: "", scope: "files", page: 1 },
       categories: [],
       postsError: "Failed to load posts.",
       filesError: "",
       categoriesError: "",
-      postViewQuery: null,
-      fileViewQuery: null,
     };
 
     render(<EditorPageClient initialState={initialState} />);
 
     expect(screen.getByText("Recovering posts")).toBeVisible();
     expect(screen.queryByText("Failed to load posts.")).not.toBeInTheDocument();
-    await waitFor(() => expect(getAdminPostsMock).toHaveBeenCalledWith(1, 10, "admin"));
+    await waitFor(() => expect(getAdminPostsMock).toHaveBeenCalledWith(1, 10, "admin", ""));
     expect(await screen.findByText("Recovered editor post")).toBeVisible();
     expect(screen.queryByText("Failed to load posts.")).not.toBeInTheDocument();
   });
@@ -259,14 +256,12 @@ describe("EditorPageClient initial request recovery", () => {
     const initialState: EditorPageInitialState = {
       posts: emptySnapshot,
       files: emptySnapshot,
-      postDefault: emptySnapshot,
-      fileDefault: emptySnapshot,
+      postQuery: { query: "", categoryId: "", scope: "posts", page: 1 },
+      fileQuery: { query: "", categoryId: "", scope: "files", page: 1 },
       categories: [],
       postsError: "",
       filesError: "",
       categoriesError: "",
-      postViewQuery: null,
-      fileViewQuery: null,
     };
     const view = render(<EditorPageClient initialState={initialState} />);
     const editorList = screen.getByTestId("editor-list");

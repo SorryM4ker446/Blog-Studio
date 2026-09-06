@@ -32,7 +32,7 @@ describe("posts server search", () => {
       const url = new URL(String(input));
       const body = url.pathname.endsWith("/categories")
         ? [{ id: 2, name: "Go", description: "", post_count: 1, created_at: "2026-08-26T00:00:00Z" }]
-        : { posts: [matchingPost], files: [] };
+        : { posts: [matchingPost], files: [], posts_total: 1, files_total: 0, total: 1, page: 1, limit: 10 };
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -50,6 +50,8 @@ describe("posts server search", () => {
       q: "observability",
       scope: "posts",
       category_id: "2",
+      page: "1",
+      limit: "10",
     });
     expect(result.props.initialState).toMatchObject({
       posts: [matchingPost],

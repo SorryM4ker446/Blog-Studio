@@ -27,6 +27,7 @@ type Post struct {
 	Slug         string     `gorm:"unique;not null;size:255" json:"slug"`
 	Summary      string     `gorm:"type:text" json:"summary"`
 	Content      string     `gorm:"type:text;not null" json:"content"`
+	SearchText   string     `gorm:"type:text;not null" json:"-"`
 	CategoryID   *uint      `gorm:"index:idx_posts_category_id" json:"category_id"`
 	Category     *Category  `gorm:"foreignKey:CategoryID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"category"`
 	Status       string     `gorm:"type:varchar(20);not null;default:'draft';index:idx_posts_status_updated_at,priority:1" json:"status"`

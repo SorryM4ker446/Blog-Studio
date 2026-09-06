@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getAdminPost,
+  searchResources,
+  searchAdminResources,
   getPostTimeline,
   logoutUser,
   normalizeFileViewUrl,
@@ -9,6 +11,27 @@ import {
 } from "./api";
 import { clearCSRFToken, setCSRFToken } from "./api-client";
 import { rebaseFileViewURLs } from "./file-url";
+
+describe("paginated search requests", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("sends public filters and combined pagination without credentials", async () => {
+    const payload = { posts: [], files: [], posts_total: 3, files_total: 2, total: 5, page: 2, limit: 3 };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(payload)); vi.stubGlobal("fetch", fetchMock);
+    await expect(searchResources({query:"a%b 中", scope:"all", categoryId:"0", page:2}, 3)).resolves.toEqual(payload);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(Object.fromEntries(new URL(url).searchParams)).toEqual({q:"a%b 中", scope:"all", category_id:"0", page:"2", limit:"3"});
+    expect(options).toMatchObject({credentials:"omit"});
+  });
+  it("keeps administrator search private with explicit system-file selection", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({posts:[], files:[], total:0, posts_total:0, files_total:0, page:1, limit:10}));
+    vi.stubGlobal("fetch", fetchMock);
+    await searchAdminResources({query:"file", scope:"files", categoryId:"", page:1}, false);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(new URL(url).pathname).toBe("/api/admin/search");
+    expect(new URL(url).searchParams.get("include_system")).toBe("false");
+    expect(options).toMatchObject({credentials:"include", cache:"no-store"});
+  });
+});
 
 describe("administrator article detail", () => {
   afterEach(() => vi.unstubAllGlobals());

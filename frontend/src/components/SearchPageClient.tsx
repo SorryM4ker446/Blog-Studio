@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useState, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { PostSummary, FileRecord } from "@/lib/api";
-import { getApiErrorMessage, searchResources, getPostTimeline } from "@/lib/api";
+import type { PostSummary, FileRecord, Category } from "@/lib/api";
+import { getCategories, searchResources, getPostTimeline } from "@/lib/api";
+import Pagination from "@/components/Pagination";
+import { useResourcePage } from "@/lib/use-resource-page";
+import { readResourceQuery, writeResourceQuery, type ResourceQuery, type SearchScope } from "@/lib/resource-query";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
 import { 
@@ -16,6 +19,13 @@ import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
 export interface SearchPageInitialState {
   query: string;
+  categoryId: string;
+  scope: SearchScope;
+  page: number;
+  totalPages: number;
+  postsTotal: number;
+  filesTotal: number;
+  categories: Category[];
   posts: PostSummary[];
   files: FileRecord[];
   searched: boolean;
@@ -24,85 +34,35 @@ export interface SearchPageInitialState {
 
 export default function SearchPageClient({ initialState }: { initialState: SearchPageInitialState }) {
   const searchParams = useSearchParams();
-  const urlQuery = searchParams.get("q") || "";
-  const [query, setQuery] = useState(initialState.query);
-  const [posts, setPosts] = useState<PostSummary[]>(initialState.posts);
-  const [files, setFiles] = useState<FileRecord[]>(initialState.files);
-  const [searched, setSearched] = useState(initialState.searched);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(initialState.error);
+  const targetQuery = useMemo(() => readResourceQuery(searchParams), [searchParams]);
+  const [input, setInput] = useState({ forQuery: initialState.query, value: initialState.query });
+  if (input.forQuery !== targetQuery.query) setInput({ forQuery: targetQuery.query, value: targetQuery.query });
+  const query = input.value;
+  function setQuery(value: string) { setInput({ forQuery: targetQuery.query, value }); }
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
-  const searchRequestIdRef = useRef(0);
-  const visibleQueryRef = useRef(initialState.query.trim());
-  const retryQueryRef = useRef(initialState.query);
-  const isMountedRef = useRef(true);
-
-  const doSearch = useCallback(async (q: string) => {
-    const normalizedQuery = q.trim();
-    visibleQueryRef.current = normalizedQuery;
-    const requestId = ++searchRequestIdRef.current;
-    retryQueryRef.current = normalizedQuery;
-    if (!normalizedQuery) {
-      setPosts([]);
-      setFiles([]);
-      setSearched(false);
-      setLoading(false);
-      setError("");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    try {
-      const result = await searchResources(normalizedQuery);
-      if (!isMountedRef.current || requestId !== searchRequestIdRef.current) return;
-      setPosts(result.posts || []);
-      setFiles(result.files);
-      setSearched(true);
-    } catch (requestError) {
-      if (!isMountedRef.current || requestId !== searchRequestIdRef.current) return;
-      setSearched(false);
-      setError(getApiErrorMessage(requestError, "Could not complete the search."));
-    } finally {
-      if (isMountedRef.current && requestId === searchRequestIdRef.current) {
-        setLoading(false);
-      }
-    }
+  const load = useCallback(async (target: ResourceQuery): Promise<SearchPageInitialState> => {
+    const [categories, result] = await Promise.all([getCategories(), target.query ? searchResources(target) : Promise.resolve({
+      posts: [], files: [], posts_total: 0, files_total: 0, total: 0, page: 1, limit: 10,
+    })]);
+    return { ...target, posts: result.posts, files: result.files, categories, searched: Boolean(target.query),
+      postsTotal: result.posts_total, filesTotal: result.files_total, page: result.page,
+      totalPages: Math.max(1, Math.ceil(result.total / result.limit)), error: "" };
   }, []);
+  const { state, loading, run, retry } = useResourcePage(initialState, initialState, targetQuery, load, "/search");
+  const { posts, files, searched, error, postsTotal, filesTotal, page, totalPages, categories } = state;
 
-  function submitSearch(value: string) {
-    const normalizedQuery = value.trim();
-    const currentQuery = new URLSearchParams(window.location.search).get("q")?.trim() || "";
-    if (normalizedQuery === currentQuery) {
-      void doSearch(normalizedQuery);
-      return;
-    }
-    window.history.pushState(
-      null,
-      "",
-      normalizedQuery ? `/search?q=${encodeURIComponent(normalizedQuery)}` : "/search",
-    );
-    void doSearch(normalizedQuery);
+  function navigate(target: ResourceQuery) {
+    writeResourceQuery("/search", target, { includeScope: true });
+    void run(target);
   }
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const normalizedURLQuery = urlQuery.trim();
-    if (visibleQueryRef.current === normalizedURLQuery) return;
-    setQuery(urlQuery);
-    void doSearch(urlQuery);
-  }, [doSearch, urlQuery]);
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") {
-      submitSearch(query);
-    }
+  function submitSearch(value: string) {
+    navigate({ ...readResourceQuery(new URLSearchParams(window.location.search)), query: value.trim(), page: 1 });
+  }
+  function changeFilter(patch: Partial<ResourceQuery>) {
+    navigate({ ...readResourceQuery(new URLSearchParams(window.location.search)), ...patch, page: 1 });
+  }
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.key === "Enter") submitSearch(query);
   }
 
   return (
@@ -169,12 +129,21 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
         </button>
       </div>
 
+      <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+        <label>Search scope <select className="resource-filter premium-select" aria-label="Search scope" value={targetQuery.scope} onChange={(event) => changeFilter({ scope: event.target.value as SearchScope })}>
+          <option value="all">Posts and files</option><option value="posts">Posts</option><option value="files">Files</option>
+        </select></label>
+        <label>Article category <select className="resource-filter premium-select" aria-label="Search category" value={targetQuery.categoryId} onChange={(event) => changeFilter({ categoryId: event.target.value })}>
+          <option value="">All categories</option><option value="0">Uncategorized</option>
+          {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+        </select></label>
+      </div>
       <section aria-label="Search results" aria-busy={loading}>
       {error && (
         <ErrorState
           title="Search unavailable"
           message={error}
-          onRetry={() => { void doSearch(retryQueryRef.current); }}
+          onRetry={() => { void retry(); }}
           retrying={loading}
         />
       )}
@@ -196,7 +165,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <FileTextIcon size={16} /> Posts ({posts.length} results)
+                <FileTextIcon size={16} /> Posts ({postsTotal} results)
               </div>
             </div>
             {posts.length === 0 ? (
@@ -211,7 +180,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                   fontSize: "0.9rem",
                 }}
               >
-                No matching posts found.
+                {postsTotal ? "No posts on this page. Use pagination to see the other matches." : "No matching posts found."}
               </div>
             ) : (
               <div
@@ -282,7 +251,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <FolderIcon size={16} /> Files ({files.length} results)
+                <FolderIcon size={16} /> Files ({filesTotal} results)
               </div>
             </div>
             {files.length === 0 ? (
@@ -297,7 +266,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                   fontSize: "0.9rem",
                 }}
               >
-                No matching files found.
+                {filesTotal ? "No files on this page. Use pagination to see the other matches." : "No matching files found."}
               </div>
             ) : (
               <div
@@ -339,6 +308,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
           </div>
         </div>
       )}
+      {!error && searched && !loading && <Pagination currentPage={page} totalPages={totalPages} onPageChange={(next) => navigate({ ...targetQuery, page: next })} />}
       </section>
 
       <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(null)} />

@@ -26,6 +26,22 @@ Measured on 2026-09-06 after the summary/detail implementation, using the same w
 
 All 101 frontend tests in 25 files pass. The new detail loader has 100% statement, line, function and branch coverage, including cancellation and late rejection. The removed duplicate frontend Markdown filter is tested at its remaining backend owner; no production file is excluded to improve the metric. Go race tests, native migration and real backup/restore checks pass. Windows still skips the existing symlink-content test because creating a symlink requires an unavailable OS privilege. The opt-in query experiment runs separately from the ordinary test suite.
 
+## Search pagination regression measurement
+
+Measured on 2026-09-07 after normalized search, database pagination and shared URL state, with the same whole-source scope. The complete Go race suite passed, including native extension/privilege failures, historical backfill, concurrent search snapshots and real backup/restore. The frontend has 128 passing tests in 27 files, and all five desktop Chromium workflows pass.
+
+| Metric | Covered / total | Result |
+| --- | ---: | ---: |
+| Vitest statements | 1,062 / 1,903 | 55.80% |
+| Vitest branches | 1,000 / 1,837 | 54.43% |
+| Vitest functions | 251 / 466 | 53.86% |
+| Vitest lines | 1,002 / 1,746 | 57.38% |
+| Go statements | 1,784 / 2,581 | 69.1% |
+
+Shared URL parsing has 98.24% branch coverage (56/57); the resource page controller has 100% (30/30). Backend search has 95% statement coverage (38/40), and Markdown search extraction has 98.33% (59/60), exceeding the proposed focused 90% targets. The remaining search reader branches handle impossible-to-serialize database JSON defensively. Tests cover database failure, literal/collation matching, pagination limits, visibility, concurrent writes, retry, cancellation, inactive tabs and stale responses. Go does not report a branch percentage.
+
+The removal of duplicated client list/request state reduces the frontend denominator; no production file was excluded. Aggregate Go profiles must merge duplicate block locations across test binaries before counting, as `go tool cover` does. Windows retains the existing symlink privilege skip. The three opt-in plan/maintenance tools are run separately from the ordinary suite. Global and focused numerical CI gates remain planned quality work; this change records real measurements and checks against the proposed floors without claiming those gates are already enforced.
+
 ## Fixed measurement scope
 
 `npm run test:coverage` uses Vitest/V8 4.1.11 and includes all `src/**/*.{ts,tsx}`, excluding only test files, test setup and declaration files. Reports in `frontend/coverage` include text, HTML, LCOV and JSON summary. Untested production files remain in the denominator. Keep the Vitest coverage provider version aligned with Vitest on upgrades.
@@ -49,7 +65,7 @@ npm run test:coverage
 From `backend`, with `TEST_DB_DSN` already configured for a disposable database ending in `_test` and matching PostgreSQL tools on PATH:
 
 ~~~powershell
-go test -race -p 1 '-covermode=atomic' '-coverpkg=./...' '-coverprofile=coverage.out' -json ./... | Tee-Object test-results.json
+go test -race -p 1 -count=1 '-covermode=atomic' '-coverpkg=./...' '-coverprofile=coverage.out' -json ./... | Tee-Object test-results.json
 if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed' }
 go tool cover '-func=coverage.out' | Set-Content coverage-summary.txt
 go tool cover '-html=coverage.out' '-o=coverage.html'

@@ -2,24 +2,15 @@ package handlers
 
 import (
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"blog-backend/internal/apiresponse"
 	"blog-backend/internal/config"
 	"blog-backend/internal/httpcache"
-	"blog-backend/internal/models"
+	"blog-backend/internal/search"
 	"github.com/gin-gonic/gin"
 )
-
-var (
-	markdownImageRegex = regexp.MustCompile(`!\[[^\]]*\]\([^)]+\)`)
-	markdownLinkRegex  = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
-	urlRegex           = regexp.MustCompile(`https?://[^\s)]+`)
-)
-
-const effectiveFileNameSearch = `COALESCE(NULLIF(BTRIM(display_name), ''), orig_name) ILIKE ? ESCAPE E'\\'`
 
 func respondWithSearchResults(c *gin.Context, adminAccess bool, includeSystem bool) {
 	query, ok := validateSearchQuery(c)
@@ -39,79 +30,21 @@ func respondWithSearchResults(c *gin.Context, adminAccess bool, includeSystem bo
 		return
 	}
 
-	normalizedQuery := strings.ToLower(query)
-	likeQuery := "%" + escapeLikePattern(query) + "%"
-	var posts []models.Post
-	var files []models.File
-	if scope == "all" || scope == "posts" {
-		db := config.DB.Joins("LEFT JOIN categories ON categories.id = posts.category_id").Preload("Category")
-		if !adminAccess {
-			db = db.Where("posts.status = ?", "published")
-		}
-		if categoryID != nil {
-			if *categoryID == 0 {
-				db = db.Where("posts.category_id IS NULL")
-			} else {
-				db = db.Where("posts.category_id = ?", *categoryID)
-			}
-		}
-		db = db.Where(`(posts.title ILIKE ? ESCAPE E'\\' OR posts.summary ILIKE ? ESCAPE E'\\' OR posts.content ILIKE ? ESCAPE E'\\' OR categories.name ILIKE ? ESCAPE E'\\')`, likeQuery, likeQuery, likeQuery, likeQuery)
-		if adminAccess {
-			db = db.Order("posts.updated_at DESC, posts.id DESC")
-		} else {
-			db = db.Order("COALESCE(posts.last_edited_at, posts.published_at) DESC, posts.id DESC")
-		}
-		err := db.Find(&posts).Error
-		if err != nil {
-			apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not search posts")
-			return
-		}
-		posts = filterPostsByVisibleText(posts, normalizedQuery)
+	page, limit, ok := parsePagination(c)
+	if !ok {
+		return
 	}
-	if scope == "all" || scope == "files" {
-		db := config.DB.Where(effectiveFileNameSearch, likeQuery)
-		if adminAccess {
-			db = config.DB.Where(`(`+effectiveFileNameSearch+` OR description ILIKE ? ESCAPE E'\\')`, likeQuery, likeQuery)
-		}
-		if !includeSystem {
-			db = db.Where("is_system IS NOT TRUE")
-		}
-		if err := db.Order("created_at DESC, id DESC").Find(&files).Error; err != nil {
-			apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not search files")
-			return
-		}
+	result, err := search.Read(config.DB.WithContext(c.Request.Context()), search.Options{
+		Query: query, Scope: scope, CategoryID: categoryID, Admin: adminAccess, IncludeSystem: includeSystem, Page: page, Limit: limit,
+	})
+	if err != nil {
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not search resources")
+		return
 	}
 	if !adminAccess {
 		httpcache.PublicRead(c)
 	}
-	c.JSON(http.StatusOK, gin.H{"posts": models.SummarizePosts(posts), "files": files})
-}
-
-func filterPostsByVisibleText(posts []models.Post, normalizedQuery string) []models.Post {
-	filtered := make([]models.Post, 0, len(posts))
-	for _, post := range posts {
-		categoryName := ""
-		if post.Category != nil {
-			categoryName = post.Category.Name
-		}
-		if strings.Contains(strings.ToLower(post.Title), normalizedQuery) ||
-			strings.Contains(strings.ToLower(post.Summary), normalizedQuery) ||
-			strings.Contains(strings.ToLower(categoryName), normalizedQuery) ||
-			strings.Contains(strings.ToLower(extractSearchableContent(post.Content)), normalizedQuery) {
-			filtered = append(filtered, post)
-		}
-	}
-	return filtered
-}
-
-func extractSearchableContent(markdown string) string {
-	content := markdownImageRegex.ReplaceAllString(markdown, " ")
-	content = markdownLinkRegex.ReplaceAllString(content, "$1")
-	return urlRegex.ReplaceAllString(content, " ")
-}
-
-func escapeLikePattern(value string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
+	c.JSON(http.StatusOK, result)
 }
 
 func SearchResources(c *gin.Context) {

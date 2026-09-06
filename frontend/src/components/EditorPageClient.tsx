@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import type { Category, FileRecord, PostDetail, PostSummary } from "@/lib/api";
@@ -23,6 +23,8 @@ import {
   uploadFile,
   uploadFileWithMetadata,
 } from "@/lib/api";
+import { readResourceQuery, readEditorTab, resourceURL, setResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib/resource-query";
+import { useResourcePage } from "@/lib/use-resource-page";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
 import PostEditorForm from "@/components/editor/PostEditorForm";
@@ -50,74 +52,50 @@ export interface FileListSnapshot {
 export interface EditorPageInitialState {
   posts: PostListSnapshot;
   files: FileListSnapshot;
-  postDefault: PostListSnapshot;
-  fileDefault: FileListSnapshot;
+  postQuery: ResourceQuery;
+  fileQuery: ResourceQuery;
   categories: Category[];
   postsError: string;
   filesError: string;
   categoriesError: string;
-  postViewQuery: string | null;
-  fileViewQuery: string | null;
 }
 
 export default function EditorPageClient({ initialState }: { initialState: EditorPageInitialState }) {
   const { user, isLoading, authStatus, authError, refreshAuth } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const urlTab: EditorTab = searchParams.get("tab") === "files" ? "files" : "posts";
-  const searchQuery = searchParams.get("q") || "";
+  const urlTab: EditorTab = readEditorTab(searchParams);
+  const searchQuery = readResourceQuery(searchParams).query;
 
   const isMountedRef = useRef(true);
   const categoryRequestIdRef = useRef(0);
-  const postRequestIdRef = useRef(0);
-  const fileRequestIdRef = useRef(0);
-  const postDefaultRequestIdRef = useRef(0);
-  const fileDefaultRequestIdRef = useRef(0);
-  const postDefaultSnapshotRef = useRef<PostListSnapshot | null>(initialState.postDefault);
-  const fileDefaultSnapshotRef = useRef<FileListSnapshot | null>(initialState.fileDefault);
-  const postViewQueryRef = useRef<string | null>(initialState.postViewQuery);
-  const fileViewQueryRef = useRef<string | null>(initialState.fileViewQuery);
-  const postViewPageRef = useRef(initialState.posts.page);
-  const fileViewPageRef = useRef(initialState.files.page);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialRecoveryRef = useRef<{
-    categories: boolean;
-    posts: boolean;
-    files: boolean;
-    query: string;
-    tab: EditorTab;
-    postPage: number;
-    filePage: number;
-  } | null>({
-    categories: Boolean(initialState.categoriesError),
-    posts: Boolean(initialState.postsError),
-    files: Boolean(initialState.filesError),
-    query: searchQuery.trim(),
-    tab: urlTab,
-    postPage: initialState.posts.page,
-    filePage: initialState.files.page,
-  });
-  const recoveryActionsRef = useRef<{
-    loadCategories: () => Promise<void>;
-    loadPosts: (page: number) => Promise<void>;
-    loadFiles: (page: number) => Promise<void>;
-    runSearch: (query: string, tab: EditorTab) => Promise<void>;
-  } | null>(null);
-  const reconcileHistoryRef = useRef<(params: URLSearchParams) => void>(() => undefined);
-
+  const initialRecoveryRef = useRef({ categories: Boolean(initialState.categoriesError), posts: Boolean(initialState.postsError), files: Boolean(initialState.filesError) });
+  const postQuery = useMemo(() => readResourceQuery(searchParams, "posts", "post_page"), [searchParams]);
+  const fileQuery = useMemo(() => readResourceQuery(searchParams, "files", "file_page"), [searchParams]);
+  const loadPostPage = useCallback(async (target: ResourceQuery) => {
+    const result = target.query ? await searchAdminResources(target, false) : await getAdminPosts(target.page, 10, "admin", target.categoryId);
+    return { data: "posts" in result ? result.posts : result.data, total: "posts_total" in result ? result.posts_total : result.total,
+      page: result.page, totalPages: Math.max(1, Math.ceil(result.total / result.limit)), error: "" };
+  }, []);
+  const loadFilePage = useCallback(async (target: ResourceQuery) => {
+    const result = target.query ? await searchAdminResources(target, false) : await getAdminFiles(target.page, 10, false);
+    return { data: "files" in result ? result.files : result.data, total: "files_total" in result ? result.files_total : result.total,
+      page: result.page, totalPages: Math.max(1, Math.ceil(result.total / result.limit)), error: "" };
+  }, []);
+  const authorized = authStatus === "authenticated" && user?.role === "admin";
+  const postResource = useResourcePage({ ...initialState.posts, error: initialState.postsError }, initialState.postQuery, postQuery,
+    loadPostPage, "/editor", "post_page", authorized && urlTab === "posts");
+  const fileResource = useResourcePage({ ...initialState.files, error: initialState.filesError }, initialState.fileQuery, fileQuery,
+    loadFilePage, "/editor", "file_page", authorized && urlTab === "files");
+  const { data: posts, total: postCount, page: postPage, totalPages: postTotalPages, error: postsError } = postResource.state;
+  const { data: files, total: fileCount, page: filePage, totalPages: fileTotalPages, error: filesError } = fileResource.state;
+  const postsLoading = postResource.loading;
+  const filesLoading = fileResource.loading;
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [posts, setPosts] = useState<PostSummary[]>(initialState.posts.data);
-  const [files, setFiles] = useState<FileRecord[]>(initialState.files.data);
   const [categories, setCategories] = useState<Category[]>(initialState.categories);
   const [categoriesLoading, setCategoriesLoading] = useState(Boolean(initialState.categoriesError));
   const [categoriesError, setCategoriesError] = useState(initialState.categoriesError);
-  const [postsLoading, setPostsLoading] = useState(Boolean(initialState.postsError));
-  const [filesLoading, setFilesLoading] = useState(Boolean(initialState.filesError));
-  const [postsError, setPostsError] = useState(initialState.postsError);
-  const [filesError, setFilesError] = useState(initialState.filesError);
-  const [postCount, setPostCount] = useState<number | null>(initialState.posts.total);
-  const [fileCount, setFileCount] = useState<number | null>(initialState.files.total);
-
   const [editingPost, setEditingPost] = useState<PostDetail | null>(null);
   const [postToLoad, setPostToLoad] = useState<PostSummary | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -131,10 +109,6 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const [metadataFile, setMetadataFile] = useState<FileRecord | null>(null);
-  const [postPage, setPostPage] = useState(initialState.posts.page);
-  const [postTotalPages, setPostTotalPages] = useState(initialState.posts.totalPages);
-  const [filePage, setFilePage] = useState(initialState.files.page);
-  const [fileTotalPages, setFileTotalPages] = useState(initialState.files.totalPages);
 
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
@@ -177,233 +151,58 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
     }
   }
 
-  async function loadPosts(pageToLoad: number) {
-    postViewQueryRef.current = null;
-    postViewPageRef.current = pageToLoad;
-    const defaultRequestId = ++postDefaultRequestIdRef.current;
-    const requestId = ++postRequestIdRef.current;
-    setPostsLoading(true);
-    setPostsError("");
-    try {
-      const result = await getAdminPosts(pageToLoad, 10, "admin");
-      if (!isMountedRef.current) return;
-      const snapshot = {
-        data: result.data,
-        page: result.page,
-        totalPages: Math.max(1, Math.ceil(result.total / result.limit)),
-        total: result.total,
-      };
-      if (defaultRequestId === postDefaultRequestIdRef.current) postDefaultSnapshotRef.current = snapshot;
-      if (requestId !== postRequestIdRef.current) return;
-      showPostSnapshot(snapshot);
-    } catch (error) {
-      if (isMountedRef.current && requestId === postRequestIdRef.current) {
-        setPostsError(getApiErrorMessage(error, "Failed to load posts."));
-      }
-    } finally {
-      if (isMountedRef.current && requestId === postRequestIdRef.current) setPostsLoading(false);
-    }
-  }
-
-  async function loadFiles(pageToLoad: number) {
-    fileViewQueryRef.current = null;
-    fileViewPageRef.current = pageToLoad;
-    const defaultRequestId = ++fileDefaultRequestIdRef.current;
-    const requestId = ++fileRequestIdRef.current;
-    setFilesLoading(true);
-    setFilesError("");
-    try {
-      const result = await getAdminFiles(pageToLoad, 10, false);
-      if (!isMountedRef.current) return;
-      const snapshot = {
-        data: result.data,
-        page: result.page,
-        totalPages: Math.max(1, Math.ceil(result.total / result.limit)),
-        total: result.total,
-      };
-      if (defaultRequestId === fileDefaultRequestIdRef.current) fileDefaultSnapshotRef.current = snapshot;
-      if (requestId !== fileRequestIdRef.current) return;
-      showFileSnapshot(snapshot);
-    } catch (error) {
-      if (isMountedRef.current && requestId === fileRequestIdRef.current) {
-        setFilesError(getApiErrorMessage(error, "Failed to load files."));
-      }
-    } finally {
-      if (isMountedRef.current && requestId === fileRequestIdRef.current) setFilesLoading(false);
-    }
-  }
-
-  async function runSearch(query: string, tab: EditorTab) {
-    if (tab === "posts") {
-      postViewQueryRef.current = query;
-      postViewPageRef.current = 1;
-    } else {
-      fileViewQueryRef.current = query;
-      fileViewPageRef.current = 1;
-    }
-    const requestIdRef = tab === "posts" ? postRequestIdRef : fileRequestIdRef;
-    const requestId = ++requestIdRef.current;
-    const setLoading = tab === "posts" ? setPostsLoading : setFilesLoading;
-    const setError = tab === "posts" ? setPostsError : setFilesError;
-    setLoading(true);
-    setError("");
-    try {
-      const result = await searchAdminResources(query, tab, false);
-      if (!isMountedRef.current || requestId !== requestIdRef.current) return;
-      if (tab === "posts") {
-        const visiblePosts = result.posts || [];
-        setPosts(visiblePosts);
-        setPostCount(visiblePosts.length);
-        setPostPage(1);
-        setPostTotalPages(1);
-      } else {
-        const matchingFiles = result.files || [];
-        setFiles(matchingFiles);
-        setFileCount(matchingFiles.length);
-        setFilePage(1);
-        setFileTotalPages(1);
-      }
-    } catch (error) {
-      if (isMountedRef.current && requestId === requestIdRef.current) {
-        setError(getApiErrorMessage(error, `Failed to search ${tab}.`));
-      }
-    } finally {
-      if (isMountedRef.current && requestId === requestIdRef.current) setLoading(false);
-    }
-  }
-
-  recoveryActionsRef.current = { loadCategories, loadPosts, loadFiles, runSearch };
-
+  const recoveryActions = useRef({ loadCategories, posts: postResource.retry, files: fileResource.retry });
+  recoveryActions.current = { loadCategories, posts: postResource.retry, files: fileResource.retry };
   useEffect(() => {
-    if (authStatus !== "authenticated" || user?.role !== "admin") return;
+    if (!authorized) return;
     const recovery = initialRecoveryRef.current;
-    const actions = recoveryActionsRef.current;
-    if (!recovery || !actions) return;
-    initialRecoveryRef.current = null;
-
-    if (recovery.categories) void actions.loadCategories();
-    if (recovery.posts) {
-      if (recovery.query && recovery.tab === "posts") void actions.runSearch(recovery.query, "posts");
-      else void actions.loadPosts(recovery.postPage);
-    }
-    if (recovery.files) {
-      if (recovery.query && recovery.tab === "files") void actions.runSearch(recovery.query, "files");
-      else void actions.loadFiles(recovery.filePage);
-    }
-  }, [authStatus, user]);
-
-  function showPostSnapshot(snapshot: PostListSnapshot) {
-    setPosts(snapshot.data);
-    setPostCount(snapshot.total);
-    setPostPage(snapshot.page);
-    setPostTotalPages(snapshot.totalPages);
-  }
-
-  function showFileSnapshot(snapshot: FileListSnapshot) {
-    setFiles(snapshot.data);
-    setFileCount(snapshot.total);
-    setFilePage(snapshot.page);
-    setFileTotalPages(snapshot.totalPages);
-  }
-
-  function restoreDefaultView(tab: EditorTab) {
-    const viewQueryRef = tab === "posts" ? postViewQueryRef : fileViewQueryRef;
-    if (viewQueryRef.current === null) return;
-
-    if (tab === "posts") {
-      const snapshot = postDefaultSnapshotRef.current;
-      if (snapshot) showPostSnapshot(snapshot);
-      void loadPosts(snapshot?.page || 1);
-    } else {
-      const snapshot = fileDefaultSnapshotRef.current;
-      if (snapshot) showFileSnapshot(snapshot);
-      void loadFiles(snapshot?.page || 1);
-    }
-  }
+    initialRecoveryRef.current = { categories: false, posts: false, files: false };
+    if (recovery.categories) void recoveryActions.current.loadCategories();
+    if (recovery.posts) void recoveryActions.current.posts();
+    if (recovery.files) void recoveryActions.current.files();
+  }, [authorized]);
 
   function readCurrentLocation() {
     const params = new URLSearchParams(window.location.search);
-    return {
-      params,
-      query: (params.get("q") || "").trim(),
-      tab: (params.get("tab") === "files" ? "files" : "posts") as EditorTab,
-    };
+    return { params, query: (params.get("q") || "").trim(), tab: (params.get("tab") === "files" ? "files" : "posts") as EditorTab };
   }
-
-  reconcileHistoryRef.current = (params) => {
-    const tab: EditorTab = params.get("tab") === "files" ? "files" : "posts";
-    const query = (params.get("q") || "").trim();
-    const viewQueryRef = tab === "posts" ? postViewQueryRef : fileViewQueryRef;
-    if (query) {
-      if (viewQueryRef.current !== query) void runSearch(query, tab);
-      return;
-    }
-    if (viewQueryRef.current !== null) {
-      restoreDefaultView(tab);
-      return;
-    }
-
-    const pageParam = tab === "posts" ? params.get("post_page") : params.get("file_page");
-    const parsedPage = Number.parseInt(pageParam || "1", 10);
-    const targetPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-    if (tab === "posts") {
-      if (postViewPageRef.current !== targetPage) void loadPosts(targetPage);
-    } else if (fileViewPageRef.current !== targetPage) {
-      void loadFiles(targetPage);
-    }
-  };
-
-  useEffect(() => {
-    reconcileHistoryRef.current(new URLSearchParams(searchParams.toString()));
-  }, [searchParams]);
-
   async function refreshPosts(pageToLoad = postPage) {
-    const { query } = readCurrentLocation();
-    if (query) await runSearch(query, "posts");
-    else await loadPosts(pageToLoad);
+    const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "posts", "post_page"), page: pageToLoad };
+    if (readCurrentLocation().tab === "posts") writeResourceQuery("/editor", target, { replace: true, pageKey: "post_page" });
+    await postResource.run(target);
   }
-
   async function refreshFiles(pageToLoad = filePage) {
-    const { query } = readCurrentLocation();
-    if (query) await runSearch(query, "files");
-    else await loadFiles(pageToLoad);
+    const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "files", "file_page"), page: pageToLoad };
+    if (readCurrentLocation().tab === "files") writeResourceQuery("/editor", target, { replace: true, pageKey: "file_page" });
+    await fileResource.run(target);
   }
-
-  function handleSearch(query: string) {
-    const normalized = query.trim();
-    const { params, query: currentQuery, tab: currentTab } = readCurrentLocation();
-    if (normalized === currentQuery) {
-      if (normalized) void runSearch(normalized, currentTab);
-      else if (currentTab === "posts") void loadPosts(1);
-      else void loadFiles(1);
-      return;
-    }
-    if (normalized) void runSearch(normalized, currentTab);
-    else if (currentQuery) restoreDefaultView(currentTab);
-    params.set("tab", currentTab);
-    if (normalized) params.set("q", normalized);
-    else params.delete("q");
-    window.history.pushState(null, "", `/editor?${params.toString()}`);
+  function navigateList(tab: EditorTab, patch: Partial<ResourceQuery>) {
+    const { params } = readCurrentLocation();
+    const pageKey = tab === "posts" ? "post_page" : "file_page";
+    const target = { ...readResourceQuery(params, tab, pageKey), ...patch };
+    params.set("tab", tab);
+    setResourceQuery(params, target, pageKey);
+    const url = resourceURL("/editor", params);
+    if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
+    void (tab === "posts" ? postResource.run(target) : fileResource.run(target));
   }
-
+  function handleSearch(query: string) { navigateList(readCurrentLocation().tab, { query: query.trim(), page: 1 }); }
   function handleTabChange(tab: EditorTab) {
-    const { params, query: currentQuery, tab: currentTab } = readCurrentLocation();
-    if (tab === currentTab && !currentQuery) return;
-    if (currentQuery) restoreDefaultView(currentTab);
+    const { params, tab: previousTab, query: previousQuery } = readCurrentLocation();
+    const hadFilter = Boolean(previousQuery || params.get("category"));
     params.set("tab", tab);
     params.delete("q");
-    window.history.pushState(null, "", `/editor?${params.toString()}`);
+    params.delete("category");
+    params.delete(tab === "posts" ? "post_page" : "file_page");
+    const url = resourceURL("/editor", params);
+    if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
+    if (tab !== previousTab && hadFilter) {
+      const previousPageKey = previousTab === "posts" ? "post_page" : "file_page";
+      const defaults = readResourceQuery(params, previousTab, previousPageKey);
+      void (previousTab === "posts" ? postResource.run(defaults) : fileResource.run(defaults));
+    }
   }
-
-  function handlePageChange(tab: EditorTab, page: number) {
-    const params = new URLSearchParams(window.location.search);
-    params.set("tab", tab);
-    params.delete("q");
-    params.set(tab === "posts" ? "post_page" : "file_page", page.toString());
-    window.history.pushState(null, "", `/editor?${params.toString()}`);
-    if (tab === "posts") void loadPosts(page);
-    else void loadFiles(page);
-  }
+  function handlePageChange(tab: EditorTab, page: number) { navigateList(tab, { page }); }
 
   const applyPostDetail = useCallback((post: PostDetail) => {
     setEditingPost(post);
@@ -551,7 +350,6 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
     const result = await updateFileMetadata(file.id, displayName, description);
     if (result.ok && result.file) {
       const updated = result.file;
-      setFiles((current) => current.map((item) => item.id === updated.id ? updated : item));
       setPreviewFile((current) => current?.id === updated.id ? updated : current);
       await refreshFiles(filePage);
       notifyUpdate();
@@ -611,16 +409,11 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
           onDeleteFile={(id) => openDelete("file", id)}
           onLoadPosts={(page) => handlePageChange("posts", page)}
           onLoadFiles={(page) => handlePageChange("files", page)}
-          onRetryPosts={() => {
-            const { query } = readCurrentLocation();
-            if (query) void runSearch(query, "posts");
-            else void loadPosts(postPage);
-          }}
-          onRetryFiles={() => {
-            const { query } = readCurrentLocation();
-            if (query) void runSearch(query, "files");
-            else void loadFiles(filePage);
-          }}
+          onRetryPosts={() => { void postResource.retry(); }}
+          onRetryFiles={() => { void fileResource.retry(); }}
+          categories={categories}
+          categoryId={postQuery.categoryId}
+          onCategoryChange={(categoryId) => navigateList("posts", { categoryId, page: 1 })}
         />
       ) : postToLoad ? (
         <PostDetailLoader

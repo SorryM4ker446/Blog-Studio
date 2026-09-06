@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"blog-backend/internal/models"
+	"blog-backend/internal/searchtext"
 	"github.com/gin-gonic/gin"
 )
 
@@ -79,6 +80,9 @@ func TestPublicSearchFiltersPostsByCategory(t *testing.T) {
 			Title: "Shared search term two", Slug: "shared-search-term-two", Content: "visible content",
 			CategoryID: &categories[1].ID, Status: "published", PublishedAt: &publishedAt,
 		},
+	}
+	for i := range posts {
+		posts[i].SearchText = searchtext.Extract(posts[i].Content)
 	}
 	if err := db.Create(&posts).Error; err != nil {
 		t.Fatalf("create posts: %v", err)
@@ -231,6 +235,9 @@ func TestPublicPostsUseEffectiveTimelineOrder(t *testing.T) {
 		{Title: "Timeline edited", Slug: "timeline-edited", Content: "timeline", Status: "published", PublishedAt: &middlePublication, LastEditedAt: &recentEdit},
 		{Title: "Timeline new", Slug: "timeline-new", Content: "timeline", Status: "published", PublishedAt: &recentPublication},
 	}
+	for i := range posts {
+		posts[i].SearchText = searchtext.Extract(posts[i].Content)
+	}
 	if err := db.Create(&posts).Error; err != nil {
 		t.Fatalf("create timeline posts: %v", err)
 	}
@@ -269,6 +276,7 @@ func TestCategoryDeletionAndDatabaseConstraints(t *testing.T) {
 		t.Fatalf("create category: %v", err)
 	}
 	post := models.Post{Title: "Categorized", Slug: "categorized", Content: "content", CategoryID: &category.ID, Status: "draft"}
+	post.SearchText = searchtext.Extract(post.Content)
 	if err := db.Create(&post).Error; err != nil {
 		t.Fatalf("create categorized post: %v", err)
 	}
@@ -306,16 +314,19 @@ func TestCategoryDeletionAndDatabaseConstraints(t *testing.T) {
 	requireAPIError(t, duplicateCategory.Code, duplicateCategory.Body.Bytes(), http.StatusConflict, "category_name_conflict")
 
 	invalidStatus := models.Post{Title: "Invalid status", Slug: "invalid-status", Content: "content", Status: "archived"}
+	invalidStatus.SearchText = searchtext.Extract(invalidStatus.Content)
 	if err := db.Create(&invalidStatus).Error; err == nil {
 		t.Fatal("database accepted an invalid post status")
 	}
 	missingCategoryID := uint(999999)
 	orphan := models.Post{Title: "Orphan", Slug: "orphan", Content: "content", CategoryID: &missingCategoryID, Status: "draft"}
+	orphan.SearchText = searchtext.Extract(orphan.Content)
 	if err := db.Create(&orphan).Error; err == nil {
 		t.Fatal("database accepted a post with a missing category")
 	}
 	lastEditedAt := time.Now()
 	neverPublishedButEdited := models.Post{Title: "Invalid edit time", Slug: "invalid-edit-time", Content: "content", Status: "draft", LastEditedAt: &lastEditedAt}
+	neverPublishedButEdited.SearchText = searchtext.Extract(neverPublishedButEdited.Content)
 	if err := db.Create(&neverPublishedButEdited).Error; err == nil {
 		t.Fatal("database accepted last_edited_at without a first publication time")
 	}

@@ -1,0 +1,27 @@
+-- Application schema before normalized article search.
+CREATE TABLE "users" ("id" bigserial,"username" varchar(50) NOT NULL,"password_hash" text NOT NULL,"role" varchar(20) NOT NULL DEFAULT 'admin',"session_version" bigint NOT NULL DEFAULT 1,"created_at" timestamptz,PRIMARY KEY ("id"),CONSTRAINT "uni_users_username" UNIQUE ("username"));
+CREATE TABLE "categories" ("id" bigserial,"name" varchar(50) NOT NULL,"description" text,"created_at" timestamptz,PRIMARY KEY ("id"),CONSTRAINT "uni_categories_name" UNIQUE ("name"));
+CREATE TABLE "posts" ("id" bigserial,"title" varchar(255) NOT NULL,"slug" varchar(255) NOT NULL,"summary" text,"content" text NOT NULL,"category_id" bigint,"status" varchar(20) NOT NULL DEFAULT 'draft',"published_at" timestamptz,"last_edited_at" timestamptz,"created_at" timestamptz,"updated_at" timestamptz,PRIMARY KEY ("id"),CONSTRAINT "uni_posts_slug" UNIQUE ("slug"));
+CREATE INDEX IF NOT EXISTS "idx_posts_status_updated_at" ON "posts" ("status","updated_at" desc);
+CREATE INDEX IF NOT EXISTS "idx_posts_category_id" ON "posts" ("category_id");
+CREATE TABLE "files" ("id" bigserial,"name" varchar(255) NOT NULL,"orig_name" varchar(255) NOT NULL,"display_name" varchar(255) NOT NULL DEFAULT '',"description" varchar(500) NOT NULL DEFAULT '',"path" varchar(500) NOT NULL,"size" bigint NOT NULL DEFAULT 0,"mime_type" varchar(100),"is_system" boolean NOT NULL DEFAULT false,"created_at" timestamptz,PRIMARY KEY ("id"));
+CREATE INDEX IF NOT EXISTS "idx_files_system_created_at" ON "files" ("is_system","created_at" desc);
+CREATE UNIQUE INDEX IF NOT EXISTS "ux_files_name" ON "files" ("name");
+CREATE TABLE "settings" ("id" bigserial,"key" varchar(100) NOT NULL,"value" text,"created_at" timestamptz,"updated_at" timestamptz,PRIMARY KEY ("id"),CONSTRAINT "uni_settings_key" UNIQUE ("key"));
+ALTER TABLE "posts" ADD CONSTRAINT "fk_posts_category" FOREIGN KEY ("category_id") REFERENCES "categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE users ADD CONSTRAINT chk_users_role CHECK (role IN ('admin', 'writer'));
+ALTER TABLE users ADD CONSTRAINT chk_users_session_version CHECK (session_version >= 1);
+ALTER TABLE categories ADD CONSTRAINT chk_categories_name_not_blank CHECK (btrim(name) <> '');
+ALTER TABLE posts ADD CONSTRAINT chk_posts_title_not_blank CHECK (btrim(title) <> '');
+ALTER TABLE posts ADD CONSTRAINT chk_posts_content_not_blank CHECK (btrim(content) <> '');
+ALTER TABLE posts ADD CONSTRAINT chk_posts_slug_not_blank CHECK (btrim(slug) <> '');
+ALTER TABLE posts ADD CONSTRAINT chk_posts_status CHECK (status IN ('draft', 'published'));
+ALTER TABLE posts ADD CONSTRAINT chk_posts_publication_timestamp CHECK (status <> 'published' OR published_at IS NOT NULL);
+ALTER TABLE posts ADD CONSTRAINT chk_posts_last_edited_at CHECK (last_edited_at IS NULL OR (published_at IS NOT NULL AND last_edited_at >= published_at));
+ALTER TABLE files ADD CONSTRAINT chk_files_size_nonnegative CHECK (size >= 0);
+ALTER TABLE files ADD CONSTRAINT chk_files_display_name_not_blank CHECK (btrim(display_name) <> '');
+ALTER TABLE settings ADD CONSTRAINT chk_settings_key_not_blank CHECK (btrim(key) <> '');
+CREATE UNIQUE INDEX IF NOT EXISTS ux_categories_name_ci ON categories (lower(btrim(name)));
+CREATE INDEX IF NOT EXISTS idx_posts_public_timeline ON posts (status, (COALESCE(last_edited_at, published_at)) DESC, id DESC);
+CREATE TABLE blog_schema_migrations (version BIGINT PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+INSERT INTO blog_schema_migrations(version, name) VALUES (2026082601, 'establish_application_schema');

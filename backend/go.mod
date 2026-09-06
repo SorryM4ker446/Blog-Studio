@@ -8,6 +8,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/prometheus/client_golang v1.24.1
+	github.com/yuin/goldmark v1.8.5
 	golang.org/x/crypto v0.54.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1

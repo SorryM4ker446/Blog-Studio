@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"strings"
@@ -12,9 +13,14 @@ import (
 )
 
 func main() {
+	migrateOnly := flag.Bool("migrate-only", false, "prepare the isolated test database without resetting data")
+	flag.Parse()
 	db, err := testutil.OpenDatabase()
 	if err != nil {
 		log.Fatalf("Open test database: %v", err)
+	}
+	if *migrateOnly {
+		return
 	}
 	if err := testutil.ResetDatabase(db); err != nil {
 		log.Fatalf("Reset test database: %v", err)

@@ -14,6 +14,7 @@ import (
 	"blog-backend/internal/health"
 	"blog-backend/internal/models"
 	"blog-backend/internal/observability"
+	"blog-backend/internal/searchtext"
 	"blog-backend/internal/security"
 	"blog-backend/internal/testutil"
 	"github.com/gin-gonic/gin"
@@ -60,6 +61,9 @@ func BenchmarkAnonymousPublicReads(b *testing.B) {
 			Status:      "published",
 			PublishedAt: &publishedAt,
 		}
+	}
+	for i := range posts {
+		posts[i].SearchText = searchtext.Extract(posts[i].Content)
 	}
 	if err := db.Create(&posts).Error; err != nil {
 		b.Fatalf("seed benchmark posts: %v", err)

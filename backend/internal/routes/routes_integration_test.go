@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"blog-backend/internal/models"
+	"blog-backend/internal/searchtext"
 	"blog-backend/internal/session"
 	"blog-backend/internal/testutil"
 	"github.com/gin-gonic/gin"
@@ -381,6 +382,9 @@ func TestDraftVisibilityIsSeparatedFromPublicPosts(t *testing.T) {
 	posts := []models.Post{
 		{Title: "Published post", Slug: "published-post", Content: "Visible", CategoryID: &category.ID, Status: "published", PublishedAt: &now},
 		{Title: "Draft post", Slug: "draft-post", Content: "Hidden", CategoryID: &category.ID, Status: "draft"},
+	}
+	for i := range posts {
+		posts[i].SearchText = searchtext.Extract(posts[i].Content)
 	}
 	if err := db.Create(&posts).Error; err != nil {
 		t.Fatalf("create posts: %v", err)

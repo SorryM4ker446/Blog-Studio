@@ -14,6 +14,7 @@ import (
 	"blog-backend/internal/config"
 	"blog-backend/internal/migrations"
 	"blog-backend/internal/models"
+	"blog-backend/internal/searchtext"
 	"blog-backend/internal/testutil"
 	"github.com/jackc/pgx/v5"
 	"gorm.io/driver/postgres"
@@ -89,6 +90,7 @@ func openReadAnalysisDatabase(t testing.TB) *gorm.DB {
 	analysisExec(t, tx, "SET LOCAL search_path = "+schema)
 	analysisExec(t, tx, "SET LOCAL statement_timeout = '120s'")
 	analysisExec(t, tx, "SET LOCAL lock_timeout = '10s'")
+	analysisExec(t, tx, "CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public")
 	if err := migrations.Apply(context.Background(), tx); err != nil {
 		t.Fatal("could not apply the existing migrations in the isolated schema")
 	}
@@ -151,6 +153,9 @@ func seedReadAnalysis(t testing.TB, db *gorm.DB, count int) readAnalysisFixture 
 			posts = append(posts, post)
 			fixture.BodyBytes += len(markdown)
 			fixture.SearchTexts[i] = visible
+		}
+		for i := range posts {
+			posts[i].SearchText = searchtext.Extract(posts[i].Content)
 		}
 		if err := db.Create(&posts).Error; err != nil {
 			t.Fatal("could not seed query analysis posts")

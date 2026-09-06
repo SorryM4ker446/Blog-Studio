@@ -10,6 +10,7 @@ import (
 
 	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
+	"blog-backend/internal/searchtext"
 	"blog-backend/internal/testutil"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -30,6 +31,9 @@ func TestPostCollectionsReturnSummaries(t *testing.T) {
 	posts := []models.Post{
 		{Title: "Published article", Slug: "summary-published", Summary: "Introduction", Content: body, CategoryID: &category.ID, Status: "published", PublishedAt: &now},
 		{Title: "Draft article", Slug: "summary-draft", Content: body, Status: "draft"},
+	}
+	for i := range posts {
+		posts[i].SearchText = searchtext.Extract(posts[i].Content)
 	}
 	if err := db.Create(&posts).Error; err != nil {
 		t.Fatal(err)
@@ -112,6 +116,10 @@ func TestPostCollectionsReturnSummaries(t *testing.T) {
 	requireSummaryItems(t, page.Data, 0)
 
 	detail := performJSONRequest(t, router, http.MethodGet, fmt.Sprintf("/api/posts/%d", posts[0].ID), nil, nil, false)
+	projection, _, _ := strings.Cut(strings.ToLower(projections[len(projections)-1]), " from ")
+	if !strings.Contains(projection, "content") || strings.Contains(projection, "search_text") || strings.Contains(projection, "select *") {
+		t.Fatal("article detail must select its original body without derived search text")
+	}
 	var full models.PostDetail
 	if err := json.Unmarshal(detail.Body.Bytes(), &full); err != nil {
 		t.Fatal(err)
@@ -156,6 +164,9 @@ func TestAdministratorPostDetailAccess(t *testing.T) {
 	posts := []models.Post{
 		{Title: "Draft detail", Slug: "draft-detail", Content: "Private draft body", Status: "draft"},
 		{Title: "Published detail", Slug: "published-detail", Content: "Public detail body", Status: "published", PublishedAt: &now},
+	}
+	for i := range posts {
+		posts[i].SearchText = searchtext.Extract(posts[i].Content)
 	}
 	if err := db.Create(&posts).Error; err != nil {
 		t.Fatal(err)

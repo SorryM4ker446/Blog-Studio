@@ -13,6 +13,7 @@ import (
 	"blog-backend/internal/config"
 	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
+	"blog-backend/internal/searchtext"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -114,7 +115,7 @@ func respondWithPost(c *gin.Context, includeDrafts bool) {
 		return
 	}
 	var post models.Post
-	db := config.DB.Preload("Category")
+	db := config.DB.Omit("search_text").Preload("Category")
 	if !includeDrafts {
 		db = db.Where("status = ?", "published")
 	}
@@ -185,7 +186,7 @@ func CreatePost(c *gin.Context) {
 	}
 
 	post := models.Post{
-		Title: title, Summary: input.Summary, Content: content, CategoryID: categoryID,
+		Title: title, Summary: input.Summary, Content: content, SearchText: searchtext.Extract(content), CategoryID: categoryID,
 		Category: category, Status: status,
 	}
 	if status == "published" {
@@ -220,7 +221,7 @@ func UpdatePost(c *gin.Context) {
 	}
 
 	var post models.Post
-	err := config.DB.First(&post, id).Error
+	err := config.DB.Omit("search_text").First(&post, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		apiresponse.Error(c, http.StatusNotFound, "post_not_found", "Post not found")
 		return
@@ -250,6 +251,7 @@ func UpdatePost(c *gin.Context) {
 			return
 		}
 		updates["content"] = *input.Content
+		updates["search_text"] = searchtext.Extract(*input.Content)
 	}
 	if input.Summary != nil {
 		if validationErr := validateOptionalLength(*input.Summary, "summary", 10_000); validationErr != nil {
@@ -312,7 +314,7 @@ func UpdatePost(c *gin.Context) {
 		return
 	}
 	post = models.Post{}
-	if err := config.DB.Preload("Category").First(&post, id).Error; err != nil {
+	if err := config.DB.Omit("search_text").Preload("Category").First(&post, id).Error; err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Post was updated but could not be reloaded")
 		return
 	}

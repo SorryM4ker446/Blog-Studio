@@ -41,11 +41,11 @@ func TestApplyCreatesCurrentSchemaOnEmptyDatabase(t *testing.T) {
 func TestApplyBaselinesExistingSchemaWithoutChangingData(t *testing.T) {
 	db := openIsolatedSchema(t)
 	if err := db.AutoMigrate(
-		&models.User{},
-		&models.Category{},
-		&models.Post{},
-		&models.File{},
-		&models.Setting{},
+		&schemaUser{},
+		&schemaCategory{},
+		&schemaPost{},
+		&schemaFile{},
+		&schemaSetting{},
 	); err != nil {
 		t.Fatalf("create existing schema: %v", err)
 	}
@@ -79,11 +79,11 @@ func TestApplyBaselinesExistingSchemaWithoutChangingData(t *testing.T) {
 func TestApplyNormalizesLegacyRowsAndRestoresConstraints(t *testing.T) {
 	db := openIsolatedSchema(t)
 	if err := db.AutoMigrate(
-		&models.User{},
-		&models.Category{},
-		&models.Post{},
-		&models.File{},
-		&models.Setting{},
+		&schemaUser{},
+		&schemaCategory{},
+		&schemaPost{},
+		&schemaFile{},
+		&schemaSetting{},
 	); err != nil {
 		t.Fatalf("create legacy schema: %v", err)
 	}
@@ -210,6 +210,9 @@ func openIsolatedSchema(t *testing.T) *gorm.DB {
 		t.Fatalf("create isolated schema: %v", err)
 	}
 
+	if err := admin.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public`).Error; err != nil {
+		t.Fatal("prepare test extension")
+	}
 	isolatedDSN, err := withSearchPath(dsn, schema)
 	if err != nil {
 		t.Fatalf("build isolated schema connection: %v", err)
