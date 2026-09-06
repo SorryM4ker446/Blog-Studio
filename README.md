@@ -53,7 +53,10 @@ go run ./cmd/seed
 
 推荐的生产基线是单台 Linux 主机上的 Docker Compose：Caddy 提供同源 HTTPS 入口，Next.js 与 Go API 使用非 root 多阶段镜像，PostgreSQL、上传内容和证书状态使用独立持久化卷。首次部署、Secret 准备、升级和回滚步骤请参阅 [`docs/deployment.md`](docs/deployment.md)。这些文件不会改变上述原生本地开发方式。
 
+查询实测与索引选择见 [docs/query-analysis.md](docs/query-analysis.md)，后续列表、搜索及 URL 契约见 [docs/search-contract.md](docs/search-contract.md)，真实覆盖率与统计口径见 [docs/coverage-baseline.md](docs/coverage-baseline.md)。接口设计文档明确区分当前能力与尚待实现的行为。
+
 ## 5. 样式拓展
+
 全站样式位于 `frontend/src/app/globals.css` 中：
 - `var(--bg-sidebar)` 和 `var(--nav-active)` 控制着侧边栏明暗基调。
 - 如需更改系统强调色，可修改 CSS 中的 `var(--accent-*)` 系列色卡。

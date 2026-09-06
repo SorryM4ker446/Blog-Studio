@@ -64,3 +64,5 @@ Pagination uses `page` from 1 through 1,000,000 and `limit` from 1 through 100. 
 Successful resource creates and updates return the resource, list endpoints return their existing pagination envelope, and successful deletes or action endpoints return `{ "message": "..." }`.
 
 Public pages display `Published on` with `published_at` until a post receives a post-publication edit. They then display `Updated on` with `last_edited_at`.
+
+The proposed summary/detail split, paginated search and derived-text migration are specified in [search-contract.md](search-contract.md). They are design requirements for the next implementation, not capabilities of the current API. The [query analysis](query-analysis.md) changes only disposable test schemas; the application migration version remains unchanged.

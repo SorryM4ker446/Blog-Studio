@@ -85,6 +85,19 @@ func BenchmarkAnonymousPublicReads(b *testing.B) {
 		b.Fatalf("seed benchmark settings: %v", err)
 	}
 
+	runAnonymousReadBenchmarks(b, posts[0].ID, "anonymous", false)
+}
+
+func BenchmarkAnonymousLongBodyReads(b *testing.B) {
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	b.Cleanup(func() { slog.SetDefault(previousLogger) })
+	db := openReadAnalysisDatabase(b)
+	seedReadAnalysis(b, db, 2400)
+	runAnonymousReadBenchmarks(b, 3, "needlequartz", true)
+}
+
+func runAnonymousReadBenchmarks(b *testing.B, postID uint, searchTerm string, longBodies bool) {
 	gin.SetMode(gin.TestMode)
 	cfg := config.Current()
 	router := setupRouter(
@@ -97,16 +110,20 @@ func BenchmarkAnonymousPublicReads(b *testing.B) {
 		path string
 	}{
 		{name: "post-list", path: "/api/posts?page=1&limit=10"},
-		{name: "post-detail", path: fmt.Sprintf("/api/posts/%d", posts[0].ID)},
+		{name: "post-detail", path: fmt.Sprintf("/api/posts/%d", postID)},
 		{name: "categories", path: "/api/categories"},
 		{name: "file-list", path: "/api/files?page=1&limit=10"},
 		{name: "settings", path: "/api/settings"},
-		{name: "search", path: "/api/search?q=anonymous&scope=posts"},
+		{name: "search", path: "/api/search?q=" + searchTerm + "&scope=posts"},
+	}
+	if longBodies {
+		benchmarks = append(benchmarks, struct{ name, path string }{"search-common", "/api/search?q=article&scope=posts"})
 	}
 
 	for _, benchmark := range benchmarks {
 		b.Run(benchmark.name, func(b *testing.B) {
 			b.ReportAllocs()
+			var responseBytes int
 			for b.Loop() {
 				request := httptest.NewRequest(http.MethodGet, benchmark.path, nil)
 				request.RemoteAddr = "192.0.2.100:1234"
@@ -118,7 +135,9 @@ func BenchmarkAnonymousPublicReads(b *testing.B) {
 				if len(request.Cookies()) != 0 {
 					b.Fatal("anonymous benchmark request unexpectedly contained cookies")
 				}
+				responseBytes = response.Body.Len()
 			}
+			b.ReportMetric(float64(responseBytes), "response_bytes/op")
 		})
 	}
 }
