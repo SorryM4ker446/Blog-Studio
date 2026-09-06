@@ -12,6 +12,7 @@ import (
 	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"blog-backend/internal/observability"
+	"blog-backend/internal/searchtext"
 	"blog-backend/internal/security"
 	"github.com/gin-gonic/gin"
 )
@@ -25,6 +26,7 @@ func TestPublicAndAuthenticatedCacheBoundaries(t *testing.T) {
 		Title: "Cached public post", Slug: "cached-public-post", Content: "public",
 		Status: "published", PublishedAt: &publishedAt,
 	}
+	post.SearchText = searchtext.Extract(post.Content)
 	if err := db.Create(&post).Error; err != nil {
 		t.Fatalf("create public post: %v", err)
 	}

@@ -12,7 +12,7 @@ PowerShell example:
 $env:TEST_DB_DSN = "host=localhost user=postgres password=your_password dbname=blog_db_test port=5432 sslmode=disable TimeZone=Asia/Shanghai"
 ```
 
-The integration test helper validates the database name before running `TRUNCATE`. The Playwright setup resets this isolated database and creates a test-only administrator before every run.
+The integration test helper validates the database name before installing the test-only `pg_trgm` prerequisite, applying migrations or running `TRUNCATE`. `go run ./cmd/testsetup --migrate-only` performs guarded preparation without resetting rows; CI and Playwright server startup use it. Production uses the separate operator extension procedure and `cmd/migrate`. The Playwright setup resets this isolated database and creates a test-only administrator before every run.
 
 ## Backend tests
 
@@ -42,14 +42,14 @@ The additional `BenchmarkAnonymousLongBodyReads` uses a rollback-only random sch
 Full backend validation and coverage:
 
 ~~~powershell
-go test -race -p 1 '-covermode=atomic' '-coverpkg=./...' '-coverprofile=coverage.out' ./...
+go test -race -p 1 -count=1 '-covermode=atomic' '-coverpkg=./...' '-coverprofile=coverage.out' ./...
 go vet ./...
 go build ./...
 go tool cover '-func=coverage.out'
 go tool cover '-html=coverage.out' '-o=coverage.html'
 ~~~
 
-The query experiment requires `QUERY_ANALYSIS_OUTPUT` explicitly and refuses a missing/unsafe database configuration. Its ordinary-suite skip means only the opt-in measurement was not requested; the isolation/rollback integration test still runs whenever `TEST_DB_DSN` is configured.
+The historical query experiment requires `QUERY_ANALYSIS_OUTPUT` explicitly; the implemented query/index checks use `SEARCH_QUERY_ANALYSIS_OUTPUT`, and the optional GIN maintenance comparison uses `SEARCH_INDEX_EXPERIMENT_OUTPUT`. Each runs only with its explicit output destination and refuses a missing/unsafe database configuration. Its ordinary-suite skip means only the opt-in measurement was not requested; the isolation/rollback integration test still runs whenever `TEST_DB_DSN` is configured.
 
 When `TEST_DB_DSN` is absent, PostgreSQL integration tests are skipped. CI always supplies it, so the integration tests are mandatory there.
 
@@ -109,8 +109,16 @@ File storage coverage verifies strict TXT detection, active or structured conten
 
 Runtime coverage verifies liveness and readiness semantics, dependency timeouts, shutdown readiness, writable-storage probes, request ID validation, route-template access logging, panic recovery, and sensitive structured-log attribute redaction.
 
-Migration integration coverage uses isolated PostgreSQL schemas to verify empty-database setup, registration of an existing schema without data loss, legacy-row normalization, repeated execution, read-only current-version checks, and concurrent lock serialization. Backup integration coverage creates disposable source and `_restore` databases, produces a real `pg_dump` bundle with uploaded content, verifies checksums and archive structure, restores through `pg_restore`, and checks the restored schema, records, content, and storage reconciliation. `pg_dump` and `pg_restore` from PostgreSQL 18 are required when `TEST_DB_DSN` is configured; GitHub Actions installs the matching client tools before running the backend suite.
+Migration integration coverage includes a fixed pre-search SQL fixture, more than two backfill batches, unchanged content/timestamps, an index-build failure with complete rollback and retry, missing-extension failure in a disposable database, and the configured GIN write-maintenance option. It also uses isolated PostgreSQL schemas to verify empty-database setup, registration of an existing schema without data loss, legacy-row normalization, repeated execution, read-only current-version checks, and concurrent lock serialization. Backup integration coverage creates disposable source and `_restore` databases, produces a real `pg_dump` bundle with uploaded content, verifies checksums and archive structure, restores through `pg_restore`, and checks the restored schema, records, content, and storage reconciliation. `pg_dump` and `pg_restore` from PostgreSQL 18 are required when `TEST_DB_DSN` is configured; GitHub Actions installs the matching client tools before running the backend suite.
 
 The backend job retains query-plan JSON and both benchmark text reports for 30 days. Slower measurements remain visible for comparison without a timing threshold; invalid results or a failed experiment still fail the step.
 
 The container job validates the resolved Compose model, including separation between Caddy's fixed trusted address and the dynamic container address pool. It builds the non-root application images and maintenance image, starts PostgreSQL, migration, backend, frontend, and Caddy with disposable secrets and volumes, and probes readiness plus the same-origin `/api` and frontend routes. It also confirms that `/internal/metrics` is not reachable through Caddy. It always removes the disposable volumes afterward. Local Compose execution is not part of the native development validation workflow.
+
+## Search pagination regression
+
+Backend tests cover all scopes, exact post/file/combined totals, combined limits, stable tied timestamps and IDs, metadata/body deduplication, deep empty pages, malformed page/limit errors, literal wildcard characters, Chinese/short terms, case matching, category renames and draft/system-file isolation. A concurrent writer toggles article/file visibility transactionally while readers verify that totals and hydrated pages share one snapshot. Article writes and historical backfill use the same extractor; direct client writes of derived text are rejected.
+
+Vitest covers shared server/browser query parsing, invalid and duplicated URL conditions, preserved query/category/scope on paging and retry, stale successes and failures, unmount, inactive Editor tabs and bounded last-page correction. The browser pagination workflow seeds more than ten matching resources, verifies body-free combined pages and exact counts, restores All Posts/Drive/advanced-search/Editor filters through back/forward/reload, and deletes the last article on a filtered Editor page to verify replace-history correction. Existing identity, preference, hard-refresh, input and scroll workflows run with it.
+
+Query plan assertions exercise the production SQL after incremental bulk insertion through the real extractor, without forcing planner options or manually flushing an index queue. The historical experiment removes the newly installed search field/indexes only inside its rollback-only schema to preserve the original comparison. CI uploads both plan reports along with existing coverage and HTTP benchmark artifacts.

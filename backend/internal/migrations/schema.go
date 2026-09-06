@@ -3,30 +3,29 @@ package migrations
 import (
 	"fmt"
 
-	"blog-backend/internal/models"
 	"gorm.io/gorm"
 )
 
-// establishApplicationSchema creates the current schema on an empty database
+// establishApplicationSchema creates the baseline schema on an empty database
 // and safely normalizes databases created by earlier application releases.
 func establishApplicationSchema(tx *gorm.DB) error {
-	if tx.Migrator().HasTable(&models.User{}) && tx.Migrator().HasColumn(&models.User{}, "Role") {
+	if tx.Migrator().HasTable(&schemaUser{}) && tx.Migrator().HasColumn(&schemaUser{}, "Role") {
 		if err := tx.Exec(`UPDATE users SET role = 'writer' WHERE role IS NULL`).Error; err != nil {
 			return fmt.Errorf("normalize legacy user roles: %w", err)
 		}
 	}
-	if tx.Migrator().HasTable(&models.Post{}) && tx.Migrator().HasColumn(&models.Post{}, "Status") {
+	if tx.Migrator().HasTable(&schemaPost{}) && tx.Migrator().HasColumn(&schemaPost{}, "Status") {
 		if err := tx.Exec(`UPDATE posts SET status = 'draft' WHERE status IS NULL OR status NOT IN ('draft', 'published')`).Error; err != nil {
 			return fmt.Errorf("normalize legacy post statuses: %w", err)
 		}
 	}
-	if tx.Migrator().HasTable(&models.File{}) {
-		if tx.Migrator().HasColumn(&models.File{}, "Size") {
+	if tx.Migrator().HasTable(&schemaFile{}) {
+		if tx.Migrator().HasColumn(&schemaFile{}, "Size") {
 			if err := tx.Exec(`UPDATE files SET size = 0 WHERE size IS NULL`).Error; err != nil {
 				return fmt.Errorf("normalize legacy file sizes: %w", err)
 			}
 		}
-		if tx.Migrator().HasColumn(&models.File{}, "IsSystem") {
+		if tx.Migrator().HasColumn(&schemaFile{}, "IsSystem") {
 			if err := tx.Exec(`UPDATE files SET is_system = FALSE WHERE is_system IS NULL`).Error; err != nil {
 				return fmt.Errorf("normalize legacy system file flags: %w", err)
 			}
@@ -34,11 +33,11 @@ func establishApplicationSchema(tx *gorm.DB) error {
 	}
 
 	if err := tx.AutoMigrate(
-		&models.User{},
-		&models.Category{},
-		&models.Post{},
-		&models.File{},
-		&models.Setting{},
+		&schemaUser{},
+		&schemaCategory{},
+		&schemaPost{},
+		&schemaFile{},
+		&schemaSetting{},
 	); err != nil {
 		return fmt.Errorf("create or update application tables: %w", err)
 	}
@@ -60,8 +59,8 @@ func establishApplicationSchema(tx *gorm.DB) error {
 		}
 	}
 
-	if !tx.Migrator().HasConstraint(&models.Post{}, "Category") {
-		if err := tx.Migrator().CreateConstraint(&models.Post{}, "Category"); err != nil {
+	if !tx.Migrator().HasConstraint(&schemaPost{}, "Category") {
+		if err := tx.Migrator().CreateConstraint(&schemaPost{}, "Category"); err != nil {
 			return fmt.Errorf("create post category foreign key: %w", err)
 		}
 	}

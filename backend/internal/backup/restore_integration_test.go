@@ -15,6 +15,7 @@ import (
 
 	"blog-backend/internal/migrations"
 	"blog-backend/internal/models"
+	"blog-backend/internal/searchtext"
 	"github.com/jackc/pgx/v5"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -87,10 +88,18 @@ func TestBackupRestoresDatabaseAndUploadsIntoIsolatedTargets(t *testing.T) {
 		t.Fatalf("access source database connection: %v", err)
 	}
 	defer sourceSQLDB.Close()
+	if err := sourceDB.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public`).Error; err != nil {
+		t.Fatal("prepare source extension")
+	}
 	if err := migrations.Apply(context.Background(), sourceDB); err != nil {
 		t.Fatalf("migrate source database: %v", err)
 	}
 	setting := models.Setting{Key: "site_title", Value: "Restore fixture"}
+	post := models.Post{Title: "Restore article", Slug: "restore-search", Content: "**restoredneedle** ![hidden](image.png)", Status: "draft"}
+	post.SearchText = searchtext.Extract(post.Content)
+	if err := sourceDB.Create(&post).Error; err != nil {
+		t.Fatal("create source article")
+	}
 	if err := sourceDB.Create(&setting).Error; err != nil {
 		t.Fatalf("create source setting: %v", err)
 	}
@@ -175,6 +184,25 @@ func TestBackupRestoresDatabaseAndUploadsIntoIsolatedTargets(t *testing.T) {
 		t.Fatalf("verify restored migrations: %v", err)
 	}
 	var restoredSetting models.Setting
+	var restoredPost models.Post
+	if err := targetDB.First(&restoredPost, post.ID).Error; err != nil {
+		t.Fatal("load restored article")
+	}
+	if restoredPost.Content != post.Content || restoredPost.SearchText != post.SearchText {
+		t.Fatal("restored search text or content differs")
+	}
+	for _, name := range []string{"idx_posts_search_text", "idx_posts_admin_order"} {
+		if !targetDB.Migrator().HasIndex("posts", name) {
+			t.Fatalf("restored index missing: %s", name)
+		}
+	}
+	if !targetDB.Migrator().HasIndex("files", "idx_files_public_order") {
+		t.Fatal("restored file ordering index missing")
+	}
+	var matches int64
+	if err := targetDB.Model(&models.Post{}).Where("search_text ILIKE ?", "%restoredneedle%").Count(&matches).Error; err != nil || matches != 1 {
+		t.Fatal("restored article search failed")
+	}
 	if err := targetDB.Where("key = ?", setting.Key).First(&restoredSetting).Error; err != nil {
 		t.Fatalf("load restored setting: %v", err)
 	}

@@ -60,6 +60,11 @@ func parsePagination(c *gin.Context) (int, int, bool) {
 }
 
 func parseBoundedInt(raw string, minimum, maximum int) (int, error) {
+	for _, digit := range raw {
+		if digit < '0' || digit > '9' {
+			return 0, errors.New("integer must use decimal digits")
+		}
+	}
 	value, err := strconv.ParseInt(raw, 10, 32)
 	if err != nil || value < int64(minimum) || value > int64(maximum) {
 		return 0, errors.New("integer is outside the allowed range")

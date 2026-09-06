@@ -47,12 +47,12 @@ describe("category post search", () => {
     window.history.replaceState({}, "", "/posts?category=2&q=observability");
     getCategoriesMock.mockResolvedValue([matchingPost.category]);
     getPostsMock.mockResolvedValue({ data: [matchingPost], page: 1, limit: 10, total: 1 });
-    searchResourcesMock.mockResolvedValue({ posts: [matchingPost], files: [] });
+    searchResourcesMock.mockResolvedValue({ posts: [matchingPost], files: [], posts_total: 1, files_total: 0, total: 1, page: 1, limit: 10 });
   });
 
   it("keeps the selected category when retrying a search", async () => {
     render(<PostsPageClient initialState={{
-      query: "observability",
+      query: "observability", categoryId: "2",
       posts: [],
       page: 1,
       totalPages: 1,
@@ -63,14 +63,14 @@ describe("category post search", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
     await waitFor(() => {
-      expect(searchResourcesMock).toHaveBeenCalledWith("observability", "posts", "2");
+      expect(searchResourcesMock).toHaveBeenCalledWith({ query: "observability", scope: "posts", categoryId: "2", page: 1 });
     });
     expect(await screen.findByText("Go observability")).toBeVisible();
   });
 
   it("preserves the category parameter and searches without remounting the page", async () => {
     render(<PostsPageClient initialState={{
-      query: "observability",
+      query: "observability", categoryId: "2",
       posts: [],
       page: 1,
       totalPages: 1,
@@ -85,7 +85,7 @@ describe("category post search", () => {
     expect(window.location.pathname).toBe("/posts");
     expect(window.location.search).toBe("?category=2&q=tracing");
     await waitFor(() => {
-      expect(searchResourcesMock).toHaveBeenCalledWith("tracing", "posts", "2");
+      expect(searchResourcesMock).toHaveBeenCalledWith({ query: "tracing", scope: "posts", categoryId: "2", page: 1 });
     });
   });
 
@@ -98,7 +98,7 @@ describe("category post search", () => {
     }));
     const slowResult = { ...matchingPost, id: 13, title: "Late search result" };
     render(<PostsPageClient initialState={{
-      query: "",
+      query: "", categoryId: "2",
       posts: [matchingPost],
       page: 1,
       totalPages: 1,

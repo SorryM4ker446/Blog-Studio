@@ -200,7 +200,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   expect(compatibilityResponse).not.toBeNull();
   expect(await compatibilityResponse!.text()).toContain("Checking editor access");
   await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
-  await expect(page).toHaveURL(/\/editor$/);
+  await expect(page).toHaveURL(/\/editor\?tab=posts$/);
   await expect(page.getByText("Editor posts could not be loaded", { exact: true })).toHaveCount(0);
   compatibilityRequests.push(...browserShellRequests);
   expect(compatibilityRequests).toContain("/api/admin/me");

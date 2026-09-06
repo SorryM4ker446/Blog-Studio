@@ -16,6 +16,7 @@ import (
 
 	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
+	"blog-backend/internal/searchtext"
 	"github.com/gin-gonic/gin"
 )
 
@@ -228,6 +229,7 @@ func TestFileUploadStorageAndServingSecurity(t *testing.T) {
 	}
 
 	post := models.Post{Title: "Uses file", Slug: "uses-file", Content: fmt.Sprintf("![avatar](/api/files/%d/view)", fileID), Status: "draft"}
+	post.SearchText = searchtext.Extract(post.Content)
 	if err := db.Create(&post).Error; err != nil {
 		t.Fatalf("create referencing post: %v", err)
 	}

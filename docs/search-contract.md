@@ -1,6 +1,6 @@
 # Search and Article Read Contract
 
-Article summaries and protected administrator detail reads are implemented. Ordinary article lists select summary columns, and both public and administrator search responses omit `content`. Search still reads full matching bodies for the existing backend visible-text filter and remains unpaginated. The pagination, normalized-text migration and expanded URL rules below are proposed contracts, not current API behavior. Query prototypes and their evidence are in [query-analysis.md](query-analysis.md).
+Article summaries, protected administrator detail reads, normalized body search, bounded pagination and list URL state are implemented. Lists and search responses omit `content` and derived text. PostgreSQL filters searchable fields and produces exact totals plus one bounded summary page in a single statement. Editor form URLs, version conflicts and publication actions remain future editor work. Query evidence is in [query-analysis.md](query-analysis.md).
 
 ## Resource representations and access
 
@@ -11,15 +11,15 @@ Article summaries and protected administrator detail reads are implemented. Ordi
 | Article write input | Explicit editable fields, separate from read types; version and publication actions follow the editor contract when implemented |
 | File result | Existing public file metadata; no storage paths, bytes or credentials |
 
-Ordinary lists use explicit SQL projection without `content`. Search currently converts the full records required by its backend filter to summary DTOs before serialization; the proposed normalized-text query will also eliminate full-body search reads. Public post detail stays `GET /api/posts/:id` and cannot reveal drafts, including when an administrator Cookie is supplied. `GET /api/admin/posts/:id` uses the existing authentication and administrator middleware and returns `Cache-Control: no-store`. Missing articles return `404 post_not_found`; unauthorized requests follow existing 401/403 behavior.
+Ordinary lists use explicit SQL projection without `content`. Search uses `posts.search_text` for body matching and hydrates only the selected page with explicit summary columns; Markdown bodies are never loaded into Go for list or search requests. Public post detail stays `GET /api/posts/:id` and cannot reveal drafts, including when an administrator Cookie is supplied. `GET /api/admin/posts/:id` uses the existing authentication and administrator middleware and returns `Cache-Control: no-store`. Missing articles return `404 post_not_found`; unauthorized requests follow existing 401/403 behavior.
 
 Editor now obtains the full article after clicking an edit action or a draft card. The form uses the fresh detail response for every editable field. Loading and failure states provide a way back to the list; failures can be retried, and no saveable form appears until a complete matching detail response arrives. Returning to the list or unmounting aborts the request and ignores late success/error responses. Creating a new draft does not request an existing article. List HTML and server-component props contain summaries only. Direct editor URLs remain proposed below.
 
-Visible-text post-filtering has one owner, the backend. Clients retain body-only search matches returned as summaries without trying to filter them again. The backend's existing regular-expression extraction is unchanged; the parser/backfill rules below are still pending. Saving, publication status selection and the existing return-to-list behavior are unchanged by the read split.
+Visible-text post-filtering has one owner, the backend. Clients retain body-only search matches returned as summaries without trying to filter them again. The shared backend Markdown AST extractor supplies both historical backfill and explicit create/content-update paths; clients perform no post-filtering. Saving, publication status selection and the existing return-to-list behavior are unchanged by the read split.
 
-Removing `content` is a breaking response change for consumers that edit from list results. Deploy frontend and backend together, and reload already-open clients after upgrade. Roll back the pair together if needed. This read split adds no migration, index, extension, configuration variable or deployment service. Public detail and successful article write responses retain complete bodies; file endpoints keep their existing behavior.
+Removing `content` is a breaking response change for consumers that edit from list results. Deploy frontend and backend together, and reload already-open clients after upgrade. Search pagination also changes the default from all matches to a combined ten-result page. Deploy migration `2026090601` with operator-prepared `pg_trgm` in schema `public`; see [deployment.md](deployment.md). An image-only rollback across this migration is unsupported. No new application environment variable or service is required. Public detail and successful article write responses retain complete bodies; file endpoints keep their existing behavior.
 
-## Proposed paginated search request and response
+## Paginated search request and response
 
 Both `GET /api/search` and `GET /api/admin/search` accept:
 
@@ -46,13 +46,13 @@ For `scope=all`, `posts.length + files.length <= limit`. There is one combined p
 | Files | `created_at DESC, id DESC` |
 | Combined search | Corresponding resource timestamp DESC, `kind ASC` (`file` before `post`), `id DESC` |
 
-Build candidate IDs with `UNION` to deduplicate article fields/category matches, then `UNION ALL` across resource kinds. A single SQL statement derives totals and the ordered page from one materialized candidate set. Hydrate only those page IDs with summary columns in that same statement; alternatively, if ORM hydration requires another statement, wrap both in a read-only REPEATABLE READ transaction. Ordinary READ COMMITTED statements alone do not supply the required shared snapshot.
+Build candidate IDs with `UNION` to deduplicate article fields/category matches, then `UNION ALL` across resource kinds. A single SQL statement derives totals and the ordered page from one materialized candidate set. Totals, article summaries, category metadata and file metadata are hydrated by that same SQL statement. Separate READ COMMITTED queries would not supply the required shared snapshot.
 
 The response arrays are grouped by kind, preserving each kind's relative order within the combined page. They do not encode cross-kind interleaving; the UI retains separate article/file sections and uses the shared page control. Writes between separate page requests can change results; offset pagination does not promise a historical snapshot across requests.
 
-## Proposed visible text and database consistency
+## Visible text and database consistency
 
-Use one backend Markdown parser/AST traversal shared by migration backfill and every create/update path. Store derived **body-only** text, keeping title, summary and category matching separate so a query cannot span artificial field boundaries. Resolve category names live; category renames must immediately affect searches.
+The backend uses Goldmark with an AST traversal shared by migration backfill and every create/content-update path. The parser keeps HTML literal, supports tables and strikethrough, and handles image-size shortcut references supported by the browser renderer. Store derived **body-only** text, keeping title, summary and category matching separate so a query cannot span artificial field boundaries. Resolve category names live; category renames must immediately affect searches.
 
 Extraction rules:
 
@@ -62,13 +62,13 @@ Extraction rules:
 - Match the current renderer's `html: false` behavior: raw HTML stays escaped literal text, with the same bare-URL exclusion; never execute or interpret it as active HTML. Retain visible text according to the supported Markdown syntax.
 - Keep case-insensitive substring semantics; do not introduce stemming, fuzzy matching, ranking, accent folding or a minimum three-character query length.
 
-Use parameterized PostgreSQL `ILIKE` consistently for candidate fields. Record database collation/ctype and test non-ASCII case behavior against the previous Go filtering before enabling the new query. Chinese one-character and two-character queries remain valid even when a trigram index cannot accelerate them. Unicode and Markdown fixtures must cover hidden URLs, reference images, entities, nested links, fenced code, empty output, category renames and literal wildcard characters.
+Use parameterized PostgreSQL `ILIKE` consistently for candidate fields. Case behavior follows the database collation/ctype rather than an additional Go case-folding pass; ASCII case, Chinese and short substring behavior have explicit integration coverage. Locale-specific case folds are not portable across database collations. Chinese one-character and two-character queries remain valid even when a trigram index cannot accelerate them. Unicode and Markdown fixtures must cover hidden URLs, reference images, entities, nested links, fenced code, empty output, category renames and literal wildcard characters.
 
-The experiment supplies known visible text directly: it proves query mechanics, **not** that a production Markdown extractor has been implemented or validated. The implementation must establish golden extraction fixtures first, then use the identical extractor for historical rows and new writes. No frontend post-filtering may alter totals after database pagination.
+Golden fixtures cover entity decoding without double decoding, formatting, links and references, complete image removal, code, HTML literals and Unicode. The historical prototype still supplies known visible fixture text; production query checks and HTTP benchmarks now seed through the real extractor. Content updates synchronize `content` and `search_text` atomically; metadata-only updates retain the derived body, and clients cannot submit `search_text`.
 
-Add a new versioned migration; never edit the meaning of an applied migration or derive a legacy fixture from the evolving current model. Backfill in bounded batches without changing original Markdown, publication dates or edit timestamps. Add only indexes supported by the measured final query. Extension preconditions, rollback and matched backup tooling are specified in [query-analysis.md](query-analysis.md).
+Migration `2026090601` adds `search_text`, backfills 64 articles at a time, sets NOT NULL and creates the three verified read indexes. The initial migration uses frozen schema models, and a checked-in historical SQL fixture verifies upgrade independently of current models. Backfill preserves original Markdown and every article timestamp; failure rolls back data, schema and history together. Extension preconditions, rollback and matched backup tooling are specified in [query-analysis.md](query-analysis.md).
 
-## Proposed URL and navigation state
+## URL and navigation state
 
 | Page | Parameters | Transition |
 | --- | --- | --- |
@@ -76,16 +76,16 @@ Add a new versioned migration; never edit the meaning of an applied migration or
 | Drive | `q, page` | Search/clear resets page; paging preserves query |
 | Advanced search | `q, scope, category, page` | Default scope all; condition changes reset the shared page |
 | Editor list | `tab, q, category, post_page, file_page` | Search/category changes reset active resource page; tab changes clear q/category and reset the destination page |
-| Editor form | List parameters plus `edit` | `edit=ID` loads an article; `edit=new` plus an independent draft identifier isolates a new article |
+| Editor form (future) | List parameters plus `edit` | Planned direct article/new-draft entry; the current form still opens from the list |
 
-The URL owns submitted conditions; the input component owns unsubmitted typing. Server entrypoints and clients share strict parsing. Search submissions, page changes and tabs push history; canonicalization and correction of a page emptied by deletion replace history. Returning from the form retains the source list conditions.
+The URL owns submitted conditions; the input component owns unsubmitted typing. Server entrypoints and clients share strict parsing. Invalid or duplicated recognized conditions normalize to defaults; empty q/category, page 1 and advanced-search scope all are omitted from canonical URLs. Editor tab defaults to posts and both resource page values are normalized. API malformed page/limit values still return stable 400 errors. Search submissions, page changes and tabs push history; canonicalization and correction of a page emptied by deletion replace history. Returning from the form retains the source list conditions.
 
 Request identity includes all active filters and page parameters. Delayed responses must not overwrite the current query. Browser back/forward and hard refresh restore conditions without breaking existing input focus, identity restoration or scroll return. A resource section empty on the current mixed page must not claim there are no matches when its total is nonzero.
 
 ## Automated acceptance
 
-Implemented checks assert summary-only list SQL/JSON, public and administrator search JSON without bodies, body-only matches, protected detail access and existing cache boundaries. Component tests exercise fresh detail loading, failed/incomplete responses, retry, cancellation and late responses without accidental writes. Playwright inspects list/search server HTML, retries a failed detail request, saves the complete draft and rechecks public draft isolation. The existing browser workflows continue to cover publishing, identity/hard refresh, search input and scroll return. The remaining requirements below apply as the proposed query and navigation contracts are implemented.
+Implemented checks assert summary-only list SQL/JSON, public and administrator search JSON without bodies, body-only matches, protected detail access and existing cache boundaries. Component tests exercise fresh detail loading, failed/incomplete responses, retry, cancellation and late responses without accidental writes. Playwright inspects list/search server HTML, retries a failed detail request, saves the complete draft and rechecks public draft isolation. The existing browser workflows continue to cover publishing, identity/hard refresh, search input and scroll return. Search pagination tests additionally exercise exact totals, per-kind scopes, wildcard escaping, stable ties and concurrent publication/system-file changes.
 
-Backend integration tests must assert omitted body/derived fields, protected details, permission isolation, all search scopes, exact per-kind/combined totals, strict combined limits at 1/10/100, ties, duplicate field matches, malformed parameters, empty/deep pages, literal wildcards, Chinese/short terms and concurrent-write snapshot consistency. Migration tests cover fixed legacy rows, repeat/concurrent/failure cases, identical backfill/write extraction and backup restoration with extensions.
+Backend integration tests assert omitted body/derived fields, protected details, permission isolation, all search scopes, exact per-kind/combined totals, strict combined limits at 1/10/100, ties, duplicate field matches, malformed parameters, empty/deep pages, literal wildcards, Chinese/short terms and concurrent-write snapshot consistency. Migration tests cover fixed legacy rows, repeat/concurrent/failure cases, identical backfill/write extraction and backup restoration with extensions.
 
-Vitest tests cover summary/detail types and consumers, stale detail requests, retry and disabled-save behavior, shared URL parsing, grouped mixed results and out-of-range correction. Playwright covers direct editor entry, draft isolation, list/search HTML without body markers, all four list/search routes, forward/back/refresh and preserved scroll/input behavior. Rerun the original and long-body benchmarks on the same machine after implementation.
+Vitest tests cover summary/detail types and consumers, stale detail requests, retry and disabled-save behavior, shared URL parsing, grouped mixed results and out-of-range correction. Playwright covers direct editor list entry, draft isolation, list/search HTML without body markers, all four list/search routes, forward/back/refresh and preserved scroll/input behavior. Rerun the original and long-body benchmarks on the same machine after implementation.

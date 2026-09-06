@@ -1,6 +1,6 @@
 # Query Analysis
 
-The query-analysis harness measures candidate SQL in a disposable schema. It does not add application fields, indexes, migrations or API behavior. Implemented summary/detail reads and proposed search changes are distinguished in [search-contract.md](search-contract.md).
+The historical harness measures candidate SQL in a disposable schema. The application now implements normalized body search and the three selected indexes through migration `2026090601`. `TestSearchQueryPlans` measures the actual API SQL after incremental fixture writes, while the original experiment remains a reproducible historical reference. Implemented behavior is in [search-contract.md](search-contract.md).
 
 ## Reproducible fixture and isolation
 
@@ -26,13 +26,13 @@ The analysis normally takes several minutes. Run it sequentially with integratio
 
 Each SELECT runs `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` three times. Reports retain SQL, synthetic parameters, every full plan (including actual rows, loops and buffers), and the median PostgreSQL execution time. Baseline cases include list/count/category queries, first/deep pages, a 100-row page, and current public/administrator search candidates. Candidate experiments additionally measure the final summary projection, normalized search page/count, mixed pages and empty far-out pages.
 
-The retained full-body list SQL is the historical comparison baseline. The application now uses the measured summary column projection for ordinary lists; integration tests capture its actual SQL and reject selection of `content`. Search still reads complete candidates before backend filtering, while its JSON now uses summaries. No experimental index or normalized search field has been installed by the read split. Before/after router measurements are recorded in [performance-baseline.md](performance-baseline.md).
+The retained full-body list SQL is the historical comparison baseline. The application now uses the measured summary column projection for ordinary lists; integration tests capture its actual SQL and reject selection of `content`. The historical experiment drops the newly installed derived field and three selected indexes inside its disposable transaction before measuring the old query shapes. Production query measurements retain the application schema and use the real extractor for fixture inserts. Before/after router measurements are recorded in [performance-baseline.md](performance-baseline.md).
 
-The current search SQL fetches candidate bodies without a limit and then performs visible-text filtering in Go. Its SQL candidate count is explicitly labelled as such: it is not a trustworthy public result total. GORM category preload, result transfer, JSON serialization and Go filtering are measured by the real-router HTTP benchmark rather than this SQL-only plan.
+The historical search SQL fetched candidate bodies without a limit and then performed visible-text filtering in Go. Its SQL candidate count is explicitly labelled as such: it is not a trustworthy public result total. GORM category preload, result transfer, JSON serialization and Go filtering are measured by the real-router HTTP benchmark rather than this SQL-only plan.
 
 The normalized prototype uses fixture-supplied visible body text and tests query mechanics; it is not a second Markdown parser. Materialize matching title/summary IDs and the remaining authorized IDs, then UNION body matches with metadata and live category matches. An explicit EXISTS guard skips the body branch when no IDs remain. This preserves field boundaries and permits a body-only trigram condition without forcing a scan after every authorized article already matched metadata. For partial metadata matches, inspect the actual plan rather than assuming the planner evaluates a written WHERE order. Mixed resource IDs use one materialized candidate set and one SQL statement for totals and page, with deterministic timestamp/kind/ID ordering.
 
-Executable assertions independently count the rare matches, recover them across pages without duplicates, verify tied-order repeatability and the combined ten-result cap, preserve totals on an empty far-out page, and exclude drafts, system files and hidden metadata. The prototype returns IDs; summary hydration and concurrency coverage belong to the API implementation.
+Executable assertions independently count the rare matches, recover them across pages without duplicates, verify tied-order repeatability and the combined ten-result cap, preserve totals on an empty far-out page, and exclude drafts, system files and hidden metadata. The prototype returns IDs; the API implementation separately tests summary hydration and snapshot consistency while article/file visibility changes concurrently.
 
 Candidate indexes are created and removed with savepoints. The report records build wall time, index bytes and three rollback-only update probes, with a matching no-candidate write baseline. Writes target 100 IDs (80 published rows for the partial category index). These timings include client/driver cost and are not production write-latency predictions. Warm buffers, aborted tuple versions within a transaction and planner estimates can affect the samples; no sequential-scan or planner setting is disabled to force an index.
 
@@ -75,7 +75,7 @@ GIN makes this 100-row body update about 5.3 times more expensive. That tradeoff
 
 Two rejected query shapes explain the explicit remaining-ID guard. Unconditionally UNIONing body matches forced common-title searches to scan bodies. A same-table OR with title/summary/body GIN indexes still selected a sequential scan for rare terms on this fixture. The selected query uses a body-only indexed predicate, and its common-title plan shows zero executions of the body index branch; its rare plan uses that index. Do not remove this guard, concatenate distinct fields, disable sequential scans, or add unused indexes to improve a single headline number.
 
-These are recommendations for a future migration, not installed application indexes. Recheck them against the final DTO/search SQL and CI's collation. The raw plan includes actual row and buffer evidence; the common-title query's modest SQL overhead compared with the existing 1.67 ms candidate SELECT also buys exact totals and a bounded page, whose HTTP impact must be assessed with the retained benchmark.
+The historical recommendations are implemented in the new migration, with the production query and GIN maintenance measurements below. CI must still verify its own collation and platform. The raw plan includes actual row and buffer evidence; the common-title query's modest SQL overhead compared with the existing 1.67 ms candidate SELECT also buys exact totals and a bounded page, whose HTTP impact must be assessed with the retained benchmark.
 
 ## Extension and upgrade requirements
 
@@ -83,8 +83,33 @@ The measured local server is PostgreSQL 18.3, with `Chinese (Simplified)_China.9
 
 PostgreSQL documents `pg_trgm` as a trusted extension installable by a non-superuser with database CREATE; its indexes support ILIKE, while patterns without usable trigrams may require full scanning. See [pg_trgm](https://www.postgresql.org/docs/18/pgtrgm.html) and [CREATE EXTENSION](https://www.postgresql.org/docs/18/sql-createextension.html). Keep short and Chinese queries valid.
 
-For the future indexed-search release, make the PostgreSQL extension package and an operator-preinstalled `pg_trgm` in the agreed schema explicit prerequisites. Do not grant the application runtime role broader privileges or silently omit required indexes. The migration must check availability and operator-class/schema access, fail with an actionable sanitized error if missing, and leave history/data unchanged on failure. The native experiment records permission failure and still measures a no-extension reference; that experiment fallback is not an application deployment policy.
+The indexed-search release requires the PostgreSQL extension package and an operator-preinstalled `pg_trgm` in schema `public`. Do not grant the application runtime role broader privileges or silently omit required indexes. The migration checks extension placement and schema USAGE, fails with an actionable sanitized error if missing, and leaves history/data unchanged on failure. The native experiment records permission failure and still measures a no-extension reference; that experiment fallback is not an application deployment policy.
 
-A new derived-text migration will need bounded backfill, index build time/space planning, historical fixture tests and repeat/failure/concurrency tests. Use a maintenance window for the existing transactional migrator; `CREATE INDEX CONCURRENTLY` cannot simply be inserted into that transaction. On failed migration, retain the old schema and matched release. Once an upgrade has committed, do not start an older binary against newer history.
+Migration `2026090601` uses a 64-row bounded backfill and transactional index creation. Historical SQL fixtures, repeat/concurrent application, missing/wrong-schema extensions, absent public USAGE, and failed-index rollback/retry are covered by native integration tests. Use a maintenance window for the existing transactional migrator; `CREATE INDEX CONCURRENTLY` cannot simply be inserted into that transaction. On failed migration, retain the old schema and matched release. Once an upgrade has committed, do not start an older binary against newer history.
 
-Backups require the matching PostgreSQL client major version and application restore release. Restore an old bundle first with tooling matching its recorded migration version into an isolated empty target, then migrate with the newer release. Verify extension availability/permissions on that target before the new indexed-search migration or restoring an extension-bearing dump. Do not weaken the existing migration-version checks. Current backup bundles and application migration history are unchanged.
+Backups require the matching PostgreSQL client major version and application restore release. Restore an old bundle first with tooling matching its recorded migration version into an isolated empty target, then migrate with the newer release. Verify extension availability/permissions on that target before the new indexed-search migration or restoring an extension-bearing dump. Do not weaken the existing migration-version checks. New bundles record migration `2026090601` and include the search field, read indexes and extension; the backup format and strict version checks remain unchanged.
+
+## Implemented query and index maintenance results
+
+Measured on 2026-09-07 with native PostgreSQL 18.3, the same `long-body-v1` corpus, the real extractor and the production query builder. Each of 43 SELECT measurements retains three complete plans; three additional index experiments compare write costs. No planner option is forced and no manual queue flush runs before the production query check. Local collation remains `Chinese (Simplified)_China.936`; its ILIKE does not fold the tested Ä/ä and É/é pairs. Tests verify literal Unicode and database-specific case behavior rather than assuming Linux and Windows collations are identical.
+
+| Actual operation | SQL median |
+| --- | ---: |
+| Public rare body search, exact totals and 10 summaries | 9.973 ms |
+| Administrator rare body search | 10.460 ms |
+| Public mixed rare search | 10.472 ms |
+| Public common title search | 3.295 ms |
+| Public missing body term | 1.489 ms |
+| Public one-character Chinese body term | 757.066 ms |
+| Administrator ordinary first summary page | 0.014 ms |
+| Public first file page | 0.010 ms |
+
+The rare-body plan uses `idx_posts_search_text`; the common-title plan's body-index node has `Actual Loops = 0`. Short/common body matches remain scan-heavy. The exact total does not become cheap merely because the returned page is bounded.
+
+Incremental fixture inserts exposed a difference from a freshly built prototype index: default GIN fast-update queues led PostgreSQL to choose a body sequential scan (786.601 ms in the final maintenance comparison). A 64 KiB queue limit still scanned after incremental bulk seeding (808.733 ms), despite looking good after rebuilding an index. A smaller queue alone was therefore rejected. The selected index uses `WITH (fastupdate=off)`, which preserved the indexed plan after the same incremental writes without manual cleanup.
+
+The isolated maintenance comparison measured fresh GIN builds around 10.2 seconds. With fast updates off, its 100-body-update probe was 1,336.684 ms; rebuilt 64/256 KiB queue candidates were 575.953/543.477 ms but did not establish the required incremental-write stability. In the final production fixture, the body index was 3,686,400 bytes after insertion/update probes, with 100 body updates at 1,381.235 ms versus 117.402 ms without that index. These are rollback-only synthetic update timings, not per-save latency predictions. Even metadata-only updates can incur index maintenance when an update cannot use PostgreSQL HOT. This explicit read/write tradeoff suits the current single-administrator blog and must be reviewed before a write-heavy import workload.
+
+The final administrator ordering index measured 196,608 bytes; its timestamp update probes were 556.408 ms without / 531.321 ms with that specific index, with the body GIN retained in both cases. The public file index measured 81,920 bytes and 1.003 / 1.505 ms for 100 timestamp updates. Such small/noisy differences do not establish a write speedup. No title, category or file-name trigram index was added.
+
+Use `SEARCH_QUERY_ANALYSIS_OUTPUT` with `go test -run '^TestSearchQueryPlans$' -count=1 -v ./internal/routes` for the actual plans. `SEARCH_INDEX_EXPERIMENT_OUTPUT` and `TestSearchIndexWriteMaintenance` reproduce the optional queue/rebuild comparison. Keep both separate from database suites and HTTP benchmarking. CI retains actual and historical query reports; HTTP allocation and response comparisons are recorded in [performance-baseline.md](performance-baseline.md).

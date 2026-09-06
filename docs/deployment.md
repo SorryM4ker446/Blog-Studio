@@ -53,6 +53,20 @@ chmod 700 deploy/backups
 
 Do not put passwords, JWT values, database DSNs, or restored data in `deploy/.env`. The committed file contains only non-secret settings and secret file paths.
 
+## PostgreSQL search prerequisite
+
+Migration `2026090601` requires `pg_trgm` installed in schema `public`, plus `USAGE` on that schema for the migration role. The runtime and migration commands do not install extensions or grant themselves privileges. An operator runs this in the intended application database before migration:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+```
+
+Check `pg_extension`/`pg_namespace` to confirm the existing extension is actually in `public`; `IF NOT EXISTS` does not move an extension from another schema. On deployments with separate roles, grant schema USAGE to the already-authorized migration role through the operator's normal privilege process. PostgreSQL's extension files must also be available on restore hosts.
+
+For a new Compose PostgreSQL volume, the read-only `deploy/postgres/initialize-search.sql` mount performs this preparation through the PostgreSQL initialization role. Initialization scripts are not replayed for an existing volume. Existing installations therefore require the operator step before running the new migration. The same requirement applies to native development databases. Test-only tooling prepares the extension only after validating the `_test` database name.
+
+The migration adds body-only `posts.search_text`, backfills 64 articles at a time, sets NOT NULL and builds three verified indexes in the existing migration transaction. It preserves original Markdown and article timestamps. Backfill and index creation block writers; reserve a maintenance window, disk/WAL space and a verified backup. Failure rolls back the version and its changes. Review [query evidence and write costs](query-analysis.md) before applying the release to a larger corpus.
+
 ## First deployment
 
 Run all commands from the repository root:
@@ -80,14 +94,14 @@ The seed command refuses to replace an existing account. Sign in, change the gen
 
 ## Release upgrade
 
-The article summary API removes `content` from ordinary lists and search results and adds protected `GET /api/admin/posts/:id` detail reads. Build and deploy the frontend and backend from the same revision, and reload already-open browser clients after upgrading. Old editors expect list bodies and cannot safely be paired with the new API. This response change has no schema migration or additional configuration/service requirement. The existing image build and routing definitions already include the new handler and frontend; retain both previous application images for a paired rollback.
+Lists and search return body-free summaries; Editor reads complete content through protected `GET /api/admin/posts/:id`. Search now defaults to a combined ten-result page and returns exact post/file totals. Build and deploy frontend and backend from the same revision and reload open clients. Prepare the extension prerequisite and apply migration `2026090601` before restarting the API. Keep the previous images and their matched backup; an image-only rollback across the new schema version is unsupported.
 
 Migrations are forward-only, and a database backup must match the uploads captured during the same write-free interval. Use this sequence:
 
 1. Fetch the reviewed release, choose a new immutable tag, and pre-build it without changing the current tag in `deploy/.env`.
 2. Stop all public and application writers while leaving PostgreSQL running.
 3. Create and verify a matched backup with the current maintenance image. This image expects the current pre-upgrade schema.
-4. Change `APP_IMAGE_TAG` in `deploy/.env` to the pre-built new tag.
+4. Prepare the search extension in the application database, then change `APP_IMAGE_TAG` in `deploy/.env` to the pre-built new tag.
 5. Apply migrations from the new backend image.
 6. Recreate the application services and verify readiness.
 
@@ -98,6 +112,7 @@ docker compose --env-file deploy/.env stop caddy frontend backend
 docker compose --env-file deploy/.env --profile tools run --rm maintenance /app/backup create /backups
 docker compose --env-file deploy/.env --profile tools run --rm maintenance \
   /app/backup verify /backups/blog-studio-backup-YYYYMMDDTHHMMSSZ
+# Have the database operator prepare pg_trgm in public before migration.
 # Edit deploy/.env and set APP_IMAGE_TAG to $NEW_RELEASE only after verification.
 docker compose --env-file deploy/.env run --rm migrate
 docker compose --env-file deploy/.env up --detach --wait --wait-timeout 240

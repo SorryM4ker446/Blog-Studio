@@ -1,6 +1,6 @@
 "use client";
 
-import type { FileRecord, PostSummary } from "@/lib/api";
+import type { Category, FileRecord, PostSummary } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
 import FileCard, { EditActionButton } from "@/components/files/FileCard";
@@ -12,6 +12,9 @@ export type EditorTab = "posts" | "files";
 interface EditorListViewProps {
   activeTab: EditorTab;
   searchQuery: string;
+  categories: Category[];
+  categoryId: string;
+  onCategoryChange: (categoryId: string) => void;
   posts: PostSummary[];
   files: FileRecord[];
   postCount: number | null;
@@ -134,6 +137,10 @@ export default function EditorListView(props: EditorListViewProps) {
         </div>
 
         <div className="editor-list-actions">
+          {props.activeTab === "posts" && <select className="resource-filter premium-select" aria-label="Filter articles by category" value={props.categoryId} onChange={(event) => props.onCategoryChange(event.target.value)}>
+            <option value="">All categories</option><option value="0">Uncategorized</option>
+            {props.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select>}
           <SearchInput placeholder={`Search ${props.activeTab}...`} onSearch={props.onSearch} style={{ width: "220px" }} value={props.searchQuery} />
           <button type="button" onClick={props.activeTab === "posts" ? props.onNewPost : props.onUploadFile} className="editor-primary-action">
             {props.activeTab === "posts" ? "+ New Post" : <><UploadIcon size={16} /> Upload File</>}

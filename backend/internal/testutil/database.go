@@ -59,6 +59,9 @@ func OpenDatabase() (*gorm.DB, error) {
 		return nil, fmt.Errorf("connect to test database: %w", err)
 	}
 
+	if err := db.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public`).Error; err != nil {
+		return nil, errors.New("could not prepare pg_trgm in the isolated test database")
+	}
 	if err := migrations.Apply(context.Background(), db); err != nil {
 		return nil, fmt.Errorf("migrate test database: %w", err)
 	}

@@ -112,7 +112,7 @@ For a restore drill:
 
 The commands in this document work with native development tools and are also exercised by the PostgreSQL integration suite in GitHub Actions. Docker Compose execution is documented in [`deployment.md`](deployment.md); domain and host-level validation remains a deployment-host responsibility.
 
-Future derived-search fields and indexes have a documented [upgrade and extension plan](query-analysis.md). Query experiments do not change the current migration version or backup format. For an older bundle, use the restore release matching its recorded migration version before applying newer migrations in the isolated target. Extension-bearing dumps also require the extension package and suitable installation/access privileges on that target; do not bypass version verification to restore them.
+Migration `2026090601` includes derived search text and the verified read indexes; the backup archive format is unchanged. New bundles retain `search_text`, indexes and the `pg_trgm` extension. The integration drill verifies searchable restored articles, all three indexes, matching migration history and uploaded content. See the [upgrade and extension requirements](deployment.md). For an older bundle, use the restore release matching its recorded migration version before applying newer migrations in the isolated target. Extension-bearing dumps also require the extension package and suitable installation/access privileges on that target; do not bypass version verification to restore them.
 
 For the Compose topology, the tools image includes matching PostgreSQL 18 clients and mounts uploads read-only during backup creation. Stop Caddy, the frontend, and the backend before running:
 

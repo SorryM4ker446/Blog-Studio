@@ -45,6 +45,9 @@ describe("EditorListView", () => {
       <EditorListView
         activeTab="posts"
         searchQuery=""
+        categories={[]}
+        categoryId=""
+        onCategoryChange={vi.fn()}
         posts={[post]}
         files={[]}
         postCount={1}
@@ -90,6 +93,9 @@ describe("EditorListView", () => {
       <EditorListView
         activeTab="files"
         searchQuery=""
+        categories={[]}
+        categoryId=""
+        onCategoryChange={vi.fn()}
         posts={[]}
         files={[file]}
         postCount={12}

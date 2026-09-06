@@ -43,7 +43,7 @@ describe("DrivePageClient navigation", () => {
     getFilesMock.mockReset();
     searchResourcesMock.mockReset();
     getFilesMock.mockResolvedValue({ data: [defaultFile], page: 1, limit: 10, total: 1 });
-    searchResourcesMock.mockResolvedValue({ posts: [], files: [] });
+    searchResourcesMock.mockResolvedValue({ posts: [], files: [], posts_total: 0, files_total: 0, total: 0, page: 1, limit: 10 });
   });
 
   it("updates the search URL and data without a route remount", async () => {
@@ -54,7 +54,7 @@ describe("DrivePageClient navigation", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(window.location.search).toBe("?q=report");
-    await waitFor(() => expect(searchResourcesMock).toHaveBeenCalledWith("report", "files"));
+    await waitFor(() => expect(searchResourcesMock).toHaveBeenCalledWith({ query: "report", scope: "files", categoryId: "", page: 1 }));
   });
 
   it("ignores a late search result after the search is cleared", async () => {

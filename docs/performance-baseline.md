@@ -104,4 +104,39 @@ The short-body fixture reduces list/search payloads by about 19%; these timings 
 
 The long-body list shrinks from 485,635 to 4,452 bytes (99.08%), with median time falling from 2.397 to 0.559 ms and heap allocation from 2.80 MiB to 56.3 KiB. Rare/common search responses shrink by 99.27%/99.26%; common-search cumulative allocation falls from 504.95 to 125.00 MiB and median time from 274.773 to 168.730 ms. Public detail retains the full article and similar allocation behavior.
 
-Search remains unpaginated and still transfers candidate bodies from PostgreSQL for the existing Go visible-text filter. Its rare-query latency and common-query 125 MiB allocation remain substantial. These results demonstrate SQL projection and response serialization savings; they do not establish bounded search memory, database-query optimization, production throughput or a capacity guarantee. Rare search still has one request per sample and common search now has three; use longer samples for close timing decisions. The planned normalized-text query, exact totals and combined pagination remain separate work.
+At that summary-only measurement, search remained unpaginated and transferred candidate bodies from PostgreSQL for the Go visible-text filter. Its rare-query latency and common-query 125 MiB allocation remain substantial. These results demonstrate SQL projection and response serialization savings; they do not establish bounded search memory, database-query optimization, production throughput or a capacity guarantee. Rare search still has one request per sample and common search now has three; use longer samples for close timing decisions. The subsequent normalized-text query, exact totals and combined pagination are measured below.
+
+## Normalized search and pagination comparison
+
+Measured on 2026-09-07 against the same corpora, native PostgreSQL 18.3 and Windows/Go/Ryzen platform. Each case has three 500 ms samples. Database suites, browser servers and heavy workloads finished before benchmarking. The detail rows were remeasured after removing an unnecessary derived-text projection; the other rows retain their full-suite samples. Generated category timestamps can vary slightly in fractional precision, accounting for a few bytes of unrelated list/category variation.
+
+### Original short-body fixture
+
+| Operation | Median (observed range) | Response bytes | Median heap / operation | Median allocations |
+| --- | ---: | ---: | ---: | ---: |
+| Post list, limit 10 | 0.339 ms (0.331–0.346) | 5,104 | 61.2 KiB | 731 |
+| Post detail | 0.170 ms (0.167–0.171) | 623 | 28.4 KiB | 289 |
+| Categories | 0.195 ms (0.195–0.200) | 1,212 | 22.3 KiB | 250 |
+| File list, limit 10 | 0.181 ms (0.181–0.184) | 2,013 | 28.0 KiB | 406 |
+| Settings | 0.091 ms (0.088–0.092) | 81 | 14.2 KiB | 127 |
+| Search, first 10 matches | 0.645 ms (0.635–0.747) | 5,150 | 87.9 KiB | 310 |
+
+### Long-body fixture
+
+| Operation | Median (observed range) | Response bytes | Median heap / operation | Median allocations |
+| --- | ---: | ---: | ---: | ---: |
+| Post list, limit 10 | 0.517 ms (0.511–0.527) | 4,443 | 57.0 KiB | 670 |
+| Post detail | 0.692 ms (0.625–0.755) | 132,745 | 667.4 KiB | 315 |
+| Categories | 0.615 ms (0.600–0.624) | 4,323 | 40.5 KiB | 587 |
+| File list, limit 10 | 0.282 ms (0.277–0.283) | 2,123 | 29.4 KiB | 456 |
+| Settings | 0.084 ms (0.084–0.085) | 39 | 13.9 KiB | 117 |
+| Search, first 10 matches | 9.238 ms (8.968–9.267) | 4,448 | 87.2 KiB | 321 |
+| Common search, first 10 matches | 2.514 ms (2.449–2.535) | 4,490 | 84.6 KiB | 325 |
+
+The previous search returned all matches: 200 on the short fixture, 17 for the rare long-body term and 1,920 for the common long-body title. The new default returns at most ten and includes exact totals for all matches. The reduced payload and serialization allocation therefore partly reflect the new pagination contract; they must not all be attributed to a faster SQL predicate.
+
+Against the immediately preceding summary-only implementation, rare long-body search changes from 686.254 to 9.238 ms, 7,398 to 4,448 response bytes and approximately 8.93 MiB to 87.2 KiB of cumulative heap allocation. Common-title search changes from 168.730 to 2.514 ms, 830,465 to 4,490 bytes and 125.00 MiB to 84.6 KiB. The actual query plan separately verifies indexed selective matching and a skipped body branch for common-title matches; see [query-analysis.md](query-analysis.md).
+
+The initial detail rerun exposed an avoidable read of `search_text` alongside Markdown. Public/admin detail and update readback queries now omit the derived field, with a projection regression assertion. Final long-body detail remains a complete 132,745-byte response, at 0.692 ms and 667.4 KiB median allocation, close to the earlier 0.647 ms / 685.2 KiB behavior. The explicit projection adds some small query-building allocation; no detail speedup is claimed.
+
+These are in-process warm-database regression measurements. Short/common body terms can still scan the derived corpus for exact totals, GIN increases write cost, and offset pages remain mutable between separate requests. No production capacity or timing gate is inferred from this synthetic corpus.
