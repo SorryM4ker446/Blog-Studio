@@ -3,7 +3,7 @@ import {
   normalizeFileViewUrl,
   normalizeMarkdownFileUrls,
 } from "@/lib/api";
-import type { Post } from "@/lib/api";
+import type { PostDetail } from "@/lib/api";
 import { notFound } from "next/navigation";
 import BackButton from "@/components/BackButton";
 import PostAuthorIdentity from "@/components/PostAuthorIdentity";
@@ -22,7 +22,7 @@ const md = createMarkdownParser();
 export default async function PostPage({ params }: PostPageProps) {
   const { id } = await params;
   const [postResult, settingsResult] = await Promise.all([
-    requestServerJSON<Post>(`/posts/${encodeURIComponent(id)}`),
+    requestServerJSON<PostDetail>(`/posts/${encodeURIComponent(id)}`),
     requestServerJSON<Record<string, string>>("/settings"),
   ]);
 

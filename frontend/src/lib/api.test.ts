@@ -1,23 +1,52 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  extractSearchablePostContent,
-  filterPostsByVisibleText,
+  getAdminPost,
   getPostTimeline,
   logoutUser,
   normalizeFileViewUrl,
   normalizeMarkdownFileUrls,
-  type Post,
+  type PostSummary,
 } from "./api";
 import { clearCSRFToken, setCSRFToken } from "./api-client";
 import { rebaseFileViewURLs } from "./file-url";
 
-function makePost(overrides: Partial<Post> = {}): Post {
+describe("administrator article detail", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("requests complete content with the session, no-store and cancellation signal", async () => {
+    const post = { ...makePost(), content: "Complete article body" };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(post));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+
+    await expect(getAdminPost(1, { signal: controller.signal })).resolves.toEqual(post);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/admin/posts/1", expect.objectContaining({
+      credentials: "include", cache: "no-store", signal: controller.signal,
+    }));
+  });
+
+  it.each([
+    null,
+    makePost(),
+    { ...makePost(), id: 2, content: "Wrong article" },
+    { ...makePost(), content: null },
+  ])("rejects an incomplete or mismatched detail response: %j", async (payload) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(payload)));
+    await expect(getAdminPost(1)).rejects.toMatchObject({ kind: "parse" });
+  });
+
+  it.each([401, 403, 404, 503])("preserves HTTP %i as a recoverable load error", async (status) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ error: "Cannot load article" }, { status })));
+    await expect(getAdminPost(1)).rejects.toMatchObject({ kind: "http", status });
+  });
+});
+
+function makePost(overrides: Partial<PostSummary> = {}): PostSummary {
   return {
     id: 1,
     title: "Default title",
     slug: "default-title",
     summary: "Default summary",
-    content: "Default content",
     category_id: null,
     category: null,
     status: "published",
@@ -61,63 +90,6 @@ describe("file URL normalization", () => {
   it("preserves empty values", () => {
     expect(normalizeFileViewUrl("")).toBe("");
     expect(normalizeMarkdownFileUrls("")).toBe("");
-  });
-});
-
-describe("visible post text extraction", () => {
-  it("removes image metadata and URLs while retaining visible link text", () => {
-    const content = [
-      "Visible paragraph",
-      "![private-image-name](http://localhost:8080/api/files/9/view)",
-      "Read [the public guide](https://example.com/private-target)",
-      "https://example.com/bare-target",
-    ].join("\n");
-
-    const searchable = extractSearchablePostContent(content);
-
-    expect(searchable).toContain("Visible paragraph");
-    expect(searchable).toContain("the public guide");
-    expect(searchable).not.toContain("private-image-name");
-    expect(searchable).not.toContain("private-target");
-    expect(searchable).not.toContain("bare-target");
-  });
-
-  it("matches title, summary, category, and visible content case-insensitively", () => {
-    const posts = [
-      makePost({ id: 1, title: "Release Notes" }),
-      makePost({ id: 2, title: "Other", summary: "Architecture overview" }),
-      makePost({
-        id: 3,
-        title: "Other",
-        summary: "Other",
-        category: {
-          id: 4,
-          name: "Engineering",
-          description: "",
-          created_at: "2026-08-01T09:00:00Z",
-        },
-      }),
-      makePost({ id: 4, title: "Other", summary: "Other", content: "A visible tutorial" }),
-    ];
-
-    expect(filterPostsByVisibleText(posts, " release ")).toEqual([posts[0]]);
-    expect(filterPostsByVisibleText(posts, "ARCHITECTURE")).toEqual([posts[1]]);
-    expect(filterPostsByVisibleText(posts, "engineering")).toEqual([posts[2]]);
-    expect(filterPostsByVisibleText(posts, "tutorial")).toEqual([posts[3]]);
-  });
-
-  it("does not match image labels or targets", () => {
-    const post = makePost({
-      content: "Visible text\n![hidden-file-name](http://localhost:8080/api/files/27/view)",
-    });
-
-    expect(filterPostsByVisibleText([post], "hidden-file-name")).toEqual([]);
-    expect(filterPostsByVisibleText([post], "files/27")).toEqual([]);
-  });
-
-  it("returns the original list for a blank query", () => {
-    const posts = [makePost()];
-    expect(filterPostsByVisibleText(posts, "   ")).toBe(posts);
   });
 });
 

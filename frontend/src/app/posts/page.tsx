@@ -1,5 +1,5 @@
 import PostsPageClient, { type PostsPageInitialState } from "@/components/PostsPageClient";
-import type { Category, PaginatedResponse, Post, SearchResult } from "@/lib/api";
+import type { Category, PaginatedResponse, PostSummary, SearchResult } from "@/lib/api";
 import { requestServerJSON } from "@/lib/server-api";
 
 interface PostsPageProps {
@@ -25,7 +25,7 @@ async function loadInitialState(query: string, categoryId: string, page: number)
         scope: "posts",
         ...(categoryId ? { category_id: categoryId } : {}),
       }).toString()}`)
-    : requestServerJSON<PaginatedResponse<Post>>(`/posts?${new URLSearchParams({
+    : requestServerJSON<PaginatedResponse<PostSummary>>(`/posts?${new URLSearchParams({
         page: page.toString(),
         limit: "10",
         ...(categoryId ? { category_id: categoryId } : {}),
@@ -43,7 +43,7 @@ async function loadInitialState(query: string, categoryId: string, page: number)
     const result = dataResult.data as SearchResult;
     return { query, posts: result.posts || [], page: 1, totalPages: 1, currentCategoryName, error: "" };
   }
-  const result = dataResult.data as PaginatedResponse<Post>;
+  const result = dataResult.data as PaginatedResponse<PostSummary>;
   return {
     query,
     posts: Array.isArray(result.data) ? result.data : [],

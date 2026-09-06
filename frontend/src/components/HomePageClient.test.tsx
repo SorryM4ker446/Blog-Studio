@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Post } from "@/lib/api";
+import type { PostSummary } from "@/lib/api";
 import HomePageClient from "./HomePageClient";
 
 const { getPostsMock, pushMock } = vi.hoisted(() => ({
@@ -14,19 +14,18 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   getApiErrorMessage: () => "Could not load recent articles.",
-  getPostTimeline: (post: Post) => ({
+  getPostTimeline: (post: PostSummary) => ({
     label: "Published",
     timestamp: post.published_at || post.updated_at,
   }),
   getPosts: getPostsMock,
 }));
 
-const recentPost: Post = {
+const recentPost: PostSummary = {
   id: 7,
   title: "Server-rendered article",
   slug: "server-rendered-article",
   summary: "",
-  content: "",
   category_id: null,
   category: null,
   status: "published",

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { FileRecord, Post } from "@/lib/api";
+import type { FileRecord, PostSummary } from "@/lib/api";
 import EditorListView from "./EditorListView";
 
 const file: FileRecord = {
@@ -15,12 +15,11 @@ const file: FileRecord = {
   created_at: "2026-08-20T12:00:00Z",
 };
 
-const post: Post = {
+const post: PostSummary = {
   id: 7,
   title: "Clickable post",
   slug: "clickable-post",
   summary: "Post summary",
-  content: "Post content",
   category_id: 2,
   category: {
     id: 2,

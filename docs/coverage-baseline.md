@@ -1,6 +1,6 @@
 # Coverage Baseline
 
-Measured on 2026-09-06 before changing application behavior, from revision `2ecefe6` plus coverage-reporting configuration. The complete current frontend suite has 25 files and 89 passing tests. PostgreSQL integration, migration and real backup/restore tests ran with native PostgreSQL 18.3 tools.
+Measured on 2026-09-06 before changing application behavior, from revision `2ecefe6` plus coverage-reporting configuration. The frontend suite at that baseline had 25 files and 89 passing tests. PostgreSQL integration, migration and real backup/restore tests ran with native PostgreSQL 18.3 tools.
 
 | Metric | Covered / total | Baseline | Proposed future global floor |
 | --- | ---: | ---: | ---: |
@@ -11,6 +11,20 @@ Measured on 2026-09-06 before changing application behavior, from revision `2ece
 | Go statements | 1,657 / 2,466 | 67.2% | 65% |
 
 These are baseline measurements and proposed conservative floors, not enforced gates. Re-measure on CI's operating system/toolchain before enabling floors. Do not lower a floor or exclude a difficult file to hide a regression. Time-based benchmark thresholds are independent of coverage and remain disabled.
+
+## Article read regression measurement
+
+Measured on 2026-09-06 after the summary/detail implementation, using the same whole-source scope and toolchain. The earlier baseline remains the comparison reference; no coverage floor is enabled by this change.
+
+| Metric | Covered / total | Result |
+| --- | ---: | ---: |
+| Vitest statements | 1,167 / 2,193 | 53.21% |
+| Vitest branches | 1,005 / 2,023 | 49.67% |
+| Vitest functions | 238 / 460 | 51.73% |
+| Vitest lines | 1,126 / 2,015 | 55.88% |
+| Go statements | 1,677 / 2,479 | 67.6% |
+
+All 101 frontend tests in 25 files pass. The new detail loader has 100% statement, line, function and branch coverage, including cancellation and late rejection. The removed duplicate frontend Markdown filter is tested at its remaining backend owner; no production file is excluded to improve the metric. Go race tests, native migration and real backup/restore checks pass. Windows still skips the existing symlink-content test because creating a symlink requires an unavailable OS privilege. The opt-in query experiment runs separately from the ordinary test suite.
 
 ## Fixed measurement scope
 

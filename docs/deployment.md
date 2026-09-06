@@ -80,6 +80,8 @@ The seed command refuses to replace an existing account. Sign in, change the gen
 
 ## Release upgrade
 
+The article summary API removes `content` from ordinary lists and search results and adds protected `GET /api/admin/posts/:id` detail reads. Build and deploy the frontend and backend from the same revision, and reload already-open browser clients after upgrading. Old editors expect list bodies and cannot safely be paired with the new API. This response change has no schema migration or additional configuration/service requirement. The existing image build and routing definitions already include the new handler and frontend; retain both previous application images for a paired rollback.
+
 Migrations are forward-only, and a database backup must match the uploads captured during the same write-free interval. Use this sequence:
 
 1. Fetch the reviewed release, choose a new immutable tag, and pre-build it without changing the current tag in `deploy/.env`.

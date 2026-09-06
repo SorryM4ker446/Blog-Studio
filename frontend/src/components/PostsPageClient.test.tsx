@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Post } from "@/lib/api";
+import type { PostSummary } from "@/lib/api";
 import PostsPageClient from "./PostsPageClient";
 
 const { getCategoriesMock, getPostsMock, navigationState, searchResourcesMock } = vi.hoisted(() => ({
@@ -22,12 +22,11 @@ vi.mock("@/lib/api", () => ({
   searchResources: searchResourcesMock,
 }));
 
-const matchingPost: Post = {
+const matchingPost: PostSummary = {
   id: 12,
   title: "Go observability",
   slug: "go-observability",
   summary: "Tracing in Go",
-  content: "Visible content",
   category_id: 2,
   category: {
     id: 2,
@@ -93,7 +92,7 @@ describe("category post search", () => {
   it("prevents a late search response from replacing the restored default list", async () => {
     navigationState.searchParams = new URLSearchParams("category=2");
     window.history.replaceState({}, "", "/posts?category=2");
-    let resolveSearch: ((value: { posts: Post[]; files: [] }) => void) | undefined;
+    let resolveSearch: ((value: { posts: PostSummary[]; files: [] }) => void) | undefined;
     searchResourcesMock.mockReturnValueOnce(new Promise((resolve) => {
       resolveSearch = resolve;
     }));

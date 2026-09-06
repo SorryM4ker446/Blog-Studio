@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import type { Category, FileRecord, Post } from "@/lib/api";
+import type { Category, FileRecord, PostDetail, PostSummary } from "@/lib/api";
 import {
   createCategory,
   createPost,
   deleteCategory,
   deleteFile,
   deletePost,
-  filterPostsByVisibleText,
   getApiErrorMessage,
   getAdminCategories,
   getAdminFiles,
@@ -27,6 +26,7 @@ import {
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
 import PostEditorForm from "@/components/editor/PostEditorForm";
+import PostDetailLoader from "@/components/editor/PostDetailLoader";
 import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
@@ -34,7 +34,7 @@ type ViewMode = "list" | "edit";
 type DeleteType = "post" | "file" | "category";
 
 export interface PostListSnapshot {
-  data: Post[];
+  data: PostSummary[];
   page: number;
   totalPages: number;
   total: number;
@@ -106,7 +106,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const reconcileHistoryRef = useRef<(params: URLSearchParams) => void>(() => undefined);
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [posts, setPosts] = useState<Post[]>(initialState.posts.data);
+  const [posts, setPosts] = useState<PostSummary[]>(initialState.posts.data);
   const [files, setFiles] = useState<FileRecord[]>(initialState.files.data);
   const [categories, setCategories] = useState<Category[]>(initialState.categories);
   const [categoriesLoading, setCategoriesLoading] = useState(Boolean(initialState.categoriesError));
@@ -118,7 +118,8 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const [postCount, setPostCount] = useState<number | null>(initialState.posts.total);
   const [fileCount, setFileCount] = useState<number | null>(initialState.files.total);
 
-  const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [editingPost, setEditingPost] = useState<PostDetail | null>(null);
+  const [postToLoad, setPostToLoad] = useState<PostSummary | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -250,7 +251,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
       const result = await searchAdminResources(query, tab, false);
       if (!isMountedRef.current || requestId !== requestIdRef.current) return;
       if (tab === "posts") {
-        const visiblePosts = filterPostsByVisibleText(result.posts || [], query);
+        const visiblePosts = result.posts || [];
         setPosts(visiblePosts);
         setPostCount(visiblePosts.length);
         setPostPage(1);
@@ -404,18 +405,31 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
     else void loadFiles(page);
   }
 
-  function openEditor(post: Post | null) {
+  const applyPostDetail = useCallback((post: PostDetail) => {
     setEditingPost(post);
-    setEditTitle(post?.title || "");
-    setEditSummary(post?.summary || "");
-    setEditContent(normalizeMarkdownFileUrls(post?.content || ""));
-    setEditCategoryId(post?.category_id ?? 0);
-    setEditStatus(post?.status || "draft");
+    setEditTitle(post.title);
+    setEditSummary(post.summary);
+    setEditContent(normalizeMarkdownFileUrls(post.content));
+    setEditCategoryId(post.category_id ?? 0);
+    setEditStatus(post.status);
+    setPostToLoad(null);
+  }, []);
+
+  function openEditor(post: PostSummary | null) {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    setPostToLoad(post);
+    setEditingPost(null);
+    setEditTitle("");
+    setEditSummary("");
+    setEditContent("");
+    setEditCategoryId(0);
+    setEditStatus("draft");
     setSaveMessage("");
     setViewMode("edit");
   }
 
   async function handleSave() {
+    if (postToLoad || saving) return;
     if (!editTitle.trim() || !editContent.trim()) {
       setSaveMessage("❌ Title and content are required.");
       if (!editTitle.trim()) document.getElementById("post-title")?.focus();
@@ -607,6 +621,13 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
             if (query) void runSearch(query, "files");
             else void loadFiles(filePage);
           }}
+        />
+      ) : postToLoad ? (
+        <PostDetailLoader
+          key={postToLoad.id}
+          postId={postToLoad.id}
+          onLoaded={applyPostDetail}
+          onBack={() => setViewMode("list")}
         />
       ) : (
         <PostEditorForm

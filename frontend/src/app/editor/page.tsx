@@ -4,15 +4,14 @@ import EditorPageClient, {
   type FileListSnapshot,
   type PostListSnapshot,
 } from "@/components/EditorPageClient";
-import { filterPostsByVisibleText } from "@/lib/api";
-import type { Category, FileRecord, PaginatedResponse, Post, SearchResult } from "@/lib/api";
+import type { Category, FileRecord, PaginatedResponse, PostSummary, SearchResult } from "@/lib/api";
 import { requestServerJSON } from "@/lib/server-api";
 
 interface EditorPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-function postSnapshot(result?: PaginatedResponse<Post>): PostListSnapshot {
+function postSnapshot(result?: PaginatedResponse<PostSummary>): PostListSnapshot {
   return {
     data: Array.isArray(result?.data) ? result.data : [],
     page: result?.page || 1,
@@ -40,7 +39,7 @@ async function loadInitialState(
   const requestOptions = { cookieHeader };
   const [categoryResult, postResult, fileResult, searchResult] = await Promise.all([
     requestServerJSON<Category[]>("/admin/categories", requestOptions),
-    requestServerJSON<PaginatedResponse<Post>>(`/admin/posts?${new URLSearchParams({
+    requestServerJSON<PaginatedResponse<PostSummary>>(`/admin/posts?${new URLSearchParams({
       page: postPage.toString(),
       limit: "10",
       sort: "admin",
@@ -66,7 +65,7 @@ async function loadInitialState(
 
   if (query && searchResult?.ok) {
     if (tab === "posts") {
-      const posts = filterPostsByVisibleText(searchResult.data.posts || [], query);
+      const posts = searchResult.data.posts || [];
       visiblePosts = { data: posts, page: 1, totalPages: 1, total: posts.length };
     } else {
       const files = searchResult.data.files || [];

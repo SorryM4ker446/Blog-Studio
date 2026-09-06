@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getApiErrorMessage, getPostTimeline, getPosts } from "@/lib/api";
-import type { Post } from "@/lib/api";
+import type { PostSummary } from "@/lib/api";
 import { 
   StarIcon, 
   GridIcon, 
@@ -20,11 +20,11 @@ export default function HomePageClient({
   initialPosts,
   initialPostsError = "",
 }: {
-  initialPosts: Post[];
+  initialPosts: PostSummary[];
   initialPostsError?: string;
 }) {
   const router = useRouter();
-  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [posts, setPosts] = useState<PostSummary[]>(initialPosts);
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsError, setPostsError] = useState(initialPostsError);
   const [searchQuery, setSearchQuery] = useState("");
@@ -129,7 +129,7 @@ export default function HomePageClient({
           ) : posts.length === 0 ? (
             <EmptyState title="No posts available yet" message="Published articles will appear here." />
           ) : (
-            posts.map((post: Post) => (
+            posts.map((post: PostSummary) => (
               <Link key={post.id} href={`/posts/${post.id}`} style={{ textDecoration: "none" }}>
                 <div
                   className="ai-card"

@@ -19,6 +19,8 @@ import (
 
 const maxSlugRunes = 255
 
+const postSummaryColumns = "posts.id, posts.title, posts.slug, posts.summary, posts.category_id, posts.status, posts.published_at, posts.last_edited_at, posts.created_at, posts.updated_at"
+
 var slugSeparatorRegex = regexp.MustCompile(`[^a-z0-9\x{4e00}-\x{9fa5}]+`)
 
 type createPostInput struct {
@@ -79,7 +81,7 @@ func respondWithPosts(c *gin.Context, includeDrafts bool) {
 	} else {
 		db = db.Order("COALESCE(last_edited_at, published_at) DESC, id DESC")
 	}
-	if err := db.Preload("Category").Limit(limit).Offset(safeOffset(page, limit)).Find(&posts).Error; err != nil {
+	if err := db.Select(postSummaryColumns).Preload("Category").Limit(limit).Offset(safeOffset(page, limit)).Find(&posts).Error; err != nil {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load posts")
 		return
 	}
@@ -87,7 +89,7 @@ func respondWithPosts(c *gin.Context, includeDrafts bool) {
 	if !includeDrafts {
 		httpcache.PublicRead(c)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": posts, "total": total, "page": page, "limit": limit})
+	c.JSON(http.StatusOK, gin.H{"data": models.SummarizePosts(posts), "total": total, "page": page, "limit": limit})
 }
 
 func GetPosts(c *gin.Context) {
@@ -99,12 +101,24 @@ func AdminGetPosts(c *gin.Context) {
 }
 
 func GetPost(c *gin.Context) {
+	respondWithPost(c, false)
+}
+
+func AdminGetPost(c *gin.Context) {
+	respondWithPost(c, true)
+}
+
+func respondWithPost(c *gin.Context, includeDrafts bool) {
 	id, ok := parseResourceID(c)
 	if !ok {
 		return
 	}
 	var post models.Post
-	err := config.DB.Preload("Category").Where("status = ?", "published").First(&post, id).Error
+	db := config.DB.Preload("Category")
+	if !includeDrafts {
+		db = db.Where("status = ?", "published")
+	}
+	err := db.First(&post, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		apiresponse.Error(c, http.StatusNotFound, "post_not_found", "Post not found")
 		return
@@ -113,8 +127,10 @@ func GetPost(c *gin.Context) {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not load post")
 		return
 	}
-	httpcache.PublicRead(c)
-	c.JSON(http.StatusOK, post)
+	if !includeDrafts {
+		httpcache.PublicRead(c)
+	}
+	c.JSON(http.StatusOK, models.DetailPost(post))
 }
 
 func CreatePost(c *gin.Context) {
@@ -186,7 +202,7 @@ func CreatePost(c *gin.Context) {
 		}
 		return
 	}
-	c.JSON(http.StatusCreated, post)
+	c.JSON(http.StatusCreated, models.DetailPost(post))
 }
 
 func UpdatePost(c *gin.Context) {
@@ -300,7 +316,7 @@ func UpdatePost(c *gin.Context) {
 		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Post was updated but could not be reloaded")
 		return
 	}
-	c.JSON(http.StatusOK, post)
+	c.JSON(http.StatusOK, models.DetailPost(post))
 }
 
 func DeletePost(c *gin.Context) {

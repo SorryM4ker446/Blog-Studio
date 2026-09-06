@@ -1,5 +1,4 @@
 import SearchPageClient, { type SearchPageInitialState } from "@/components/SearchPageClient";
-import { filterPostsByVisibleText } from "@/lib/api";
 import type { SearchResult } from "@/lib/api";
 import { requestServerJSON } from "@/lib/server-api";
 
@@ -20,7 +19,7 @@ async function loadInitialState(query: string): Promise<SearchPageInitialState> 
   }
   return {
     query,
-    posts: filterPostsByVisibleText(result.data.posts || [], query),
+    posts: result.data.posts || [],
     files: result.data.files || [],
     searched: true,
     error: "",

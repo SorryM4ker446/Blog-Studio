@@ -88,6 +88,7 @@ func setupRouter(
 		auth.Use(middleware.AuthMiddleware(), middleware.RequireAdminMiddleware(), middleware.CSRFMiddleware())
 		{
 			auth.GET("/posts", handlers.AdminGetPosts)
+			auth.GET("/posts/:id", handlers.AdminGetPost)
 			auth.GET("/categories", handlers.AdminGetCategories)
 			auth.GET("/files", handlers.AdminGetFiles)
 			auth.GET("/files/storage-health", handlers.GetFileStorageHealth)

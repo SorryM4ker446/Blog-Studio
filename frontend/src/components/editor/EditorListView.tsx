@@ -1,6 +1,6 @@
 "use client";
 
-import type { FileRecord, Post } from "@/lib/api";
+import type { FileRecord, PostSummary } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
 import FileCard, { EditActionButton } from "@/components/files/FileCard";
@@ -12,7 +12,7 @@ export type EditorTab = "posts" | "files";
 interface EditorListViewProps {
   activeTab: EditorTab;
   searchQuery: string;
-  posts: Post[];
+  posts: PostSummary[];
   files: FileRecord[];
   postCount: number | null;
   fileCount: number | null;
@@ -28,8 +28,8 @@ interface EditorListViewProps {
   onSearch: (query: string) => void;
   onNewPost: () => void;
   onUploadFile: () => void;
-  onViewPost: (post: Post) => void;
-  onEditPost: (post: Post) => void;
+  onViewPost: (post: PostSummary) => void;
+  onEditPost: (post: PostSummary) => void;
   onDeletePost: (id: number) => void;
   onPreviewFile: (file: FileRecord) => void;
   onEditFile: (file: FileRecord) => void;
@@ -40,7 +40,7 @@ interface EditorListViewProps {
   onRetryFiles: () => void;
 }
 
-function PostCard({ post, onView, onEdit, onDelete }: { post: Post; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onView: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
     <article className="ai-card editor-post-card" onClick={onView}>
       <button

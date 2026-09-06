@@ -53,7 +53,7 @@ go run ./cmd/seed
 
 推荐的生产基线是单台 Linux 主机上的 Docker Compose：Caddy 提供同源 HTTPS 入口，Next.js 与 Go API 使用非 root 多阶段镜像，PostgreSQL、上传内容和证书状态使用独立持久化卷。首次部署、Secret 准备、升级和回滚步骤请参阅 [`docs/deployment.md`](docs/deployment.md)。这些文件不会改变上述原生本地开发方式。
 
-查询实测与索引选择见 [docs/query-analysis.md](docs/query-analysis.md)，后续列表、搜索及 URL 契约见 [docs/search-contract.md](docs/search-contract.md)，真实覆盖率与统计口径见 [docs/coverage-baseline.md](docs/coverage-baseline.md)。接口设计文档明确区分当前能力与尚待实现的行为。
+查询实测与索引选择见 [docs/query-analysis.md](docs/query-analysis.md)，已实现的文章摘要/管理员详情及后续搜索分页、URL 契约见 [docs/search-contract.md](docs/search-contract.md)，真实覆盖率与统计口径见 [docs/coverage-baseline.md](docs/coverage-baseline.md)。列表和搜索已移除正文，编辑时单独读取完整详情；升级时须配套部署前后端。搜索分页与数据库正文读取优化仍待实现。
 
 ## 5. 样式拓展
 

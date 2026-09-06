@@ -1,10 +1,10 @@
 import HomePageClient from "@/components/HomePageClient";
-import type { PaginatedResponse, Post } from "@/lib/api";
+import type { PaginatedResponse, PostSummary } from "@/lib/api";
 import { requestServerJSON } from "@/lib/server-api";
 
-async function loadRecentPosts(): Promise<Post[]> {
+async function loadRecentPosts(): Promise<PostSummary[]> {
   const query = new URLSearchParams({ page: "1", limit: "5" });
-  const result = await requestServerJSON<PaginatedResponse<Post>>(`/posts?${query.toString()}`);
+  const result = await requestServerJSON<PaginatedResponse<PostSummary>>(`/posts?${query.toString()}`);
   if (!result.ok || !Array.isArray(result.data.data)) {
     throw new Error("Recent posts response was invalid");
   }
@@ -12,7 +12,7 @@ async function loadRecentPosts(): Promise<Post[]> {
 }
 
 async function resolveInitialRecentPosts(): Promise<{
-  posts: Post[];
+  posts: PostSummary[];
   error: string;
 }> {
   try {
