@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Post } from "@/lib/api";
+import type { PostSummary } from "@/lib/api";
 import Home from "./page";
 
-const recentPost: Post = {
+const recentPost: PostSummary = {
   id: 9,
   title: "Initial recent article",
   slug: "initial-recent-article",
   summary: "",
-  content: "",
   category_id: null,
   category: null,
   status: "published",

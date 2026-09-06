@@ -22,6 +22,8 @@ Public search uses a separate token bucket with a default burst of 30 and a refi
 
 Public browser `fetch` calls omit credentials, and public handlers do not read session identity. Administrator, authentication, mutation, error, health, and metrics responses use `Cache-Control: no-store`; successful public representations opt into their documented cache policy explicitly.
 
+`GET /api/admin/posts/:id` checks the current session and administrator role before returning a full draft or published article. Anonymous requests return 401, non-administrators return 403, and all responses remain no-store. Public detail continues to return 404 for drafts even with an administrator Cookie. Lists and search responses carry summary fields only; removing bodies does not widen public search access to drafts or system files. Editor loads detail through the authenticated request client, preserving the existing session-expiry flow.
+
 ## Deployment configuration
 
 Development defaults allow `http://localhost:3000` and `http://127.0.0.1:3000`, with non-secure Cookies for local HTTP. Production requires an explicit HTTPS origin and secure Cookies:

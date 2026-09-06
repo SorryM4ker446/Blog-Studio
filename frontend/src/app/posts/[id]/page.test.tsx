@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Post } from "@/lib/api";
+import type { PostDetail } from "@/lib/api";
 import PostPage from "./page";
 
-const post: Post = {
+const post: PostDetail = {
   id: 42,
   title: "Container-safe article",
   slug: "container-safe-article",

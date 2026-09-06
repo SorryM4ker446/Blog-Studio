@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { ClipboardEvent, FormEvent } from "react";
-import type { Category, Post } from "@/lib/api";
+import type { Category, PostDetail } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
 import { createMarkdownParser } from "@/lib/markdown";
 import CategoryField from "@/components/editor/CategoryField";
@@ -17,7 +17,7 @@ if (typeof window !== "undefined") {
 }
 
 interface PostEditorFormProps {
-  editingPost: Post | null;
+  editingPost: PostDetail | null;
   title: string;
   summary: string;
   content: string;

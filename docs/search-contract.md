@@ -1,6 +1,6 @@
 # Search and Article Read Contract
 
-This document specifies the next API implementation. The current handlers still return full post bodies, searches are unpaginated, and an administrator article-detail GET route does not exist. Query prototypes and their evidence are in [query-analysis.md](query-analysis.md); they do not change the live API.
+Article summaries and protected administrator detail reads are implemented. Ordinary article lists select summary columns, and both public and administrator search responses omit `content`. Search still reads full matching bodies for the existing backend visible-text filter and remains unpaginated. The pagination, normalized-text migration and expanded URL rules below are proposed contracts, not current API behavior. Query prototypes and their evidence are in [query-analysis.md](query-analysis.md).
 
 ## Resource representations and access
 
@@ -11,13 +11,15 @@ This document specifies the next API implementation. The current handlers still 
 | Article write input | Explicit editable fields, separate from read types; version and publication actions follow the editor contract when implemented |
 | File result | Existing public file metadata; no storage paths, bytes or credentials |
 
-Use explicit SQL projection for lists and search results. Do not load a full model and merely remove `content` at serialization. Public post detail stays `GET /api/posts/:id` and cannot reveal drafts. Add `GET /api/admin/posts/:id` behind the existing authentication and administrator middleware, with the existing private/no-store response boundary. Missing articles return the normal 404 error; unauthorized requests follow existing 401/403 behavior.
+Ordinary lists use explicit SQL projection without `content`. Search currently converts the full records required by its backend filter to summary DTOs before serialization; the proposed normalized-text query will also eliminate full-body search reads. Public post detail stays `GET /api/posts/:id` and cannot reveal drafts, including when an administrator Cookie is supplied. `GET /api/admin/posts/:id` uses the existing authentication and administrator middleware and returns `Cache-Control: no-store`. Missing articles return `404 post_not_found`; unauthorized requests follow existing 401/403 behavior.
 
-Editor obtains the full article only after an edit action or a direct editor URL. It must show loading and retry states, discard stale detail responses, and disable saving until the requested detail has loaded. List HTML and server-component props must contain summaries only.
+Editor now obtains the full article after clicking an edit action or a draft card. The form uses the fresh detail response for every editable field. Loading and failure states provide a way back to the list; failures can be retried, and no saveable form appears until a complete matching detail response arrives. Returning to the list or unmounting aborts the request and ignores late success/error responses. Creating a new draft does not request an existing article. List HTML and server-component props contain summaries only. Direct editor URLs remain proposed below.
 
-Removing `content` is a breaking response change for consumers that edit from list results. Deploy frontend and backend together, document the change, and update every consumer and mock. The public detail representation and file endpoints keep their existing behavior.
+Visible-text post-filtering has one owner, the backend. Clients retain body-only search matches returned as summaries without trying to filter them again. The backend's existing regular-expression extraction is unchanged; the parser/backfill rules below are still pending. Saving, publication status selection and the existing return-to-list behavior are unchanged by the read split.
 
-## Search request and response
+Removing `content` is a breaking response change for consumers that edit from list results. Deploy frontend and backend together, and reload already-open clients after upgrade. Roll back the pair together if needed. This read split adds no migration, index, extension, configuration variable or deployment service. Public detail and successful article write responses retain complete bodies; file endpoints keep their existing behavior.
+
+## Proposed paginated search request and response
 
 Both `GET /api/search` and `GET /api/admin/search` accept:
 
@@ -48,7 +50,7 @@ Build candidate IDs with `UNION` to deduplicate article fields/category matches,
 
 The response arrays are grouped by kind, preserving each kind's relative order within the combined page. They do not encode cross-kind interleaving; the UI retains separate article/file sections and uses the shared page control. Writes between separate page requests can change results; offset pagination does not promise a historical snapshot across requests.
 
-## Visible text and database consistency
+## Proposed visible text and database consistency
 
 Use one backend Markdown parser/AST traversal shared by migration backfill and every create/update path. Store derived **body-only** text, keeping title, summary and category matching separate so a query cannot span artificial field boundaries. Resolve category names live; category renames must immediately affect searches.
 
@@ -66,7 +68,7 @@ The experiment supplies known visible text directly: it proves query mechanics, 
 
 Add a new versioned migration; never edit the meaning of an applied migration or derive a legacy fixture from the evolving current model. Backfill in bounded batches without changing original Markdown, publication dates or edit timestamps. Add only indexes supported by the measured final query. Extension preconditions, rollback and matched backup tooling are specified in [query-analysis.md](query-analysis.md).
 
-## URL and navigation state
+## Proposed URL and navigation state
 
 | Page | Parameters | Transition |
 | --- | --- | --- |
@@ -81,6 +83,8 @@ The URL owns submitted conditions; the input component owns unsubmitted typing. 
 Request identity includes all active filters and page parameters. Delayed responses must not overwrite the current query. Browser back/forward and hard refresh restore conditions without breaking existing input focus, identity restoration or scroll return. A resource section empty on the current mixed page must not claim there are no matches when its total is nonzero.
 
 ## Automated acceptance
+
+Implemented checks assert summary-only list SQL/JSON, public and administrator search JSON without bodies, body-only matches, protected detail access and existing cache boundaries. Component tests exercise fresh detail loading, failed/incomplete responses, retry, cancellation and late responses without accidental writes. Playwright inspects list/search server HTML, retries a failed detail request, saves the complete draft and rechecks public draft isolation. The existing browser workflows continue to cover publishing, identity/hard refresh, search input and scroll return. The remaining requirements below apply as the proposed query and navigation contracts are implemented.
 
 Backend integration tests must assert omitted body/derived fields, protected details, permission isolation, all search scopes, exact per-kind/combined totals, strict combined limits at 1/10/100, ties, duplicate field matches, malformed parameters, empty/deep pages, literal wildcards, Chinese/short terms and concurrent-write snapshot consistency. Migration tests cover fixed legacy rows, repeat/concurrent/failure cases, identical backfill/write extraction and backup restoration with extensions.
 

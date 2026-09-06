@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Post } from "@/lib/api";
+import type { PostSummary } from "@/lib/api";
 import AllPostsPage from "./page";
 
-const matchingPost: Post = {
+const matchingPost: PostSummary = {
   id: 12,
   title: "Go observability",
   slug: "go-observability",
   summary: "Tracing in Go",
-  content: "Visible content",
   category_id: 2,
   category: {
     id: 2,

@@ -84,7 +84,7 @@ func respondWithSearchResults(c *gin.Context, adminAccess bool, includeSystem bo
 	if !adminAccess {
 		httpcache.PublicRead(c)
 	}
-	c.JSON(http.StatusOK, gin.H{"posts": posts, "files": files})
+	c.JSON(http.StatusOK, gin.H{"posts": models.SummarizePosts(posts), "files": files})
 }
 
 func filterPostsByVisibleText(posts []models.Post, normalizedQuery string) []models.Post {

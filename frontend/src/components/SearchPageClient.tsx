@@ -3,8 +3,8 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { Post, FileRecord } from "@/lib/api";
-import { getApiErrorMessage, searchResources, filterPostsByVisibleText, getPostTimeline } from "@/lib/api";
+import type { PostSummary, FileRecord } from "@/lib/api";
+import { getApiErrorMessage, searchResources, getPostTimeline } from "@/lib/api";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
 import { 
@@ -16,7 +16,7 @@ import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
 export interface SearchPageInitialState {
   query: string;
-  posts: Post[];
+  posts: PostSummary[];
   files: FileRecord[];
   searched: boolean;
   error: string;
@@ -26,7 +26,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
   const searchParams = useSearchParams();
   const urlQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialState.query);
-  const [posts, setPosts] = useState<Post[]>(initialState.posts);
+  const [posts, setPosts] = useState<PostSummary[]>(initialState.posts);
   const [files, setFiles] = useState<FileRecord[]>(initialState.files);
   const [searched, setSearched] = useState(initialState.searched);
   const [loading, setLoading] = useState(false);
@@ -56,7 +56,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
     try {
       const result = await searchResources(normalizedQuery);
       if (!isMountedRef.current || requestId !== searchRequestIdRef.current) return;
-      setPosts(filterPostsByVisibleText(result.posts, normalizedQuery));
+      setPosts(result.posts || []);
       setFiles(result.files);
       setSearched(true);
     } catch (requestError) {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { getApiErrorMessage, getPostTimeline, getPosts, searchResources, getCategories } from "@/lib/api";
-import type { Post } from "@/lib/api";
+import type { PostSummary } from "@/lib/api";
 import Link from "next/link";
 import SearchInput from "@/components/SearchInput";
 import Pagination from "@/components/Pagination";
@@ -12,7 +12,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState
 
 export interface PostsPageInitialState {
   query: string;
-  posts: Post[];
+  posts: PostSummary[];
   page: number;
   totalPages: number;
   currentCategoryName: string | null;
@@ -24,7 +24,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
   const categoryId = searchParams.get("category");
   const searchQuery = searchParams.get("q") || "";
 
-  const [posts, setPosts] = useState<Post[]>(initialState.posts);
+  const [posts, setPosts] = useState<PostSummary[]>(initialState.posts);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(initialState.error);
   const [page, setPage] = useState(initialState.page);
@@ -231,7 +231,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
         <div
           style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}
         >
-          {posts.map((post: Post) => (
+          {posts.map((post: PostSummary) => (
             <Link key={post.id} href={`/posts/${post.id}`} style={{ textDecoration: "none" }}>
               <div
                 className="ai-card"

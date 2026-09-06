@@ -1,6 +1,6 @@
 # Query Analysis
 
-The query-analysis harness measures candidate SQL in a disposable schema. It does not add application fields, indexes, migrations or API behavior. The proposed consumer/API changes are specified in [search-contract.md](search-contract.md).
+The query-analysis harness measures candidate SQL in a disposable schema. It does not add application fields, indexes, migrations or API behavior. Implemented summary/detail reads and proposed search changes are distinguished in [search-contract.md](search-contract.md).
 
 ## Reproducible fixture and isolation
 
@@ -25,6 +25,8 @@ The analysis normally takes several minutes. Run it sequentially with integratio
 ## Measurement method
 
 Each SELECT runs `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` three times. Reports retain SQL, synthetic parameters, every full plan (including actual rows, loops and buffers), and the median PostgreSQL execution time. Baseline cases include list/count/category queries, first/deep pages, a 100-row page, and current public/administrator search candidates. Candidate experiments additionally measure the final summary projection, normalized search page/count, mixed pages and empty far-out pages.
+
+The retained full-body list SQL is the historical comparison baseline. The application now uses the measured summary column projection for ordinary lists; integration tests capture its actual SQL and reject selection of `content`. Search still reads complete candidates before backend filtering, while its JSON now uses summaries. No experimental index or normalized search field has been installed by the read split. Before/after router measurements are recorded in [performance-baseline.md](performance-baseline.md).
 
 The current search SQL fetches candidate bodies without a limit and then performs visible-text filtering in Go. Its SQL candidate count is explicitly labelled as such: it is not a trustworthy public result total. GORM category preload, result transfer, JSON serialization and Go filtering are measured by the real-router HTTP benchmark rather than this SQL-only plan.
 

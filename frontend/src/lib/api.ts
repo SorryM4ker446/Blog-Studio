@@ -22,12 +22,11 @@ interface Category {
   created_at: string;
 }
 
-interface Post {
+interface PostSummary {
   id: number;
   title: string;
   slug: string;
   summary: string;
-  content: string;
   category_id: number | null;
   category: Category | null;
   status: string;
@@ -49,7 +48,7 @@ interface FileRecord {
 }
 
 interface SearchResult {
-  posts: Post[];
+  posts: PostSummary[];
   files: FileRecord[];
 }
 
@@ -61,7 +60,22 @@ interface PaginatedResponse<T> {
   error?: string;
 }
 
-export type { Category, Post, FileRecord, SearchResult, PaginatedResponse };
+export type { Category, PostSummary, FileRecord, SearchResult, PaginatedResponse };
+
+export interface PostDetail extends PostSummary {
+  content: string;
+}
+
+export interface CreatePostInput {
+  title: string;
+  summary: string;
+  content: string;
+  slug?: string;
+  category_id?: number;
+  status?: string;
+}
+
+export type UpdatePostInput = Partial<CreatePostInput>;
 
 export interface FileMutationResult {
   ok: boolean;
@@ -105,39 +119,7 @@ export function normalizeMarkdownFileUrls(markdown: string): string {
   return rebaseFileViewURLs(markdown, API_BASE);
 }
 
-export function extractSearchablePostContent(markdown: string): string {
-  if (!markdown) {
-    return "";
-  }
-  // Remove markdown image blocks completely so file names/URLs don't affect post-text search.
-  let content = markdown.replace(/!\[[^\]]*\]\([^)]+\)/g, " ");
-  // Keep link text and remove URL target.
-  content = content.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-  // Remove bare URLs.
-  content = content.replace(/https?:\/\/[^\s)]+/g, " ");
-  return content;
-}
-
-export function filterPostsByVisibleText(posts: Post[], query: string): Post[] {
-  const q = query.trim().toLowerCase();
-  if (!q) {
-    return posts;
-  }
-  return posts.filter((post) => {
-    const title = (post.title || "").toLowerCase();
-    const summary = (post.summary || "").toLowerCase();
-    const categoryName = (post.category?.name || "").toLowerCase();
-    const content = extractSearchablePostContent(post.content || "").toLowerCase();
-    return (
-      title.includes(q) ||
-      summary.includes(q) ||
-      categoryName.includes(q) ||
-      content.includes(q)
-    );
-  });
-}
-
-export function getPostTimeline(post: Pick<Post, "published_at" | "last_edited_at" | "updated_at">): {
+export function getPostTimeline(post: Pick<PostSummary, "published_at" | "last_edited_at" | "updated_at">): {
   label: "Published" | "Updated";
   timestamp: string;
 } {
@@ -198,7 +180,7 @@ export async function logoutUser(): Promise<void> {
 
 // ==================== Post API ====================
 
-export async function getPosts(page = 1, limit = 10, _useAuth = false, sort = "", categoryId = ""): Promise<PaginatedResponse<Post>> {
+export async function getPosts(page = 1, limit = 10, _useAuth = false, sort = "", categoryId = ""): Promise<PaginatedResponse<PostSummary>> {
   const query = new URLSearchParams({
     page: page.toString(),
     limit: limit.toString(),
@@ -206,7 +188,7 @@ export async function getPosts(page = 1, limit = 10, _useAuth = false, sort = ""
   if (sort) query.append("sort", sort);
   if (categoryId) query.append("category_id", categoryId);
 
-  return publicApiRequest<PaginatedResponse<Post>>(`/posts?${query.toString()}`);
+  return publicApiRequest<PaginatedResponse<PostSummary>>(`/posts?${query.toString()}`);
 }
 
 export async function getAdminPosts(
@@ -214,22 +196,22 @@ export async function getAdminPosts(
   limit = 10,
   sort = "admin",
   categoryId = ""
-): Promise<PaginatedResponse<Post>> {
+): Promise<PaginatedResponse<PostSummary>> {
   const query = new URLSearchParams({
     page: page.toString(),
     limit: limit.toString(),
   });
   if (sort) query.append("sort", sort);
   if (categoryId) query.append("category_id", categoryId);
-  return apiRequest<PaginatedResponse<Post>>(`/admin/posts?${query.toString()}`, {
+  return apiRequest<PaginatedResponse<PostSummary>>(`/admin/posts?${query.toString()}`, {
     cache: "no-store",
     auth: true,
   });
 }
 
-export async function getPost(id: string): Promise<Post | null> {
+export async function getPost(id: string): Promise<PostDetail | null> {
   try {
-    return await publicApiRequest<Post>(`/posts/${encodeURIComponent(id)}`);
+    return await publicApiRequest<PostDetail>(`/posts/${encodeURIComponent(id)}`);
   } catch (error) {
     if (isApiError(error) && error.status === 404) {
       return null;
@@ -238,10 +220,20 @@ export async function getPost(id: string): Promise<Post | null> {
   }
 }
 
-export async function createPost(
-  data: { title: string; summary: string; content: string; category_id?: number; status?: string }
-): Promise<Post | null> {
-  return apiRequest<Post>("/admin/posts", {
+export async function getAdminPost(id: number, options: { signal?: AbortSignal } = {}): Promise<PostDetail> {
+  const post = await apiRequest<PostDetail>(`/admin/posts/${id}`, {
+    cache: "no-store",
+    auth: true,
+    signal: options.signal,
+  });
+  if (!post || post.id !== id || typeof post.content !== "string") {
+    throw new ApiError("The article response is incomplete. Try loading it again.", { kind: "parse" });
+  }
+  return post;
+}
+
+export async function createPost(data: CreatePostInput): Promise<PostDetail> {
+  return apiRequest<PostDetail>("/admin/posts", {
     method: "POST",
     auth: true,
     csrf: true,
@@ -252,9 +244,9 @@ export async function createPost(
 
 export async function updatePost(
   id: number,
-  data: { title?: string; summary?: string; content?: string; category_id?: number; status?: string }
-): Promise<Post | null> {
-  return apiRequest<Post>(`/admin/posts/${id}`, {
+  data: UpdatePostInput
+): Promise<PostDetail> {
+  return apiRequest<PostDetail>(`/admin/posts/${id}`, {
     method: "PUT",
     auth: true,
     csrf: true,

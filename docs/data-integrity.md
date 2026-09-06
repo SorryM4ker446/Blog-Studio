@@ -59,10 +59,12 @@ All API errors use this compatible shape:
 
 Validation and malformed identifiers return `400`, missing resources return `404`, uniqueness conflicts return `409`, and unexpected database/storage failures return `500` without exposing driver errors.
 
-Pagination uses `page` from 1 through 1,000,000 and `limit` from 1 through 100. Search text is trimmed and limited to 200 characters; `scope` is one of `posts`, `files`, or `all`. Sort and Boolean query values are allowlisted rather than silently coerced.
+Ordinary list pagination uses `page` from 1 through 1,000,000 and `limit` from 1 through 100. Search is currently unpaginated; its text is trimmed and limited to 200 characters, and `scope` is one of `posts`, `files`, or `all`. Sort and Boolean query values are allowlisted rather than silently coerced.
 
 Successful resource creates and updates return the resource, list endpoints return their existing pagination envelope, and successful deletes or action endpoints return `{ "message": "..." }`.
 
+Article lists and search results return `PostSummary` without `content` or derived search fields. Ordinary article list SQL also excludes the body; search still reads it for backend visible-text filtering. Public `GET /api/posts/:id` returns the complete published article. Authenticated administrators use `GET /api/admin/posts/:id` for complete draft or published content, with no-store responses. Article create/update responses remain complete details. The frontend separates summary, detail and write types and loads a fresh protected detail before opening an existing article for editing.
+
 Public pages display `Published on` with `published_at` until a post receives a post-publication edit. They then display `Updated on` with `last_edited_at`.
 
-The proposed summary/detail split, paginated search and derived-text migration are specified in [search-contract.md](search-contract.md). They are design requirements for the next implementation, not capabilities of the current API. The [query analysis](query-analysis.md) changes only disposable test schemas; the application migration version remains unchanged.
+The implemented read representations and proposed search pagination, derived-text migration and URL rules are distinguished in [search-contract.md](search-contract.md). Deploy the summary API and its frontend together because list consumers can no longer read `content`. The read split leaves the application migration version unchanged; [query analysis](query-analysis.md) experiments alter only disposable test schemas.

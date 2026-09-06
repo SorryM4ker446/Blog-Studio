@@ -76,3 +76,32 @@ The common search allocates 504.95–673.71 MiB/op across these samples; this is
 The different corpora are not before/after optimization pairs. Preserve both fixtures and compare each with itself after summary projection and pagination are implemented. SQL-only EXPLAIN does not include body transfer, visible-text filtering or JSON serialization; use both measurement types.
 
 GitHub Actions uploads both raw benchmark reports and query plans for 30 days without timing gates. Synthetic metadata contains no real file bytes or private user content. The new long-body fixture rolls back its schema, while the original small benchmark retains its existing dedicated-test-database reset behavior.
+
+## Article summary comparison
+
+Measured on 2026-09-06 after replacing ordinary list projections and list/search JSON with article summaries. This run uses the same machine, toolchain, fixtures and three 500 ms samples as the response-size reference above. Backend integration tests and browser servers finished before benchmarking; the query experiment ran afterward. No migration, new index or search query rewrite is included.
+
+| Original workload after change | Median (observed range) | Response bytes | Median heap / operation | Median allocations |
+| --- | ---: | ---: | ---: | ---: |
+| Post list | 0.379 ms (0.377–0.393) | 5,084 | 60.6 KiB | 731 |
+| Post detail | 0.193 ms (0.191–0.201) | 621 | 25.9 KiB | 272 |
+| Categories | 0.214 ms (0.211–0.218) | 1,212 | 22.6 KiB | 250 |
+| File list | 0.232 ms (0.230–0.238) | 2,013 | 28.0 KiB | 406 |
+| Settings | 0.098 ms (0.096–0.099) | 81 | 14.2 KiB | 127 |
+| Search matching 200 posts | 1.495 ms (1.482–1.500) | 100,756 | 801.4 KiB | 7,612 |
+
+The short-body fixture reduces list/search payloads by about 19%; these timings are roughly 4–9% slower than the immediately preceding reference, with no repeatable timing improvement established. Small detail-byte variations can reflect the fixture's generated timestamp precision; the fixed long-body detail remains exactly the same size. Ordinary categories, files and settings retain their payloads and allocation counts.
+
+| Long-body workload after change | Median (observed range) | Response bytes | Median heap / operation | Median allocations |
+| --- | ---: | ---: | ---: | ---: |
+| Post list, limit 10 | 0.559 ms (0.550–0.565) | 4,452 | 56.3 KiB | 671 |
+| Post detail | 0.647 ms (0.627–0.657) | 132,745 | 685.2 KiB | 300 |
+| Categories | 0.655 ms (0.653–0.681) | 4,363 | 41.1 KiB | 588 |
+| File list, limit 10 | 0.466 ms (0.463–0.471) | 2,123 | 29.6 KiB | 456 |
+| Settings | 0.093 ms (0.093–0.095) | 39 | 14.0 KiB | 117 |
+| Rare search, 17 posts | 686.254 ms (674.419–688.965) | 7,398 | 8.93 MiB | 1,422 |
+| Common search, 1,920 posts | 168.730 ms (168.500–170.071) | 830,465 | 125.00 MiB | 73,511 |
+
+The long-body list shrinks from 485,635 to 4,452 bytes (99.08%), with median time falling from 2.397 to 0.559 ms and heap allocation from 2.80 MiB to 56.3 KiB. Rare/common search responses shrink by 99.27%/99.26%; common-search cumulative allocation falls from 504.95 to 125.00 MiB and median time from 274.773 to 168.730 ms. Public detail retains the full article and similar allocation behavior.
+
+Search remains unpaginated and still transfers candidate bodies from PostgreSQL for the existing Go visible-text filter. Its rare-query latency and common-query 125 MiB allocation remain substantial. These results demonstrate SQL projection and response serialization savings; they do not establish bounded search memory, database-query optimization, production throughput or a capacity guarantee. Rare search still has one request per sample and common search now has three; use longer samples for close timing decisions. The planned normalized-text query, exact totals and combined pagination remain separate work.
