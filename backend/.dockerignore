@@ -8,3 +8,8 @@ vendor/
 *.log
 *.exe
 *_test.go
+coverage.out
+coverage.html
+coverage-summary.txt
+test-results.json
+query-analysis.json

@@ -22,7 +22,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - run: npm run test:unit
+      - run: npm run test:coverage
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: warn
+          retention-days: 30
       - run: npm run build
 
   backend:
@@ -66,16 +74,54 @@ jobs:
         env:
           DB_DSN: ${{ env.TEST_DB_DSN }}
         run: go run ./cmd/migrate up
-      - run: go test -race -p 1 ./...
+      - name: Test with complete backend coverage
+        run: |
+          set -o pipefail
+          go test -race -p 1 -covermode=atomic -coverpkg=./... -coverprofile=coverage.out -json ./... | tee test-results.json
+      - name: Generate backend coverage reports
+        if: always()
+        run: |
+          if [ -f coverage.out ]; then
+            go tool cover -func=coverage.out > coverage-summary.txt
+            go tool cover -html=coverage.out -o coverage.html
+          fi
+      - name: Upload backend test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            backend/coverage.out
+            backend/coverage.html
+            backend/coverage-summary.txt
+            backend/test-results.json
+          if-no-files-found: warn
+          retention-days: 30
+      - run: go vet ./...
+      - name: Record isolated query plans
+        env:
+          QUERY_ANALYSIS_OUTPUT: ${{ runner.temp }}/query-analysis.json
+        run: go test -run '^TestQueryAnalysis$' -count=1 -v ./internal/routes
+      - name: Upload query plans
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: query-analysis
+          path: ${{ runner.temp }}/query-analysis.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Record anonymous public read benchmark
         run: |
           set -o pipefail
           go test -run '^$' -bench '^BenchmarkAnonymousPublicReads$' -benchmem -benchtime=200ms -count=1 ./internal/routes | tee "$RUNNER_TEMP/public-read-benchmark.txt"
+          go test -run '^$' -bench '^BenchmarkAnonymousLongBodyReads$' -benchmem -benchtime=200ms -count=1 ./internal/routes | tee "$RUNNER_TEMP/long-body-read-benchmark.txt"
       - name: Upload public read benchmark
         uses: actions/upload-artifact@v4
         with:
           name: public-read-benchmark
-          path: ${{ runner.temp }}/public-read-benchmark.txt
+          path: |
+            ${{ runner.temp }}/public-read-benchmark.txt
+            ${{ runner.temp }}/long-body-read-benchmark.txt
           retention-days: 30
       - run: go build ./...
 

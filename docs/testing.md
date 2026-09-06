@@ -37,6 +37,20 @@ go test -run '^$' -bench '^BenchmarkAnonymousPublicReads$' -benchmem -benchtime=
 
 The benchmark seeds 200 published posts, 10 categories, 100 public file records, and representative settings. It sends Cookie-free requests through the real Gin router and PostgreSQL queries for post list/detail, category list, file list, settings, and public search. It is a repeatable regression reference, not a network load test or a production concurrency guarantee. Stop other heavy local work when comparing runs, keep PostgreSQL and hardware stable, and compare several samples rather than one number.
 
+The additional `BenchmarkAnonymousLongBodyReads` uses a rollback-only random schema with 2,400 articles and 1,200 file records. It preserves the original short-body benchmark and adds rare/common search measurements. Both report `response_bytes/op` alongside time and allocations. See [query-analysis.md](query-analysis.md) for isolated query plans and [performance-baseline.md](performance-baseline.md) for measured results. Run database suites, query experiments and benchmarks sequentially.
+
+Full backend validation and coverage:
+
+~~~powershell
+go test -race -p 1 '-covermode=atomic' '-coverpkg=./...' '-coverprofile=coverage.out' ./...
+go vet ./...
+go build ./...
+go tool cover '-func=coverage.out'
+go tool cover '-html=coverage.out' '-o=coverage.html'
+~~~
+
+The query experiment requires `QUERY_ANALYSIS_OUTPUT` explicitly and refuses a missing/unsafe database configuration. Its ordinary-suite skip means only the opt-in measurement was not requested; the isolation/rollback integration test still runs whenever `TEST_DB_DSN` is configured.
+
 When `TEST_DB_DSN` is absent, PostgreSQL integration tests are skipped. CI always supplies it, so the integration tests are mandatory there.
 
 ## Frontend unit and component tests
@@ -55,6 +69,8 @@ npm run test:unit:watch
 ```
 
 Vitest and React Testing Library cover pure data transformations and focused client-component behavior in a `jsdom` environment. Browser-dependent layout, computed styles, file downloads, image loading, navigation, and complete user workflows remain Playwright responsibilities.
+
+Run `npm run test:coverage` to measure all production source files and generate HTML, LCOV and JSON summaries in `frontend/coverage`. The [coverage baseline](coverage-baseline.md) fixes the measurement scope, records actual results and distinguishes Go statement coverage from branch coverage. Reporting is enabled; numerical gates have not yet been activated.
 
 ## Browser workflow test
 
@@ -81,7 +97,7 @@ npx playwright show-trace test-results/<result-directory>/trace.zip
 
 ## Continuous integration
 
-GitHub Actions creates a disposable `blog_db_test` PostgreSQL service. The frontend job runs linting, unit and component tests, and a production build. The backend job runs the Go integration tests, while the E2E job installs Chromium and runs the Playwright workflow. Failure screenshots, video, trace, and HTML reports are retained as workflow artifacts for seven days.
+GitHub Actions creates a disposable `blog_db_test` PostgreSQL service. The frontend job runs linting, unit/component tests with coverage, and a production build. The backend job runs race-enabled integration tests with whole-module coverage, explicit vet/build checks, isolated query plans and both read benchmarks. Coverage and backend JSON test results are retained for 30 days, including on failure. The E2E job installs Chromium and runs Playwright; failure screenshots, video, trace, and HTML reports are retained for seven days.
 
 The backend integration suite additionally verifies login and public-search throttling, public/admin cache boundaries, file conditional revalidation, internal metrics without query-value labels, password policy, CSRF rejection, session invalidation, JWT signature/algorithm checks, and the production CORS allowlist.
 
@@ -93,6 +109,6 @@ Runtime coverage verifies liveness and readiness semantics, dependency timeouts,
 
 Migration integration coverage uses isolated PostgreSQL schemas to verify empty-database setup, registration of an existing schema without data loss, legacy-row normalization, repeated execution, read-only current-version checks, and concurrent lock serialization. Backup integration coverage creates disposable source and `_restore` databases, produces a real `pg_dump` bundle with uploaded content, verifies checksums and archive structure, restores through `pg_restore`, and checks the restored schema, records, content, and storage reconciliation. `pg_dump` and `pg_restore` from PostgreSQL 18 are required when `TEST_DB_DSN` is configured; GitHub Actions installs the matching client tools before running the backend suite.
 
-The backend job also runs a short non-threshold benchmark and retains its text output as a 30-day artifact. A slower result remains visible for comparison but does not fail CI unless the benchmark itself cannot complete correctly.
+The backend job retains query-plan JSON and both benchmark text reports for 30 days. Slower measurements remain visible for comparison without a timing threshold; invalid results or a failed experiment still fail the step.
 
 The container job validates the resolved Compose model, including separation between Caddy's fixed trusted address and the dynamic container address pool. It builds the non-root application images and maintenance image, starts PostgreSQL, migration, backend, frontend, and Caddy with disposable secrets and volumes, and probes readiness plus the same-origin `/api` and frontend routes. It also confirms that `/internal/metrics` is not reachable through Caddy. It always removes the disposable volumes afterward. Local Compose execution is not part of the native development validation workflow.

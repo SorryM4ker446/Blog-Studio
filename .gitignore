@@ -17,6 +17,7 @@ frontend/next-env.d.ts
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
+frontend/coverage/
 
 
 
@@ -31,6 +32,11 @@ backend/vendor/
 backend/.env*
 !backend/.env.example
 backend/*.log
+backend/coverage.out
+backend/coverage.html
+backend/coverage-summary.txt
+backend/test-results.json
+backend/query-analysis.json
 
 # Deployment runtime state and secrets
 deploy/.env
