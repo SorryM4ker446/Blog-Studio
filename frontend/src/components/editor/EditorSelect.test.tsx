@@ -9,6 +9,18 @@ const options = [
 ];
 
 describe("EditorSelect", () => {
+  it("identifies an unavailable selection without selecting the first option", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<EditorSelect value="removed" options={options} onChange={onChange} ariaLabel="Category" unavailableLabel="Unavailable category" />);
+    const trigger = screen.getByRole("combobox", { name: "Category" });
+    expect(trigger).toHaveTextContent("Unavailable category");
+    expect(trigger).toHaveAttribute("aria-invalid", "true");
+    await user.click(trigger);
+    expect(screen.queryByRole("option", { selected: true })).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledWith("draft");
+  });
   it("uses the project dropdown surface and selects an option with the pointer", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

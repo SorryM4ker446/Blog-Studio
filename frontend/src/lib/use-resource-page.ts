@@ -57,11 +57,18 @@ export function useResourcePage<T extends PageState>(
   useEffect(() => {
     active.current = enabled;
     if (!enabled) return;
-    writeResourceQuery(path, query, { replace: true, pageKey, includeScope: path === "/search" });
+    const location = window.location.href;
+    // Let the router install its history integration before normalizing the initial URL.
+    const frame = window.requestAnimationFrame(() => {
+      if (window.location.href === location) {
+        writeResourceQuery(path, query, { replace: true, pageKey, includeScope: path === "/search" });
+      }
+    });
     if (requestedKey.current !== resourceQueryKey(query) || initialCorrection.current) {
       initialCorrection.current = false;
       void run(query);
     }
+    return () => window.cancelAnimationFrame(frame);
   }, [enabled, path, query, run, pageKey]);
 
   return { state, loading, run, retry: () => run(retryQuery.current) };

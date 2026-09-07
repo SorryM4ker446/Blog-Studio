@@ -6,6 +6,7 @@ import Pagination from "@/components/Pagination";
 import FileCard, { EditActionButton } from "@/components/files/FileCard";
 import { EditIcon, FileTextIcon, FolderIcon, InboxIcon, UploadIcon } from "@/components/Icons";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
+import EditorSelect from "@/components/editor/EditorSelect";
 
 export type EditorTab = "posts" | "files";
 
@@ -137,10 +138,18 @@ export default function EditorListView(props: EditorListViewProps) {
         </div>
 
         <div className="editor-list-actions">
-          {props.activeTab === "posts" && <select className="resource-filter premium-select" aria-label="Filter articles by category" value={props.categoryId} onChange={(event) => props.onCategoryChange(event.target.value)}>
-            <option value="">All categories</option><option value="0">Uncategorized</option>
-            {props.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-          </select>}
+          {props.activeTab === "posts" && <EditorSelect
+            ariaLabel="Filter articles by category"
+            unavailableLabel="Unavailable category"
+            value={props.categoryId}
+            width="13rem"
+            options={[
+              { value: "", label: "All categories" },
+              { value: "0", label: "Uncategorized" },
+              ...props.categories.map((category) => ({ value: String(category.id), label: category.name })),
+            ]}
+            onChange={props.onCategoryChange}
+          />}
           <SearchInput placeholder={`Search ${props.activeTab}...`} onSearch={props.onSearch} style={{ width: "220px" }} value={props.searchQuery} />
           <button type="button" onClick={props.activeTab === "posts" ? props.onNewPost : props.onUploadFile} className="editor-primary-action">
             {props.activeTab === "posts" ? "+ New Post" : <><UploadIcon size={16} /> Upload File</>}

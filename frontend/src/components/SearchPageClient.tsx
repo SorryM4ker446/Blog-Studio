@@ -16,6 +16,7 @@ import {
   FolderIcon
 } from "@/components/Icons";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
+import EditorSelect from "@/components/editor/EditorSelect";
 
 export interface SearchPageInitialState {
   query: string;
@@ -50,6 +51,10 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
   }, []);
   const { state, loading, run, retry } = useResourcePage(initialState, initialState, targetQuery, load, "/search");
   const { posts, files, searched, error, postsTotal, filesTotal, page, totalPages, categories } = state;
+  const visibleCategories = useMemo(
+    () => categories.filter((category) => category.post_count === undefined || category.post_count > 0),
+    [categories],
+  );
 
   function navigate(target: ResourceQuery) {
     writeResourceQuery("/search", target, { includeScope: true });
@@ -121,22 +126,42 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
             fontSize: "0.9rem",
             fontWeight: 500,
             cursor: loading ? "wait" : "pointer",
-            transition: "opacity 0.2s",
-            opacity: loading ? 0.7 : 1,
           }}
         >
           Search
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-        <label>Search scope <select className="resource-filter premium-select" aria-label="Search scope" value={targetQuery.scope} onChange={(event) => changeFilter({ scope: event.target.value as SearchScope })}>
-          <option value="all">Posts and files</option><option value="posts">Posts</option><option value="files">Files</option>
-        </select></label>
-        <label>Article category <select className="resource-filter premium-select" aria-label="Search category" value={targetQuery.categoryId} onChange={(event) => changeFilter({ categoryId: event.target.value })}>
-          <option value="">All categories</option><option value="0">Uncategorized</option>
-          {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-        </select></label>
+      <div className="search-filters">
+        <div className="search-filter-field">
+          <span>Search scope</span>
+          <EditorSelect
+            ariaLabel="Search scope"
+            value={targetQuery.scope}
+            width="13rem"
+            options={[
+              { value: "all" as SearchScope, label: "Posts and files" },
+              { value: "posts" as SearchScope, label: "Posts" },
+              { value: "files" as SearchScope, label: "Files" },
+            ]}
+            onChange={(scope) => changeFilter({ scope })}
+          />
+        </div>
+        <div className="search-filter-field">
+          <span>Article category</span>
+          <EditorSelect
+            ariaLabel="Search category"
+            unavailableLabel="Unavailable category"
+            value={targetQuery.categoryId}
+            width="15rem"
+            options={[
+              { value: "", label: "All categories" },
+              { value: "0", label: "Uncategorized" },
+              ...visibleCategories.map((category) => ({ value: String(category.id), label: category.name })),
+            ]}
+            onChange={(categoryId) => changeFilter({ categoryId })}
+          />
+        </div>
       </div>
       <section aria-label="Search results" aria-busy={loading}>
       {error && (
@@ -148,12 +173,17 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
         />
       )}
 
-      {!error && loading && (
+      {!error && loading && !searched && targetQuery.query && (
         <LoadingState label="Searching posts and files…" rows={2} />
       )}
 
-      {!error && searched && !loading && (
+      {!error && searched && (
         <div>
+          {loading && (
+            <span className="sr-only" role="status" aria-label="Updating search results…">
+              Updating search results…
+            </span>
+          )}
           {/* 文章结果 */}
           <div style={{ marginBottom: "2rem" }}>
             <div
@@ -290,7 +320,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
         </div>
       )}
 
-      {!error && !searched && !loading && (
+      {!error && !searched && (!loading || !targetQuery.query) && (
         <div
           style={{
             display: "flex",

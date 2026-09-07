@@ -70,16 +70,31 @@ test("search pages restore filters and editor deletion corrects the last page", 
     await expect(results.locator('a[href^="/posts/"]').or(results.locator("[data-file-id]"))).toHaveCount(10);
     await page.getByRole("button", { name: "Next page" }).click();
     await expect(page.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
-    await page.getByRole("combobox", { name: "Search scope" }).selectOption("posts");
+    let releaseFilterRequest!: () => void;
+    const filterRequestBlocked = new Promise<void>((resolve) => { releaseFilterRequest = resolve; });
+    await page.route(/\/api\/search\?/, async (route) => {
+      const url = new URL(route.request().url());
+      const isFilteredSearch = url.pathname === "/api/search"
+        && url.searchParams.get("scope") === "posts"
+        && !url.searchParams.has("category_id");
+      if (isFilteredSearch) await filterRequestBlocked;
+      await route.continue();
+    });
+    await page.getByRole("combobox", { name: "Search scope" }).click();
+    await page.getByRole("option", { name: "Posts", exact: true }).click();
     await expect.poll(() => new URL(page.url()).searchParams.has("page")).toBe(false);
+    await expect(results.locator("[data-file-id]")).toHaveCount(1);
+    await expect(results).toHaveAttribute("aria-busy", "true");
+    releaseFilterRequest();
     await expect(results.locator('a[href^="/posts/"]')).toHaveCount(10);
-    await page.getByRole("combobox", { name: "Search category" }).selectOption(String(categoryId));
+    await page.getByRole("combobox", { name: "Search category" }).click();
+    await page.getByRole("option", { name: q, exact: true }).click();
     await expect(results.getByText("Posts (11 results)", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Next page" }).click();
     await expect(results.locator('a[href^="/posts/"]')).toHaveCount(1);
     await page.reload();
-    await expect(page.getByRole("combobox", { name: "Search scope" })).toHaveValue("posts");
-    await expect(page.getByRole("combobox", { name: "Search category" })).toHaveValue(String(categoryId));
+    await expect(page.getByRole("combobox", { name: "Search scope" })).toHaveText(/^Posts/);
+    await expect(page.getByRole("combobox", { name: "Search category" })).toContainText(q);
     await expect(page.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
 
     await page.goto(`/editor?tab=posts&q=${q}&category=${categoryId}&post_page=2&file_page=2`);

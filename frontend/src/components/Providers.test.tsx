@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InitialAppShellState } from "@/lib/app-shell-state";
 import { Providers, SidebarContent, SidebarFooter } from "./Providers";
@@ -45,6 +45,18 @@ const anonymousState: InitialAppShellState = {
 };
 
 describe("sidebar first render state", () => {
+  it("ignores older category refresh responses after a newer snapshot arrives", async () => {
+    let resolveOld!: (value: typeof initialState.categories) => void;
+    getCategoriesMock.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
+      .mockResolvedValueOnce([{ id: 2, name: "Go", post_count: 5 }]);
+    render(<Providers initialAppShellState={initialState} initialSidebarPostsExpanded><SidebarContent /></Providers>);
+    fireEvent(window, new Event("blog:refresh-sidebar"));
+    await act(async () => { window.dispatchEvent(new Event("blog:refresh-sidebar")); });
+    expect(screen.queryByRole("link", { name: /TypeScript/ })).not.toBeInTheDocument();
+    await act(async () => resolveOld(initialState.categories));
+    expect(screen.queryByRole("link", { name: /TypeScript/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Go/ })).toHaveTextContent("5");
+  });
   beforeEach(() => {
     getCategoriesMock.mockReset();
     navigationState.pathname = "/";

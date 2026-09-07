@@ -219,8 +219,9 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   }
   await page.getByRole("combobox", { name: "Post category" }).click();
   await page.getByRole("option", { name: "General", exact: true }).click();
-  await page.getByRole("button", { name: "Save Changes" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 
   const publicDraftSearch = await request.get(`${E2E_API_URL}/search`, {
     params: { q: postTitle, scope: "posts" },
@@ -229,11 +230,43 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   const draftSearchResult = await publicDraftSearch.json();
   expect(draftSearchResult.posts).toHaveLength(0);
 
+  await page.getByRole("button", { name: "Back to content list" }).click();
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
   await clickAtVisibleCenter(page, page.getByText(postTitle, { exact: true }));
   await selectPublicationStatus(page, "Published");
-  await page.getByRole("button", { name: "Save Changes" }).click();
-  await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  const saveButton = page.getByRole("button", { name: "Save", exact: true });
+  const initialSaveButtonBox = await saveButton.boundingBox();
+  expect(initialSaveButtonBox).not.toBeNull();
+  const sidebarNav = page.locator(".sidebar .nav-menu");
+  await sidebarNav.evaluate((element) => { element.setAttribute("data-save-stability", "preserved"); });
+  await page.evaluate(() => {
+    const trackedWindow = window as typeof window & { saveSidebarTransitionCount?: number };
+    trackedWindow.saveSidebarTransitionCount = 0;
+    document.addEventListener("transitionrun", (event) => {
+      if (event.target instanceof Element && event.target.closest(".sidebar")) {
+        trackedWindow.saveSidebarTransitionCount = (trackedWindow.saveSidebarTransitionCount || 0) + 1;
+      }
+    });
+  });
+  let releaseSave!: () => void;
+  const saveGate = new Promise<void>((resolve) => { releaseSave = resolve; });
+  await page.route(/\/api\/admin\/posts\/\d+$/, async (route) => {
+    await saveGate;
+    await route.continue();
+  }, { times: 1 });
+  await saveButton.click();
+  await expect(page.getByRole("button", { name: "Saving…" })).toBeVisible();
+  const savingButtonBox = await page.getByRole("button", { name: "Saving…" }).boundingBox();
+  expect(savingButtonBox).not.toBeNull();
+  expect(savingButtonBox!.width).toBeCloseTo(initialSaveButtonBox!.width, 1);
+  await expect(sidebarNav).toHaveAttribute("data-save-stability", "preserved");
+  releaseSave();
+  await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  await expect(sidebarNav).toHaveAttribute("data-save-stability", "preserved");
+  expect(await page.evaluate(
+    () => (window as typeof window & { saveSidebarTransitionCount?: number }).saveSidebarTransitionCount || 0,
+  )).toBe(0);
 
   await page.goto("/posts");
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
@@ -516,6 +549,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
 
   fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   await fileCard.getByRole("button", { name: "Edit" }).click();
+  await expect(displayNameInput).toBeFocused();
   await editDialog.getByRole("textbox", { name: /Description/ }).fill(`Updated ${fileDescription}`);
   const filteredFileRefreshPromise = page.waitForResponse((response) => {
     const url = new URL(response.url());
@@ -554,8 +588,9 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await page.getByLabel("INTRODUCTION").fill("Image lifecycle verification");
   await page.locator(".custom-editor-wrapper textarea").fill(`![${imageAlt}](${imageViewURL})`);
   await selectPublicationStatus(page, "Published");
-  await page.getByRole("button", { name: "Save Changes" }).click();
-  await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 
   await page.goto("/posts");
   await page.getByText(postTitle, { exact: true }).click();
@@ -602,8 +637,10 @@ test("administrator can publish an uploaded image and safely remove it after ref
       && url.searchParams.get("scope") === "posts"
       && url.searchParams.get("q") === postTitle;
   });
-  await page.getByRole("button", { name: "Save Changes" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   expect((await filteredPostRefreshPromise).ok()).toBeTruthy();
+  await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await expect(page.getByPlaceholder("Search posts...")).toBeVisible();
   await expect(page).toHaveURL(/\/editor\?tab=posts&q=/);
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue(postTitle);
@@ -681,8 +718,9 @@ test("administrator can publish an uploaded image and safely remove it after ref
   expect(await readEditActionPresentation(postEditButton)).toEqual(fileEditPresentation);
   await postEditButton.click();
   await page.locator(".custom-editor-wrapper textarea").fill("# Image reference removed");
-  await page.getByRole("button", { name: "Save Changes" }).click();
-  await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: /Files \(/ })).toBeVisible();
 
   await page.getByRole("tab", { name: /Files \(/ }).click();

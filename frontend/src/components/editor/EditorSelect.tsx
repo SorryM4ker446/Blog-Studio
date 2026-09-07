@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { EditIcon, TrashIcon } from "@/components/Icons";
+import { ChevronDownIcon, EditIcon, TrashIcon } from "@/components/Icons";
 
 type SelectValue = string | number;
 
@@ -16,6 +16,7 @@ interface EditorSelectProps<T extends SelectValue> {
   options: EditorSelectOption<T>[];
   onChange: (value: T) => void;
   ariaLabel: string;
+  unavailableLabel?: string;
   disabled?: boolean;
   width?: string;
   onRenameOption?: (value: T, name: string) => Promise<string | null>;
@@ -28,6 +29,7 @@ export default function EditorSelect<T extends SelectValue>({
   options,
   onChange,
   ariaLabel,
+  unavailableLabel = "Unavailable selection",
   disabled = false,
   width = "100%",
   onRenameOption,
@@ -38,6 +40,7 @@ export default function EditorSelect<T extends SelectValue>({
   const listboxId = `editor-select-${reactId}`;
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
   const savingRef = useRef(false);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const [open, setOpen] = useState(false);
@@ -46,7 +49,19 @@ export default function EditorSelect<T extends SelectValue>({
   const [editName, setEditName] = useState("");
   const [managementError, setManagementError] = useState("");
   const [saving, setSaving] = useState(false);
-  const selectedOption = options.find((option) => option.value === value) || options[0];
+  const selectedOption = options.find((option) => option.value === value);
+  const menuOpen = open && !disabled;
+
+  useEffect(() => {
+    if (!open || disabled) return;
+    const menu = menuRef.current;
+    const option = menu?.children[highlightedIndex] as HTMLElement | undefined;
+    if (!menu || !option) return;
+    const top = option.offsetTop;
+    const bottom = top + option.offsetHeight;
+    if (top < menu.scrollTop) menu.scrollTop = top;
+    else if (bottom > menu.scrollTop + menu.clientHeight) menu.scrollTop = bottom - menu.clientHeight;
+  }, [open, disabled, highlightedIndex, options]);
 
   useEffect(() => {
     if (!open) return;
@@ -157,106 +172,117 @@ export default function EditorSelect<T extends SelectValue>({
         type="button"
         role="combobox"
         aria-label={ariaLabel}
-        aria-expanded={open && !disabled}
+        aria-expanded={menuOpen}
+        aria-invalid={!selectedOption || undefined}
         aria-controls={listboxId}
-        aria-activedescendant={open ? `${listboxId}-option-${highlightedIndex}` : undefined}
+        aria-activedescendant={menuOpen ? `${listboxId}-option-${highlightedIndex}` : undefined}
         disabled={disabled}
         className="custom-select-trigger"
         onClick={() => open ? closeMenu() : openMenu()}
         onKeyDown={handleKeyDown}
       >
-        <span>{selectedOption?.label || ""}</span>
-        <span className="custom-select-arrow" aria-hidden="true">{open && !disabled ? "▲" : "▼"}</span>
+        <span className="custom-select-value">{selectedOption?.label ?? unavailableLabel}</span>
+        <span className="custom-select-arrow" aria-hidden="true"><ChevronDownIcon size={16} /></span>
       </button>
 
-      {open && !disabled && (
-        <ul id={listboxId} role="listbox" aria-label={ariaLabel} className="custom-select-options fade-in">
-          {options.map((option, index) => {
-            const manageable = Boolean((onRenameOption || onDeleteOption) && isOptionManageable(option));
-            const editing = editingValue === option.value;
-            return (
-              <li
-                id={`${listboxId}-option-${index}`}
-                key={String(option.value)}
-                role="option"
-                aria-selected={option.value === value}
-                aria-busy={editing && saving}
-                className={`custom-select-option${option.value === value ? " active" : ""}${index === highlightedIndex ? " highlighted" : ""}`}
-                onPointerMove={() => setHighlightedIndex(index)}
-                onClick={() => choose(index)}
-              >
-                {editing ? (
-                  <div className="custom-select-rename" onClick={(event) => event.stopPropagation()}>
-                    <label htmlFor={`${listboxId}-rename`} className="sr-only">New category name</label>
-                    <input
-                      id={`${listboxId}-rename`}
-                      autoFocus
-                      value={editName}
-                      readOnly={saving}
-                      maxLength={255}
-                      aria-invalid={Boolean(managementError)}
-                      onChange={(event) => setEditName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void submitRename();
-                        }
-                        if (event.key === "Escape" && !saving) {
-                          event.preventDefault();
-                          setEditingValue(null);
-                          setManagementError("");
-                          triggerRef.current?.focus();
-                        }
-                      }}
-                    />
-                    <button type="button" onClick={() => void submitRename()} disabled={saving} aria-label={`Save ${option.label} rename`}>✓</button>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      aria-label="Cancel rename"
-                      onClick={() => {
+      <ul
+        ref={menuRef}
+        id={listboxId}
+        role="listbox"
+        aria-label={ariaLabel}
+        aria-hidden={!menuOpen}
+        inert={!menuOpen}
+        data-open={menuOpen}
+        className="custom-select-options"
+      >
+        {options.map((option, index) => {
+          const manageable = Boolean((onRenameOption || onDeleteOption) && isOptionManageable(option));
+          const editing = editingValue === option.value;
+          return (
+            <li
+              id={`${listboxId}-option-${index}`}
+              key={String(option.value)}
+              role="option"
+              aria-selected={option.value === value}
+              aria-busy={editing && saving}
+              className={`custom-select-option${option.value === value ? " active" : ""}${index === highlightedIndex ? " highlighted" : ""}`}
+              onPointerMove={() => setHighlightedIndex(index)}
+              onClick={() => choose(index)}
+            >
+              {editing ? (
+                <div className="custom-select-rename" onClick={(event) => event.stopPropagation()}>
+                  <label htmlFor={`${listboxId}-rename`} className="sr-only">New category name</label>
+                  <input
+                    id={`${listboxId}-rename`}
+                    autoFocus
+                    value={editName}
+                    readOnly={saving}
+                    maxLength={255}
+                    aria-invalid={Boolean(managementError)}
+                    onChange={(event) => setEditName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void submitRename();
+                      }
+                      if (event.key === "Escape" && !saving) {
+                        event.preventDefault();
                         setEditingValue(null);
                         setManagementError("");
                         triggerRef.current?.focus();
-                      }}
-                    >
-                      ×
-                    </button>
-                    {managementError && <span role="alert" className="custom-select-option-error">{managementError}</span>}
-                  </div>
-                ) : (
-                  <>
-                    <span className="custom-select-option-label">{option.label}</span>
-                    {manageable && (
-                      <span className="custom-select-option-actions" onClick={(event) => event.stopPropagation()}>
-                        {onRenameOption && (
-                          <button type="button" onClick={() => startRename(option)} aria-label={`Rename ${option.label}`} title="Rename category">
-                            <EditIcon size={14} />
-                          </button>
-                        )}
-                        {onDeleteOption && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeMenu();
-                              onDeleteOption(option.value);
-                            }}
-                            aria-label={`Delete ${option.label}`}
-                            title="Delete category"
-                            className="custom-select-option-delete"
-                          >
-                            <TrashIcon size={14} />
-                          </button>
-                        )}
-                      </span>
-                    )}
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                      }
+                    }}
+                  />
+                  <button type="button" onClick={() => void submitRename()} disabled={saving} aria-label={`Save ${option.label} rename`}>✓</button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    aria-label="Cancel rename"
+                    onClick={() => {
+                      setEditingValue(null);
+                      setManagementError("");
+                      triggerRef.current?.focus();
+                    }}
+                  >
+                    ×
+                  </button>
+                  {managementError && <span role="alert" className="custom-select-option-error">{managementError}</span>}
+                </div>
+              ) : (
+                <>
+                  <span className="custom-select-check" aria-hidden="true">
+                    {option.value === value && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6" /></svg>}
+                  </span>
+                  <span className="custom-select-option-label">{option.label}</span>
+                  {manageable && (
+                    <span className="custom-select-option-actions" onClick={(event) => event.stopPropagation()}>
+                      {onRenameOption && (
+                        <button type="button" onClick={() => startRename(option)} aria-label={`Rename ${option.label}`} title="Rename category">
+                          <EditIcon size={14} />
+                        </button>
+                      )}
+                      {onDeleteOption && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeMenu();
+                            onDeleteOption(option.value);
+                          }}
+                          aria-label={`Delete ${option.label}`}
+                          title="Delete category"
+                          className="custom-select-option-delete"
+                        >
+                          <TrashIcon size={14} />
+                        </button>
+                      )}
+                    </span>
+                  )}
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

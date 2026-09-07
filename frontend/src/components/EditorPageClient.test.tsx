@@ -16,7 +16,7 @@ const { getAdminFilesMock, getAdminPostsMock, getAdminPostMock, createPostMock, 
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock, replace: vi.fn(), refresh: refreshMock }),
-  useSearchParams: () => navigationState.searchParams,
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 vi.mock("@/context/AuthContext", () => ({
@@ -74,10 +74,12 @@ vi.mock("@/components/editor/EditorListView", () => ({
 
 vi.mock("@/components/editor/EditorDeleteDialog", () => ({ default: () => null }));
 vi.mock("@/components/editor/PostEditorForm", () => ({
-  default: (props: { title: string; content: string; saving: boolean; onSave: () => Promise<void>; onBack: () => void }) => (
+  default: (props: { title: string; content: string; saving: boolean; saveMessage: string; onTitleChange: (value: string) => void; onContentChange: (value: string) => void; onSave: () => Promise<void>; onBack: () => void }) => (
     <div>
       <span data-testid="editing-title">{props.title}</span>
-      <textarea aria-label="Loaded article body" value={props.content} readOnly />
+      <input aria-label="Article title" value={props.title} onChange={event => props.onTitleChange(event.target.value)} />
+      <textarea aria-label="Loaded article body" value={props.content} onChange={event => props.onContentChange(event.target.value)} />
+      <span role="status">{props.saveMessage}</span>
       <button disabled={props.saving} onClick={() => void props.onSave()}>Save article</button>
       <button onClick={props.onBack}>Back to content list</button>
     </div>
@@ -128,7 +130,7 @@ describe("Editor article detail loading", () => {
     getAdminPostsMock.mockResolvedValue({ data: [recoveredPost], page: 1, limit: 10, total: 1 });
   });
 
-  it("loads a fresh body on edit and saves the full detail to the existing article", async () => {
+  it("loads a fresh body, saves the full detail, and returns published articles to the list", async () => {
     const pending = pendingDetail();
     getAdminPostMock.mockReturnValue(pending.promise);
     updatePostMock.mockResolvedValue(fullPost);
@@ -149,6 +151,8 @@ describe("Editor article detail loading", () => {
     await waitFor(() => expect(updatePostMock).toHaveBeenCalledWith(7, expect.objectContaining({
       title: fullPost.title, content: fullPost.content, status: "published",
     })));
+    await waitFor(() => expect(screen.getByTestId("editor-list")).toBeVisible());
+    expect(screen.queryByRole("button", { name: "Save article" })).not.toBeInTheDocument();
     expect(createPostMock).not.toHaveBeenCalled();
   });
 
@@ -163,6 +167,75 @@ describe("Editor article detail loading", () => {
     expect(getAdminPostMock).toHaveBeenCalledTimes(2);
     expect(updatePostMock).not.toHaveBeenCalled();
     expect(createPostMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks returning to another article until a pending draft save finishes", async () => {
+    getAdminPostsMock.mockResolvedValue({ data: readyState.posts.data, page: 1, limit: 10, total: 2 });
+    const pending = pendingDetail();
+    const draft = { ...fullPost, status: "draft" };
+    getAdminPostMock.mockResolvedValue(draft);
+    updatePostMock.mockReturnValueOnce(pending.promise).mockResolvedValue(draft);
+    render(<EditorPageClient initialState={readyState} />);
+    fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
+    await screen.findByRole("button", { name: "Save article" });
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to content list" }));
+    expect(screen.queryByTestId("editor-list")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    expect(updatePostMock).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve(draft));
+    fireEvent.click(screen.getByRole("button", { name: "Back to content list" }));
+    getAdminPostMock.mockResolvedValue({ ...draft, id: 8, title: "Another article" });
+    fireEvent.click(screen.getByRole("button", { name: "Another article" }));
+    await screen.findByRole("button", { name: "Save article" });
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    await waitFor(() => expect(updatePostMock).toHaveBeenLastCalledWith(8, expect.objectContaining({ title: "Another article" })));
+  });
+
+  it("retains the created draft identity when saving again", async () => {
+    const draft = { ...fullPost, status: "draft" };
+    createPostMock.mockResolvedValue(draft);
+    updatePostMock.mockResolvedValue(draft);
+    render(<EditorPageClient initialState={readyState} />);
+    fireEvent.click(screen.getByRole("button", { name: "New article" }));
+    fireEvent.change(screen.getByLabelText("Article title"), { target: { value: fullPost.title } });
+    fireEvent.change(screen.getByLabelText("Loaded article body"), { target: { value: fullPost.content } });
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    await screen.findByText("✅ Saved successfully!");
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    await waitFor(() => expect(updatePostMock).toHaveBeenCalledWith(draft.id, expect.objectContaining({ content: draft.content })));
+    expect(createPostMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["success", "failure"])("ignores a save %s after the editor unmounts", async outcome => {
+    let resolve!: (post: PostDetail) => void;
+    let reject!: (error: Error) => void;
+    updatePostMock.mockReturnValue(new Promise<PostDetail>((yes, no) => { resolve = yes; reject = no; }));
+    getAdminPostMock.mockResolvedValue(fullPost);
+    const view = render(<EditorPageClient initialState={readyState} />);
+    fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
+    await screen.findByRole("button", { name: "Save article" });
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    view.unmount();
+    getAdminPostsMock.mockClear();
+    window.history.replaceState(null, "", "/search?q=keep");
+    await act(async () => { if (outcome === "success") resolve(fullPost); else reject(new Error("Offline")); });
+    expect(window.location.pathname + window.location.search).toBe("/search?q=keep");
+    expect(getAdminPostsMock).not.toHaveBeenCalled();
+  });
+
+  it("retains input after a failed save and allows a retry", async () => {
+    getAdminPostMock.mockResolvedValue(fullPost);
+    updatePostMock.mockRejectedValueOnce(new Error("Offline")).mockResolvedValue(fullPost);
+    render(<EditorPageClient initialState={readyState} />);
+    fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
+    await screen.findByRole("button", { name: "Save article" });
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    await screen.findByText("❌ Failed to save post.");
+    expect(screen.getByLabelText("Loaded article body")).toHaveValue(fullPost.content);
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    await waitFor(() => expect(screen.getByTestId("editor-list")).toBeVisible());
+    expect(updatePostMock).toHaveBeenCalledTimes(2);
   });
 
   it("aborts a cancelled read and ignores its late response after another article loads", async () => {
@@ -187,6 +260,46 @@ describe("Editor article detail loading", () => {
     fireEvent.click(screen.getByRole("button", { name: "New article" }));
     expect(screen.getByRole("textbox", { name: "Loaded article body" })).toHaveValue("");
     expect(getAdminPostMock).not.toHaveBeenCalled();
+    expect(new URLSearchParams(window.location.search).get("edit")).toBe("new");
+  });
+
+  it("opens a saved article directly from the URL without first showing the list", async () => {
+    window.history.replaceState(null, "", "/editor?edit=7");
+    getAdminPostMock.mockResolvedValue(fullPost);
+    render(<EditorPageClient initialState={readyState} />);
+    expect(screen.queryByTestId("editor-list")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("Loaded article body")).toHaveValue(fullPost.content);
+    expect(getAdminPostMock).toHaveBeenCalledWith(7, { signal: expect.any(AbortSignal) });
+  });
+
+  it("opens the new article form from its URL without a saved article read", () => {
+    window.history.replaceState(null, "", "/editor?edit=new");
+    render(<EditorPageClient initialState={readyState} />);
+    expect(screen.queryByTestId("editor-list")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Loaded article body")).toHaveValue("");
+    expect(getAdminPostMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["success", "failure"])("ignores a pending save %s after history switches to a different article", async outcome => {
+    let resolve!: (post: PostDetail) => void;
+    let reject!: (error: Error) => void;
+    updatePostMock.mockReturnValue(new Promise<PostDetail>((yes, no) => { resolve = yes; reject = no; }));
+    getAdminPostMock.mockResolvedValueOnce(fullPost).mockResolvedValueOnce({ ...fullPost, id: 8, title: "Article B", content: "Body B" });
+    window.history.replaceState(null, "", "/editor?edit=7");
+    const view = render(<EditorPageClient initialState={readyState} />);
+    await screen.findByRole("button", { name: "Save article" });
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    window.history.replaceState(null, "", "/editor?edit=8");
+    view.rerender(<EditorPageClient initialState={readyState} />);
+    await waitFor(() => expect(screen.getByLabelText("Loaded article body")).toHaveValue("Body B"));
+    await act(async () => { if (outcome === "success") resolve(fullPost); else reject(new Error("Offline")); });
+    expect(screen.getByLabelText("Loaded article body")).toHaveValue("Body B");
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled();
+    expect(new URLSearchParams(window.location.search).get("edit")).toBe("8");
+    updatePostMock.mockResolvedValue({ ...fullPost, id: 8 });
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    await waitFor(() => expect(updatePostMock).toHaveBeenLastCalledWith(8, expect.objectContaining({ title: "Article B", content: "Body B" })));
   });
 
   it("does not show a cancelled request failure after returning to the list", async () => {

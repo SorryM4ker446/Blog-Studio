@@ -60,10 +60,10 @@ test("article summaries stay body-free and editing loads complete content with r
     });
     await page.getByRole("button", { name: `Open ${draft.title}`, exact: true }).click();
     await expect(page.getByText("Article could not be loaded")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save Changes" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Try again" }).click();
     await expect(page.getByText("Loading article…")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save Changes" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
     allowDetail();
 
     const bodyInput = page.locator(".custom-editor-wrapper textarea");
@@ -72,8 +72,10 @@ test("article summaries stay body-free and editing loads complete content with r
     const updatedContent = `${content}\n\nSaved through the detail editor.`;
     await bodyInput.fill(updatedContent);
     const saveResponse = page.waitForResponse((response) => response.url() === `${E2E_API_URL}/admin/posts/${draft.id}` && response.request().method() === "PUT");
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     expect((await saveResponse).ok()).toBeTruthy();
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Back to content list" }).click();
     await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
     const saved = await page.request.get(`${E2E_API_URL}/admin/posts/${draft.id}`);
     expect(await saved.json()).toMatchObject({ id: draft.id, status: "draft", content: updatedContent });
