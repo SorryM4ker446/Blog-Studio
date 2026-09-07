@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type TestInfo } from "@playwright/test";
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 
 async function presentation(locator: Locator) {
@@ -9,6 +9,80 @@ async function presentation(locator: Locator) {
       x: box.x, y: box.y, width: box.width, height: box.height };
   });
 }
+
+interface MonitoredSidebar extends HTMLElement {
+  finishStabilityCheck?: () => string[];
+}
+
+async function monitorSidebar(sidebar: Locator) {
+  await expect.poll(() => sidebar.evaluate(element => element.getAnimations({ subtree: true })
+    .filter(animation => animation.playState === "running" || animation.pending).length)).toBe(0);
+  await sidebar.evaluate(element => {
+    const tracked = [element, ...element.querySelectorAll(
+      ".nav-item, .nav-posts-row, .sidebar-categories, .sidebar-categories-inner, .sidebar-category-link",
+    )];
+    const problems = new Set<string>();
+    let frame = 0;
+    const check = () => {
+      for (const node of tracked) {
+        const label = node.className;
+        if (!node.isConnected || !element.contains(node)) {
+          problems.add(`${label}: original node detached`);
+          continue;
+        }
+        const style = getComputedStyle(node);
+        if (style.opacity !== "1" || style.visibility !== "visible" || style.display === "none") {
+          problems.add(`${label}: opacity=${style.opacity}, visibility=${style.visibility}, display=${style.display}`);
+        }
+      }
+    };
+    const tick = () => { check(); frame = requestAnimationFrame(tick); };
+    tick();
+    (element as MonitoredSidebar).finishStabilityCheck = () => {
+      cancelAnimationFrame(frame);
+      check();
+      return [...problems];
+    };
+  });
+}
+
+async function sidebarPresentation(sidebar: Locator) {
+  return sidebar.evaluate(element => [element, ...element.querySelectorAll(
+    ".nav-item, .nav-posts-row, .sidebar-categories, .sidebar-category-link, .sidebar-category-name, .sidebar-category-count",
+  )].map(node => {
+    const style = getComputedStyle(node);
+    const box = node.getBoundingClientRect();
+    return { text: node.textContent, opacity: style.opacity, visibility: style.visibility,
+      background: style.backgroundColor, color: style.color, transform: style.transform,
+      x: box.x, y: box.y, width: box.width, height: box.height };
+  }));
+}
+
+async function attachSidebar(sidebar: Locator, testInfo: TestInfo, name: string) {
+  await testInfo.attach(`Sidebar ${name}`, { body: await sidebar.screenshot(), contentType: "image/png" });
+}
+
+test("sidebar stability checks detect a transient fade and replaced navigation nodes", async ({ page }) => {
+  await page.setContent('<nav><a class="nav-item" href="/editor">Content Editor</a></nav>');
+  const sidebar = page.locator("nav");
+  const before = await sidebarPresentation(sidebar);
+  await monitorSidebar(sidebar);
+  await sidebar.evaluate(async element => {
+    const node = element as HTMLElement;
+    node.style.opacity = "0.5";
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    node.style.opacity = "1";
+  });
+  expect(await sidebarPresentation(sidebar)).toEqual(before);
+  expect(await sidebar.evaluate(element => (element as MonitoredSidebar).finishStabilityCheck?.()))
+    .toEqual([expect.stringContaining("opacity=0.5")]);
+
+  await monitorSidebar(sidebar);
+  await sidebar.locator("a").evaluate(element => element.replaceWith(element.cloneNode(true)));
+  expect(await sidebarPresentation(sidebar)).toEqual(before);
+  expect(await sidebar.evaluate(element => (element as MonitoredSidebar).finishStabilityCheck?.()))
+    .toEqual(["nav-item: original node detached"]);
+});
 
 for (const theme of ["dark", "light"]) {
   test(`saving preserves the ${theme} editor presentation and prevents edits until completion`, async ({ page }, testInfo) => {
@@ -25,6 +99,7 @@ for (const theme of ["dark", "light"]) {
     expect(createdCategory.ok()).toBeTruthy();
     const category = await createdCategory.json();
     const posts: { id: number; title: string }[] = [];
+    const sidebar = page.locator(".sidebar .nav-menu");
     let release = () => {};
     try {
       for (const [suffix, status] of [["anchor", "published"], ["A", "draft"], ["B", "draft"]]) {
@@ -52,9 +127,11 @@ for (const theme of ["dark", "light"]) {
       await page.screenshot({ path: controlsScreenshot });
       await testInfo.attach(`Editor controls (${theme})`, { path: controlsScreenshot, contentType: "image/png" });
       await status.press("Escape");
-      const sidebar = page.locator(".sidebar .nav-menu");
       await expect(sidebar.getByRole("link", { name: `${name} 1`, exact: true })).toBeVisible();
-      const beforeSidebar = await sidebar.screenshot();
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      await monitorSidebar(sidebar);
+      const beforeSidebar = await sidebarPresentation(sidebar);
+      await attachSidebar(sidebar, testInfo, "before saving");
       const beforeSave = await presentation(save);
       const beforeStatus = await presentation(status);
       const gate = new Promise<void>(resolve => { release = resolve; });
@@ -73,12 +150,14 @@ for (const theme of ["dark", "light"]) {
       await expect(page.getByRole("combobox", { name: "Post category" })).toBeDisabled();
       expect(await presentation(save)).toEqual(beforeSave);
       expect(await presentation(status)).toEqual(beforeStatus);
-      expect(await sidebar.screenshot()).toEqual(beforeSidebar);
+      await attachSidebar(sidebar, testInfo, "during failed save");
+      expect(await sidebarPresentation(sidebar)).toEqual(beforeSidebar);
       release();
       await expect(page.locator("#post-save-message")).toHaveAttribute("role", "alert");
       await expect(save).toBeEnabled();
       await expect(body).toHaveValue("Preserved submitted body");
-      expect(await sidebar.screenshot()).toEqual(beforeSidebar);
+      await attachSidebar(sidebar, testInfo, "after failed save");
+      expect(await sidebarPresentation(sidebar)).toEqual(beforeSidebar);
       await page.unroute(endpoint);
 
       await status.click();
@@ -95,7 +174,8 @@ for (const theme of ["dark", "light"]) {
       await expect(page.getByRole("button", { name: "Back to content list" })).toBeDisabled();
       await page.keyboard.type("Must not replace submitted content");
       await expect(body).toHaveValue("Preserved submitted body");
-      expect(await sidebar.screenshot()).toEqual(beforeSidebar);
+      await attachSidebar(sidebar, testInfo, "during publishing");
+      expect(await sidebarPresentation(sidebar)).toEqual(beforeSidebar);
       release();
       await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
       await page.unroute(endpoint);
@@ -121,9 +201,15 @@ for (const theme of ["dark", "light"]) {
       await expect(page.locator("#post-save-message")).toHaveAttribute("role", "status");
       await expect(sidebar.getByRole("link", { name: `${name} 1`, exact: true })).toBeVisible();
       await expect(sidebar).toHaveAttribute("data-preserved", "yes");
-      expect(await sidebar.screenshot()).toEqual(beforeSidebar);
+      await attachSidebar(sidebar, testInfo, "after withdrawing publication");
+      expect(await sidebarPresentation(sidebar)).toEqual(beforeSidebar);
+      expect(await sidebar.evaluate(element => (element as MonitoredSidebar).finishStabilityCheck?.()))
+        .toEqual([]);
     } finally {
       release();
+      if (!page.isClosed() && await sidebar.count()) {
+        await sidebar.evaluate(element => (element as MonitoredSidebar).finishStabilityCheck?.());
+      }
       for (const post of posts) await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers });
       await page.request.delete(`${E2E_API_URL}/admin/categories/${category.id}`, { headers });
     }
