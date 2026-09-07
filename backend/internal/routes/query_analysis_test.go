@@ -250,7 +250,7 @@ func baselineAnalysisQueries() []analysisQuery {
 		analysisQuery{"public-file-first", "SELECT * FROM files WHERE is_system IS NOT TRUE ORDER BY created_at DESC,id DESC LIMIT 10", nil},
 		analysisQuery{"public-file-deep", "SELECT * FROM files WHERE is_system IS NOT TRUE ORDER BY created_at DESC,id DESC LIMIT 100 OFFSET 1000", nil},
 		analysisQuery{"admin-file-first", "SELECT * FROM files ORDER BY created_at DESC,id DESC LIMIT 10", nil},
-		analysisQuery{"public-categories", "SELECT c.*,count(p.id) AS post_count FROM categories c LEFT JOIN posts p ON p.category_id=c.id AND p.status='published' GROUP BY c.id ORDER BY c.name,c.id", nil},
+		analysisQuery{"public-categories", "SELECT c.*,count(p.id) AS post_count FROM categories c JOIN posts p ON p.category_id=c.id AND p.status='published' GROUP BY c.id ORDER BY c.name,c.id", nil},
 		analysisQuery{"admin-categories", "SELECT c.*,count(p.id) AS post_count FROM categories c LEFT JOIN posts p ON p.category_id=c.id GROUP BY c.id ORDER BY c.name,c.id", nil},
 	)
 	for _, term := range []string{"article", "needlequartz", "nohitszzzz", "中", "数据库", "hiddenneedle"} {

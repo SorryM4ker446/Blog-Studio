@@ -23,7 +23,7 @@ import {
   uploadFile,
   uploadFileWithMetadata,
 } from "@/lib/api";
-import { readResourceQuery, readEditorTab, resourceURL, setResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib/resource-query";
+import { readResourceQuery, readEditorTab, readEditorTarget, writeEditorTarget, resourceURL, setResourceQuery, writeResourceQuery, type EditorTarget, type ResourceQuery } from "@/lib/resource-query";
 import { useResourcePage } from "@/lib/use-resource-page";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
@@ -32,7 +32,6 @@ import PostDetailLoader from "@/components/editor/PostDetailLoader";
 import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
-type ViewMode = "list" | "edit";
 type DeleteType = "post" | "file" | "category";
 
 export interface PostListSnapshot {
@@ -66,10 +65,12 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const searchParams = useSearchParams();
   const urlTab: EditorTab = readEditorTab(searchParams);
   const searchQuery = readResourceQuery(searchParams).query;
+  const editTarget = readEditorTarget(searchParams);
 
   const isMountedRef = useRef(true);
+  const editorSessionRef = useRef(0);
+  const saveOperationRef = useRef<symbol | null>(null);
   const categoryRequestIdRef = useRef(0);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialRecoveryRef = useRef({ categories: Boolean(initialState.categoriesError), posts: Boolean(initialState.postsError), files: Boolean(initialState.filesError) });
   const postQuery = useMemo(() => readResourceQuery(searchParams, "posts", "post_page"), [searchParams]);
   const fileQuery = useMemo(() => readResourceQuery(searchParams, "files", "file_page"), [searchParams]);
@@ -92,12 +93,12 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const { data: files, total: fileCount, page: filePage, totalPages: fileTotalPages, error: filesError } = fileResource.state;
   const postsLoading = postResource.loading;
   const filesLoading = fileResource.loading;
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [formTarget, setFormTarget] = useState<EditorTarget>(editTarget);
   const [categories, setCategories] = useState<Category[]>(initialState.categories);
   const [categoriesLoading, setCategoriesLoading] = useState(Boolean(initialState.categoriesError));
   const [categoriesError, setCategoriesError] = useState(initialState.categoriesError);
   const [editingPost, setEditingPost] = useState<PostDetail | null>(null);
-  const [postToLoad, setPostToLoad] = useState<PostSummary | null>(null);
+  const [postToLoad, setPostToLoad] = useState<number | null>(typeof editTarget === "number" ? editTarget : null);
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -119,6 +120,26 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const [deleteError, setDeleteError] = useState("");
   const [deleteErrorCode, setDeleteErrorCode] = useState("");
 
+  function resetForm(target: EditorTarget) {
+    setFormTarget(target);
+    setPostToLoad(typeof target === "number" ? target : null);
+    setEditingPost(null);
+    setEditTitle("");
+    setEditSummary("");
+    setEditContent("");
+    setEditCategoryId(0);
+    setEditStatus("draft");
+    setSaveMessage("");
+    setSaving(false);
+  }
+
+  if (formTarget !== editTarget) resetForm(editTarget);
+
+  useEffect(() => {
+    editorSessionRef.current++;
+    saveOperationRef.current = null;
+  }, [editTarget]);
+
   function notifyUpdate() {
     window.dispatchEvent(new CustomEvent("blog:refresh-sidebar"));
   }
@@ -131,7 +152,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveOperationRef.current = null;
     };
   }, []);
 
@@ -178,6 +199,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   }
   function navigateList(tab: EditorTab, patch: Partial<ResourceQuery>) {
     const { params } = readCurrentLocation();
+    params.delete("edit");
     const pageKey = tab === "posts" ? "post_page" : "file_page";
     const target = { ...readResourceQuery(params, tab, pageKey), ...patch };
     params.set("tab", tab);
@@ -193,6 +215,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
     params.set("tab", tab);
     params.delete("q");
     params.delete("category");
+    params.delete("edit");
     params.delete(tab === "posts" ? "post_page" : "file_page");
     const url = resourceURL("/editor", params);
     if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
@@ -215,26 +238,34 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   }, []);
 
   function openEditor(post: PostSummary | null) {
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    setPostToLoad(post);
-    setEditingPost(null);
-    setEditTitle("");
-    setEditSummary("");
-    setEditContent("");
-    setEditCategoryId(0);
-    setEditStatus("draft");
-    setSaveMessage("");
-    setViewMode("edit");
+    if (saveOperationRef.current) return;
+    const target = post?.id ?? "new";
+    writeEditorTarget(target);
+    resetForm(target);
+  }
+
+  function closeEditor() {
+    if (saveOperationRef.current) return;
+    writeEditorTarget(null, true);
+    resetForm(null);
   }
 
   async function handleSave() {
-    if (postToLoad || saving) return;
+    if (postToLoad || saveOperationRef.current) return;
     if (!editTitle.trim() || !editContent.trim()) {
       setSaveMessage("❌ Title and content are required.");
       if (!editTitle.trim()) document.getElementById("post-title")?.focus();
       else document.querySelector<HTMLElement>(".custom-editor-wrapper textarea")?.focus();
       return;
     }
+    const operation = Symbol();
+    const session = editorSessionRef.current;
+    let operationTarget = editTarget;
+    saveOperationRef.current = operation;
+    const isCurrentSave = () => isMountedRef.current
+      && editorSessionRef.current === session && saveOperationRef.current === operation
+      && window.location.pathname === "/editor"
+      && readEditorTarget(new URLSearchParams(window.location.search)) === operationTarget;
     setSaving(true);
     setSaveMessage("");
     try {
@@ -246,18 +277,33 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
         status: editStatus,
       };
       const result = editingPost ? await updatePost(editingPost.id, payload) : await createPost(payload);
+      if (!isCurrentSave()) return;
       if (!result) throw new Error("Failed to save post.");
-      setSaveMessage("✅ Saved successfully!");
+      const previousStatus = editingPost?.status;
+      const previousCategoryId = editingPost?.category_id ?? null;
+      const returnToContentEditor = result.status === "published";
+      setEditingPost(result);
       await refreshPosts(editingPost ? postPage : 1);
-      notifyUpdate();
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        if (isMountedRef.current) setViewMode("list");
-      }, 600);
+      if (!isCurrentSave()) return;
+      const savedCategoryId = result.category_id ?? null;
+      const publicCategoryMembershipChanged = (previousStatus === "published") !== (result.status === "published")
+        || (result.status === "published" && previousCategoryId !== savedCategoryId);
+      if (returnToContentEditor) {
+        operationTarget = null;
+        writeEditorTarget(null, true);
+        setFormTarget(null);
+      } else {
+        operationTarget = result.id;
+        writeEditorTarget(result.id, true);
+        setFormTarget(result.id);
+        setSaveMessage("✅ Saved successfully!");
+      }
+      if (publicCategoryMembershipChanged) notifyUpdate();
     } catch (error) {
-      setSaveMessage(`❌ ${getApiErrorMessage(error, "Failed to save post.")}`);
+      if (isCurrentSave()) setSaveMessage(`❌ ${getApiErrorMessage(error, "Failed to save post.")}`);
     } finally {
-      setSaving(false);
+      if (isCurrentSave()) setSaving(false);
+      if (saveOperationRef.current === operation) saveOperationRef.current = null;
     }
   }
 
@@ -311,7 +357,8 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
         if (!deleted) throw new Error("Failed to delete post.");
         if (editingPost?.id === id) {
           setEditingPost(null);
-          setViewMode("list");
+          writeEditorTarget(null, true);
+          resetForm(null);
         }
         await refreshPosts(postPage);
       } else if (type === "file") {
@@ -381,7 +428,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
 
   return (
     <>
-      {viewMode === "list" ? (
+      {editTarget === null ? (
         <EditorListView
           activeTab={urlTab}
           searchQuery={searchQuery}
@@ -417,10 +464,10 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
         />
       ) : postToLoad ? (
         <PostDetailLoader
-          key={postToLoad.id}
-          postId={postToLoad.id}
+          key={postToLoad}
+          postId={postToLoad}
           onLoaded={applyPostDetail}
-          onBack={() => setViewMode("list")}
+          onBack={closeEditor}
         />
       ) : (
         <PostEditorForm
@@ -440,7 +487,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
           onContentChange={setEditContent}
           onCategoryChange={setEditCategoryId}
           onStatusChange={setEditStatus}
-          onBack={() => setViewMode("list")}
+          onBack={closeEditor}
           onSave={handleSave}
           onCreateCategory={handleCreateCategory}
           onRenameCategory={handleRenameCategory}

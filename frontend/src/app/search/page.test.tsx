@@ -80,4 +80,51 @@ describe("advanced search input", () => {
       expect(searchResourcesMock).toHaveBeenCalledWith({ query: "restored article", scope: "all", categoryId: "", page: 1 });
     });
   });
+
+  it("keeps current results visible while refreshing and hides categories without published posts", async () => {
+    const visibleCategory = { id: 4, name: "Visible category", description: "", post_count: 2, created_at: "2026-01-01T00:00:00Z" };
+    const draftOnlyCategory = { id: 5, name: "Draft-only category", description: "", post_count: 0, created_at: "2026-01-01T00:00:00Z" };
+    let resolveSearch: ((value: { posts: []; files: []; posts_total: number; files_total: number; total: number; page: number; limit: number }) => void) | undefined;
+    getCategoriesMock.mockResolvedValue([visibleCategory, draftOnlyCategory]);
+    searchResourcesMock.mockReturnValueOnce(new Promise((resolve) => { resolveSearch = resolve; }));
+    const post: PostSummary = {
+      id: 10, title: "Existing result", slug: "existing-result", summary: "", category_id: null, category: null,
+      status: "published", published_at: "2026-01-01T00:00:00Z", last_edited_at: null,
+      created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    };
+    render(<SearchPageClient initialState={{
+      categoryId: "", scope: "all", page: 1, totalPages: 1, postsTotal: 1, filesTotal: 0,
+      categories: [visibleCategory, draftOnlyCategory], posts: [post], files: [], query: "existing query", searched: true, error: "",
+    }} />);
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Search category" }));
+    expect(screen.getByRole("option", { name: "Visible category" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "Draft-only category" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "Visible category" }));
+
+    expect(screen.getByRole("link", { name: /Existing result/ })).toBeVisible();
+    expect(screen.getByRole("status", { name: "Updating search results…" })).toBeInTheDocument();
+    expect(searchResourcesMock).toHaveBeenCalledWith({ query: "existing query", scope: "all", categoryId: "4", page: 1 });
+    resolveSearch?.({ posts: [], files: [], posts_total: 0, files_total: 0, total: 0, page: 1, limit: 10 });
+    await waitFor(() => expect(screen.queryByRole("link", { name: /Existing result/ })).not.toBeInTheDocument());
+  });
+
+  it("keeps the empty search prompt visible while a filter refreshes", async () => {
+    let resolveCategories: ((value: []) => void) | undefined;
+    getCategoriesMock.mockReturnValueOnce(new Promise((resolve) => { resolveCategories = resolve; }));
+    navigationState.searchParams = new URLSearchParams();
+    window.history.replaceState({}, "", "/search");
+    render(<SearchPageClient initialState={{
+      categoryId: "", scope: "all", page: 1, totalPages: 1, postsTotal: 0, filesTotal: 0,
+      categories: [], posts: [], files: [], query: "", searched: false, error: "",
+    }} />);
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Search scope" }));
+    fireEvent.click(screen.getByRole("option", { name: "Posts" }));
+
+    expect(screen.getByText("Enter a keyword to search across posts and files.")).toBeVisible();
+    expect(screen.queryByText("Searching posts and files…")).not.toBeInTheDocument();
+    resolveCategories?.([]);
+    await waitFor(() => expect(getCategoriesMock).toHaveBeenCalledTimes(1));
+  });
 });

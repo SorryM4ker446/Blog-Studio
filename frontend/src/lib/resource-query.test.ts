@@ -1,9 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readPage, readResourceQuery, resourceQueryKey, resourceURL, searchAPIParams, setResourceQuery, toSearchParams, writeResourceQuery, type ResourceQuery } from "./resource-query";
+import { readPage, readResourceQuery, readEditorTarget, writeEditorTarget, resourceQueryKey, resourceURL, searchAPIParams, setResourceQuery, toSearchParams, writeResourceQuery, type ResourceQuery } from "./resource-query";
 
 const query: ResourceQuery = { query: "中文 & traces", categoryId: "2", scope: "posts", page: 3 };
 
 describe("resource URL contracts", () => {
+  it("reads explicit editor targets and rejects ambiguous or invalid IDs", () => {
+    expect(readEditorTarget(new URLSearchParams("edit=new"))).toBe("new");
+    expect(readEditorTarget(new URLSearchParams("edit=0007"))).toBe(7);
+    for (const query of ["", "edit=0", "edit=-1", "edit=7abc", "edit=1.5", "edit=9007199254740993", "edit=7&edit=8", "tab=files&edit=7"]) {
+      expect(readEditorTarget(new URLSearchParams(query))).toBeNull();
+    }
+  });
+
+  it("keeps list filters while opening an editor and replaces a new draft with its saved ID", () => {
+    window.history.replaceState(null, "", "/editor?tab=posts&q=needle&category=2&post_page=3&file_page=4");
+    const push = vi.spyOn(window.history, "pushState");
+    const replace = vi.spyOn(window.history, "replaceState");
+    writeEditorTarget("new");
+    expect(push).toHaveBeenCalledTimes(1);
+    writeEditorTarget(7, true);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(readEditorTarget(new URLSearchParams(window.location.search))).toBe(7);
+    writeEditorTarget(null, true);
+    expect(window.location.search).toBe("?tab=posts&q=needle&category=2&post_page=3&file_page=4");
+  });
   beforeEach(() => { window.history.replaceState(null, "", "/search"); });
   it.each(["", "0", "-1", "+2", "1.5", "2abc", "1000001", "9007199254740993", "１", " 2 "])("normalizes invalid page %j", (raw) => {
     expect(readPage(raw)).toBe(1);

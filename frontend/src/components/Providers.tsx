@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useState, useCallback, createContext, useContext } from "react";
+import { ReactNode, useEffect, useState, useRef, useCallback, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -105,31 +105,45 @@ export function SidebarContent() {
   const isAllPostsActive = pathname === "/posts" && !selectedCategoryId;
   const [isPostsExpanded, setIsPostsExpanded] = useState(initialPostsExpanded || Boolean(selectedCategoryId));
   const [showAllCategories, setShowAllCategories] = useState(initialShowAllCategories);
+  const categoryRefreshRef = useRef({ id: 0 });
 
   const refreshCategories = useCallback(async () => {
+    const requestId = ++categoryRefreshRef.current.id;
     try {
       const cats: Category[] = await getCategories({ fresh: true });
-      setCategories(
-        cats
-          .filter((c) => (c.post_count || 0) > 0)
-          .sort((a, b) => (b.post_count || 0) - (a.post_count || 0))
-          .map((category) => ({
-            id: category.id,
-            name: category.name,
-            post_count: category.post_count || 0,
-          }))
-      );
+      if (requestId !== categoryRefreshRef.current.id) return;
+      const nextCategories = cats
+        .filter((c) => (c.post_count || 0) > 0)
+        .sort((a, b) => (b.post_count || 0) - (a.post_count || 0))
+        .map((category) => ({
+          id: category.id,
+          name: category.name,
+          post_count: category.post_count || 0,
+        }));
+      setCategories((current) => {
+        if (current.length === nextCategories.length && current.every((category, index) => {
+          const next = nextCategories[index];
+          return category.id === next.id
+            && category.name === next.name
+            && category.post_count === next.post_count;
+        })) {
+          return current;
+        }
+        return nextCategories;
+      });
     } catch {
       // Keep the last successful category list when the public API is temporarily unavailable.
     }
   }, []);
 
   useEffect(() => {
+    const refreshState = categoryRefreshRef.current;
     const frame = categoriesResolved ? 0 : window.requestAnimationFrame(() => {
       void refreshCategories();
     });
     window.addEventListener("blog:refresh-sidebar", refreshCategories);
     return () => {
+      refreshState.id++;
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener("blog:refresh-sidebar", refreshCategories);
     };

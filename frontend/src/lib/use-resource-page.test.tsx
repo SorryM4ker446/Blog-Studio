@@ -8,6 +8,17 @@ const initial = { page:2, totalPages:3, error:"", data:"server snapshot" };
 function pending<T>() { let resolve!: (value:T)=>void; let reject!: (error:Error)=>void; const promise = new Promise<T>((yes,no)=>{resolve=yes;reject=no;}); return {promise,resolve,reject}; }
 
 describe("resource page navigation", () => {
+  it("defers initial URL normalization and skips it after a newer navigation", () => {
+    let frame!: FrameRequestCallback;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frame = callback; return 1; });
+    const replace = vi.spyOn(window.history, "replaceState");
+    renderHook(() => useResourcePage(initial, initialQuery, initialQuery, vi.fn(), "/posts"));
+    expect(replace).not.toHaveBeenCalled();
+    window.history.pushState(null, "", "/editor?edit=7");
+    act(() => frame(0));
+    expect(window.location.pathname + window.location.search).toBe("/editor?edit=7");
+    expect(replace).not.toHaveBeenCalled();
+  });
   beforeEach(() => window.history.replaceState(null,"","/posts?q=needle&category=2&page=2"));
   it("uses the server snapshot and reloads all restored filters without remounting", async () => {
     const load = vi.fn().mockResolvedValue({...initial,data:"restored"});

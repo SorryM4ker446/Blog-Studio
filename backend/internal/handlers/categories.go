@@ -21,10 +21,11 @@ type updateCategoryInput struct {
 }
 
 func respondWithCategories(c *gin.Context, includeDrafts bool) {
-	var categories []models.Category
+	categories := make([]models.Category, 0)
 	join := "LEFT JOIN posts ON posts.category_id = categories.id"
 	arguments := []any{}
 	if !includeDrafts {
+		join = "JOIN posts ON posts.category_id = categories.id"
 		join += " AND posts.status = ?"
 		arguments = append(arguments, "published")
 	}

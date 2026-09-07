@@ -67,16 +67,14 @@ export default function PostEditorForm(props: PostEditorFormProps) {
   return (
     <form className="fade-in" onSubmit={handleSubmit} aria-busy={props.saving}>
       <div className="editor-form-header">
-        <button type="button" onClick={props.onBack} className="editor-back-button" aria-label="Back to content list">←</button>
+        <button type="button" disabled={props.saving} onClick={props.onBack} className="editor-back-button" aria-label="Back to content list">←</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="page-title" style={{ margin: 0, fontSize: "1.5rem" }}>
             {props.editingPost ? `Editing: ${props.editingPost.title}` : "New Post"}
           </h1>
-          {props.editingPost && (
-            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "4px 0 0" }}>
-              Last updated: {new Date(props.editingPost.updated_at).toLocaleString()}
-            </p>
-          )}
+          <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "4px 0 0" }}>
+            {props.editingPost ? `Last updated: ${new Date(props.editingPost.updated_at).toLocaleString()}` : "Not saved yet"}
+          </p>
         </div>
         <div style={{ display: "flex", gap: "0.8rem", alignItems: "center", flexWrap: "wrap" }}>
           <EditorSelect
@@ -91,12 +89,16 @@ export default function PostEditorForm(props: PostEditorFormProps) {
             ]}
           />
           <button type="submit" disabled={props.saving} className="editor-save-button">
-            {props.saving ? "Saving…" : "Save Changes"}
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z" />
+              <path d="M7 3v6h10V3M7 21v-8h10v8" />
+            </svg>
+            <span>{props.saving ? "Saving…" : "Save"}</span>
           </button>
         </div>
       </div>
 
-      <div className="editor-form-surface">
+      <fieldset className="editor-form-surface" disabled={props.saving} inert={props.saving}>
         <div style={{ marginBottom: "2rem" }}>
           <label htmlFor="post-title" style={labelStyle}>POST TITLE</label>
           <input
@@ -158,9 +160,10 @@ export default function PostEditorForm(props: PostEditorFormProps) {
             >
               <MdEditor
                 value={props.content}
+                readOnly={props.saving}
                 style={{ height: "calc(100vh - 450px)", minHeight: "450px", borderRadius: "12px", border: "1px solid var(--border-color)" }}
                 renderHTML={(text: string) => mdParser!.render(normalizeMarkdownFileUrls(text))}
-                onChange={({ text }: { text: string }) => props.onContentChange(text)}
+                onChange={({ text }: { text: string }) => { if (!props.saving) props.onContentChange(text); }}
                 onImageUpload={props.onImageUpload}
                 onPaste={handlePaste}
               />
@@ -168,18 +171,18 @@ export default function PostEditorForm(props: PostEditorFormProps) {
           )}
         </div>
 
-        <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
-          {props.saveMessage && (
-            <div
-              id="post-save-message"
-              role={failed ? "alert" : "status"}
-              aria-live={failed ? "assertive" : "polite"}
-              className={failed ? "editor-save-message editor-save-message-error" : "editor-save-message"}
-            >
-              {props.saveMessage}
-            </div>
-          )}
-        </div>
+      </fieldset>
+      <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
+        {props.saveMessage && (
+          <div
+            id="post-save-message"
+            role={failed ? "alert" : "status"}
+            aria-live={failed ? "assertive" : "polite"}
+            className={failed ? "editor-save-message editor-save-message-error" : "editor-save-message"}
+          >
+            {props.saveMessage}
+          </div>
+        )}
       </div>
     </form>
   );

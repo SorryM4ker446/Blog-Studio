@@ -264,6 +264,49 @@ func TestPublicPostsUseEffectiveTimelineOrder(t *testing.T) {
 	}
 }
 
+func TestPublicCategoriesExcludeCategoriesWithoutPublishedPosts(t *testing.T) {
+	db := requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+
+	publishedCategory := models.Category{Name: "Public category"}
+	draftOnlyCategory := models.Category{Name: "Draft-only category"}
+	if err := db.Create(&publishedCategory).Error; err != nil {
+		t.Fatalf("create published category: %v", err)
+	}
+	if err := db.Create(&draftOnlyCategory).Error; err != nil {
+		t.Fatalf("create draft-only category: %v", err)
+	}
+	publishedAt := time.Now().UTC()
+	posts := []models.Post{
+		{
+			Title: "Published category article", Slug: "public-category-article", Content: "public",
+			CategoryID: &publishedCategory.ID, Status: "published", PublishedAt: &publishedAt,
+		},
+		{
+			Title: "Draft-only category article", Slug: "draft-only-category-article", Content: "private",
+			CategoryID: &draftOnlyCategory.ID, Status: "draft",
+		},
+	}
+	for index := range posts {
+		posts[index].SearchText = searchtext.Extract(posts[index].Content)
+	}
+	if err := db.Create(&posts).Error; err != nil {
+		t.Fatalf("create category articles: %v", err)
+	}
+
+	response := performJSONRequest(t, SetupRouter(), http.MethodGet, "/api/categories", nil, nil, false)
+	if response.Code != http.StatusOK {
+		t.Fatalf("public categories status = %d; body=%s", response.Code, response.Body.String())
+	}
+	var categories []models.Category
+	if err := json.Unmarshal(response.Body.Bytes(), &categories); err != nil {
+		t.Fatalf("decode public categories: %v", err)
+	}
+	if len(categories) != 1 || categories[0].ID != publishedCategory.ID || categories[0].PostCount != 1 {
+		t.Fatalf("public categories = %+v, want only the published category with count 1", categories)
+	}
+}
+
 func TestCategoryDeletionAndDatabaseConstraints(t *testing.T) {
 	db := requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)

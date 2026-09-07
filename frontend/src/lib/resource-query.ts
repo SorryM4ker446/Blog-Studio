@@ -35,6 +35,26 @@ export function readResourceQuery(params: QueryInput, fixedScope?: SearchScope, 
 
 export function readEditorTab(params: QueryInput): "posts" | "files" { return single(params, "tab") === "files" ? "files" : "posts"; }
 
+export type EditorTarget = number | "new" | null;
+
+export function readEditorTarget(params: QueryInput): EditorTarget {
+  if (readEditorTab(params) === "files") return null;
+  const value = single(params, "edit");
+  if (value === "new") return "new";
+  const id = /^\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+export function writeEditorTarget(target: EditorTarget, replace = false): void {
+  const params = new URLSearchParams(window.location.search);
+  if (target === null) params.delete("edit");
+  else { params.set("tab", "posts"); params.set("edit", String(target)); }
+  const url = resourceURL("/editor", params);
+  if (url !== `${window.location.pathname}${window.location.search}`) {
+    window.history[replace ? "replaceState" : "pushState"](null, "", url);
+  }
+}
+
 export function resourceQueryKey(query: ResourceQuery): string {
   return JSON.stringify([query.query, query.categoryId, query.scope, query.page]);
 }
