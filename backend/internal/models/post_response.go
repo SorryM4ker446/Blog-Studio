@@ -20,6 +20,7 @@ type PostSummary struct {
 type PostDetail struct {
 	PostSummary
 	Content string `json:"content"`
+	Version int64  `json:"version"`
 }
 
 func SummarizePost(post Post) PostSummary {
@@ -40,5 +41,5 @@ func SummarizePosts(posts []Post) []PostSummary {
 }
 
 func DetailPost(post Post) PostDetail {
-	return PostDetail{PostSummary: SummarizePost(post), Content: post.Content}
+	return PostDetail{PostSummary: SummarizePost(post), Content: post.Content, Version: post.Version}
 }

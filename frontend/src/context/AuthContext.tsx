@@ -1,5 +1,6 @@
 "use client";
 
+import { clearEditorPreview } from "@/lib/editor-preview";
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentUser, getSettings, logoutUser, normalizeFileViewUrl } from "@/lib/api";
@@ -159,6 +160,8 @@ export function AuthProvider({
       }
     }
   }
+
+  useEffect(() => { clearEditorPreview(); }, [user?.id]);
 
   const login = (newUser: AuthUser) => {
     sessionExpiryHandledRef.current = false;

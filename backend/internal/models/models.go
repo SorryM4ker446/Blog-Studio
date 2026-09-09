@@ -22,6 +22,7 @@ type Category struct {
 }
 
 type Post struct {
+	Version      int64      `gorm:"not null;default:1" json:"version"`
 	ID           uint       `gorm:"primaryKey" json:"id"`
 	Title        string     `gorm:"not null;size:255" json:"title"`
 	Slug         string     `gorm:"unique;not null;size:255" json:"slug"`

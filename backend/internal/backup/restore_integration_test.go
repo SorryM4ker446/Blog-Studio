@@ -191,6 +191,16 @@ func TestBackupRestoresDatabaseAndUploadsIntoIsolatedTargets(t *testing.T) {
 	if restoredPost.Content != post.Content || restoredPost.SearchText != post.SearchText {
 		t.Fatal("restored search text or content differs")
 	}
+	if restoredPost.Version != post.Version {
+		t.Fatal("restored article version differs")
+	}
+	if err := targetDB.Exec("UPDATE posts SET summary = ? WHERE id = ?", "Restored update", post.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	var nextVersion int64
+	if err := targetDB.Model(&models.Post{}).Where("id = ?", post.ID).Pluck("version", &nextVersion).Error; err != nil || nextVersion != post.Version+1 {
+		t.Fatalf("restored version trigger failed: version=%d error=%v", nextVersion, err)
+	}
 	for _, name := range []string{"idx_posts_search_text", "idx_posts_admin_order"} {
 		if !targetDB.Migrator().HasIndex("posts", name) {
 			t.Fatalf("restored index missing: %s", name)

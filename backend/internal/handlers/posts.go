@@ -34,6 +34,7 @@ type createPostInput struct {
 }
 
 type updatePostInput struct {
+	Version    *int64  `json:"version"`
 	Title      *string `json:"title"`
 	Slug       *string `json:"slug"`
 	Summary    *string `json:"summary"`
@@ -161,8 +162,8 @@ func CreatePost(c *gin.Context) {
 	if status == "" {
 		status = "draft"
 	}
-	if err := validatePostStatus(status); err != nil {
-		apiresponse.Error(c, http.StatusBadRequest, "invalid_status", err.Error())
+	if status != "draft" {
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_status", "New posts must be drafts; use the publish action")
 		return
 	}
 
@@ -189,10 +190,6 @@ func CreatePost(c *gin.Context) {
 		Title: title, Summary: input.Summary, Content: content, SearchText: searchtext.Extract(content), CategoryID: categoryID,
 		Category: category, Status: status,
 	}
-	if status == "published" {
-		now := time.Now()
-		post.PublishedAt = &now
-	}
 	if err := createPostWithAvailableSlug(&post, baseSlug, explicitSlug); err != nil {
 		if isUniqueViolation(err) {
 			apiresponse.Error(c, http.StatusConflict, "slug_conflict", "slug is already in use")
@@ -206,7 +203,11 @@ func CreatePost(c *gin.Context) {
 	c.JSON(http.StatusCreated, models.DetailPost(post))
 }
 
-func UpdatePost(c *gin.Context) {
+func UpdatePost(c *gin.Context)    { mutatePost(c, "save") }
+func PublishPost(c *gin.Context)   { mutatePost(c, "publish") }
+func UnpublishPost(c *gin.Context) { mutatePost(c, "unpublish") }
+
+func mutatePost(c *gin.Context, action string) {
 	id, ok := parseResourceID(c)
 	if !ok {
 		return
@@ -215,7 +216,20 @@ func UpdatePost(c *gin.Context) {
 	if !bindJSON(c, &input) {
 		return
 	}
-	if input.Title == nil && input.Slug == nil && input.Summary == nil && input.Content == nil && input.CategoryID == nil && input.Status == nil {
+	if input.Version == nil || *input.Version < 1 || *input.Version > 9007199254740991 {
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_version", "A positive article version is required")
+		return
+	}
+	if input.Status != nil {
+		apiresponse.Error(c, http.StatusBadRequest, "status_change_requires_action", "Use the publish or unpublish action to change publication status")
+		return
+	}
+	contentTouched := input.Title != nil || input.Slug != nil || input.Summary != nil || input.Content != nil || input.CategoryID != nil
+	if action == "unpublish" && contentTouched {
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_unpublish", "Unpublishing accepts only the article version")
+		return
+	}
+	if action == "save" && !contentTouched {
 		apiresponse.Error(c, http.StatusBadRequest, "empty_update", "At least one post field is required")
 		return
 	}
@@ -231,8 +245,15 @@ func UpdatePost(c *gin.Context) {
 		return
 	}
 
+	if post.Version != *input.Version {
+		apiresponse.Error(c, http.StatusConflict, "post_version_conflict", "This article has changed. Load the latest version before saving again")
+		return
+	}
+	if (action == "publish" && post.Status != "draft") || (action == "unpublish" && post.Status != "published") {
+		apiresponse.Error(c, http.StatusConflict, "post_state_conflict", "The article is already in the requested publication state")
+		return
+	}
 	updates := map[string]any{}
-	contentTouched := input.Title != nil || input.Slug != nil || input.Summary != nil || input.Content != nil || input.CategoryID != nil
 	if input.Title != nil {
 		title, validationErr := normalizeRequired(*input.Title, "title", 255)
 		if validationErr != nil {
@@ -277,12 +298,12 @@ func UpdatePost(c *gin.Context) {
 	}
 
 	status := post.Status
-	if input.Status != nil {
-		status = strings.TrimSpace(*input.Status)
-		if validationErr := validatePostStatus(status); validationErr != nil {
-			apiresponse.Error(c, http.StatusBadRequest, "invalid_status", validationErr.Error())
-			return
-		}
+	if action == "publish" {
+		status = "published"
+		updates["status"] = status
+	}
+	if action == "unpublish" {
+		status = "draft"
 		updates["status"] = status
 	}
 	if status == "published" {
@@ -296,26 +317,38 @@ func UpdatePost(c *gin.Context) {
 		updates["last_edited_at"] = &now
 	}
 
-	result := config.DB.Model(&models.Post{}).Where("id = ?", id).Updates(updates)
-	if isUniqueViolation(result.Error) {
-		apiresponse.Error(c, http.StatusConflict, "slug_conflict", "slug is already in use")
-		return
-	}
-	if isConstraintViolation(result.Error) {
-		apiresponse.Error(c, http.StatusBadRequest, "invalid_post", "Post violates a data constraint")
-		return
-	}
-	if result.Error != nil {
-		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not update post")
-		return
-	}
-	if result.RowsAffected == 0 {
+	errVersionConflict := errors.New("article version conflict")
+	err = config.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&models.Post{}).Where("id = ? AND version = ?", id, *input.Version).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			var count int64
+			if err := tx.Model(&models.Post{}).Where("id = ?", id).Count(&count).Error; err != nil {
+				return err
+			}
+			if count == 0 {
+				return gorm.ErrRecordNotFound
+			}
+			return errVersionConflict
+		}
+		post = models.Post{}
+		return tx.Omit("search_text").Preload("Category").First(&post, id).Error
+	})
+	switch {
+	case errors.Is(err, errVersionConflict):
+		apiresponse.Error(c, http.StatusConflict, "post_version_conflict", "This article has changed. Load the latest version before saving again")
+	case errors.Is(err, gorm.ErrRecordNotFound):
 		apiresponse.Error(c, http.StatusNotFound, "post_not_found", "Post not found")
-		return
+	case isUniqueViolation(err):
+		apiresponse.Error(c, http.StatusConflict, "slug_conflict", "slug is already in use")
+	case isConstraintViolation(err):
+		apiresponse.Error(c, http.StatusBadRequest, "invalid_post", "Post violates a data constraint")
+	case err != nil:
+		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Could not update post")
 	}
-	post = models.Post{}
-	if err := config.DB.Omit("search_text").Preload("Category").First(&post, id).Error; err != nil {
-		apiresponse.Error(c, http.StatusInternalServerError, "database_error", "Post was updated but could not be reloaded")
+	if err != nil {
 		return
 	}
 	c.JSON(http.StatusOK, models.DetailPost(post))

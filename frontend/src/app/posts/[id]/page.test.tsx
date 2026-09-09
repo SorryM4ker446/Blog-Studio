@@ -3,6 +3,7 @@ import type { PostDetail } from "@/lib/api";
 import PostPage from "./page";
 
 const post: PostDetail = {
+  version: 1,
   id: 42,
   title: "Container-safe article",
   slug: "container-safe-article",

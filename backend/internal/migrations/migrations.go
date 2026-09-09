@@ -34,6 +34,7 @@ var registered = []migration{
 		up:      establishApplicationSchema,
 	},
 	{version: 2026090601, name: "add_article_search_text_and_read_indexes", up: addArticleSearch},
+	{version: 2026090901, name: "add_article_versions", up: addPostVersions},
 }
 
 // Apply serializes migration processes with a PostgreSQL transaction-level

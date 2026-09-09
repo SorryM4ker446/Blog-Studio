@@ -1,12 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { ClipboardEvent, FormEvent } from "react";
 import type { Category, PostDetail } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
 import { createMarkdownParser } from "@/lib/markdown";
 import CategoryField from "@/components/editor/CategoryField";
-import EditorSelect from "@/components/editor/EditorSelect";
+import type { PostAction } from "@/lib/post-editor";
 import "react-markdown-editor-lite/lib/index.css";
 
 const MdEditor = dynamic(() => import("react-markdown-editor-lite"), { ssr: false });
@@ -22,7 +24,18 @@ interface PostEditorFormProps {
   summary: string;
   content: string;
   categoryId: number;
-  status: string;
+  dirty: boolean;
+  action: PostAction;
+  conflict: boolean;
+  latestPost: PostDetail | null;
+  loadingLatest: boolean;
+  latestError: string;
+  sessionExpired: boolean;
+  onLoadLatest: () => void;
+  onUseLatest: () => void;
+  onPublish: () => Promise<void>;
+  onUnpublish: () => Promise<void>;
+  onViewArticle: () => void;
   categories: Category[];
   categoriesLoading: boolean;
   categoriesError: string;
@@ -32,7 +45,6 @@ interface PostEditorFormProps {
   onSummaryChange: (value: string) => void;
   onContentChange: (value: string) => void;
   onCategoryChange: (value: number) => void;
-  onStatusChange: (value: string) => void;
   onBack: () => void;
   onSave: () => Promise<void>;
   onCreateCategory: (name: string) => Promise<string | null>;
@@ -53,6 +65,8 @@ const labelStyle = {
 
 export default function PostEditorForm(props: PostEditorFormProps) {
   const failed = props.saveMessage.startsWith("❌");
+  const params = useSearchParams();
+  const returnTo = `/editor?${params.toString()}`;
 
   function handlePaste(event: ClipboardEvent) {
     const hasImage = Array.from(event.clipboardData.items).some((item) => item.type.startsWith("image/"));
@@ -76,28 +90,44 @@ export default function PostEditorForm(props: PostEditorFormProps) {
             {props.editingPost ? `Last updated: ${new Date(props.editingPost.updated_at).toLocaleString()}` : "Not saved yet"}
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.8rem", alignItems: "center", flexWrap: "wrap" }}>
-          <EditorSelect
-            ariaLabel="Publication status"
-            value={props.status}
-            onChange={props.onStatusChange}
-            width="140px"
-            disabled={props.saving}
-            options={[
-              { value: "draft", label: "Draft" },
-              { value: "published", label: "Published" },
-            ]}
-          />
-          <button type="submit" disabled={props.saving} className="editor-save-button">
+        <div className="editor-header-actions">
+          <span className="editor-publication-status" data-published={props.editingPost?.status === "published"}>{props.editingPost?.status === "published" ? "Published" : "Draft"}</span>
+          <button type="button" className="editor-publication-action" disabled={props.saving || props.conflict}
+            onClick={() => void (props.editingPost?.status === "published" ? props.onUnpublish() : props.onPublish())}>
+            {props.saving && props.action === "publish" ? "Publishing…" : (props.editingPost?.status === "published" ? "Draft" : "Publish")}
+          </button>
+          <button type="submit" disabled={props.saving || props.conflict} className="editor-save-button">
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z" />
               <path d="M7 3v6h10V3M7 21v-8h10v8" />
             </svg>
-            <span>{props.saving ? "Saving…" : "Save"}</span>
+            <span>Save</span>
           </button>
         </div>
       </div>
 
+      <div className="editor-save-state" role="status">
+        <span>{props.saving ? "Saving changes…" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}</span>
+        {props.editingPost?.status === "published" && <Link className="editor-view-link" href={`/posts/${props.editingPost.id}?returnTo=${encodeURIComponent(returnTo)}`} aria-disabled={props.saving}
+          aria-label="View article" title="View article"
+          onNavigate={(event) => { if (props.saving) event.preventDefault(); else props.onViewArticle(); }}>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 17 17 7M7 7h10v10" />
+          </svg>
+        </Link>}
+      </div>
+      {props.sessionExpired && <p role="alert">Your edits are still here. <a href="/login?redirect=%2Feditor" target="_blank" rel="noopener noreferrer">Sign in in a new tab</a>, then return here and try again.</p>}
+      {props.conflict && <section className="editor-conflict" aria-label="Article version conflict">
+        <h2>This article changed elsewhere</h2>
+        <p>Your edits have been kept. Copy any text you want to keep before replacing this form with the latest saved version.</p>
+        <button type="button" onClick={props.onLoadLatest} disabled={props.loadingLatest}>{props.loadingLatest ? "Loading…" : "Load latest version"}</button>
+        {props.latestError && <p role="alert">{props.latestError}</p>}
+        {props.latestPost && <>
+          <p>Latest: {props.latestPost.title} · {new Date(props.latestPost.updated_at).toLocaleString()}</p>
+          <label>Latest saved content<textarea readOnly value={props.latestPost.content} /></label>
+          <button type="button" onClick={props.onUseLatest} disabled={props.loadingLatest}>Discard my edits and use latest</button>
+        </>}
+      </section>}
       <fieldset className="editor-form-surface" disabled={props.saving} inert={props.saving}>
         <div style={{ marginBottom: "2rem" }}>
           <label htmlFor="post-title" style={labelStyle}>POST TITLE</label>

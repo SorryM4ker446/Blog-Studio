@@ -1,3 +1,4 @@
+import { createArticle } from "./support/articles";
 import { expect, test } from "@playwright/test";
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL } from "./support/test-env";
 
@@ -16,7 +17,7 @@ test("editor URLs restore saved articles and new drafts through refresh and hist
   const posts: { id: number; title: string; content: string }[] = [];
   try {
     for (const status of ["draft", "published"]) {
-      const response = await page.request.post(`${E2E_API_URL}/admin/posts`, {
+      const response = await createArticle(page.request, {
         headers, data: { title: `${name} ${status}`, content: `Saved ${status} body`, status, category_id: category.id },
       });
       expect(response.ok()).toBeTruthy();
@@ -47,8 +48,9 @@ test("editor URLs restore saved articles and new drafts through refresh and hist
     await page.reload();
     await expect(body).toHaveValue(published.content);
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Content Editor", exact: true })).toBeVisible();
-    expect(new URL(page.url()).searchParams.has("edit")).toBe(false);
+    await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("edit")).toBe(String(published.id));
+    await page.getByRole("button", { name: "Back to content list" }).click();
 
     await page.getByRole("button", { name: "+ New Post" }).click();
     expect(new URL(page.url()).searchParams.get("edit")).toBe("new");

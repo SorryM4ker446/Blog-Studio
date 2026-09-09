@@ -57,11 +57,6 @@ async function submitFileSearchAndWait(
   });
 }
 
-async function selectPublicationStatus(page: Page, option: "Draft" | "Published") {
-  await page.getByRole("combobox", { name: "Publication status" }).click();
-  await page.getByRole("option", { name: option, exact: true }).click();
-}
-
 async function clickAtVisibleCenter(page: Page, target: Locator) {
   await expect(target).toBeVisible();
   await target.scrollIntoViewIfNeeded();
@@ -233,8 +228,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   await page.getByRole("button", { name: "Back to content list" }).click();
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
   await clickAtVisibleCenter(page, page.getByText(postTitle, { exact: true }));
-  await selectPublicationStatus(page, "Published");
-  const saveButton = page.getByRole("button", { name: "Save", exact: true });
+  const saveButton = page.getByRole("button", { name: "Publish", exact: true });
   const initialSaveButtonBox = await saveButton.boundingBox();
   expect(initialSaveButtonBox).not.toBeNull();
   const sidebarNav = page.locator(".sidebar .nav-menu");
@@ -250,13 +244,13 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   });
   let releaseSave!: () => void;
   const saveGate = new Promise<void>((resolve) => { releaseSave = resolve; });
-  await page.route(/\/api\/admin\/posts\/\d+$/, async (route) => {
+  await page.route(/\/api\/admin\/posts\/\d+\/publish$/, async (route) => {
     await saveGate;
     await route.continue();
   }, { times: 1 });
   await saveButton.click();
-  await expect(page.getByRole("button", { name: "Saving…" })).toBeVisible();
-  const savingButtonBox = await page.getByRole("button", { name: "Saving…" }).boundingBox();
+  await expect(page.getByRole("button", { name: "Publishing…" })).toBeVisible();
+  const savingButtonBox = await page.getByRole("button", { name: "Publishing…" }).boundingBox();
   expect(savingButtonBox).not.toBeNull();
   expect(savingButtonBox!.width).toBeCloseTo(initialSaveButtonBox!.width, 1);
   await expect(sidebarNav).toHaveAttribute("data-save-stability", "preserved");
@@ -297,7 +291,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   await expect.poll(() => page.evaluate(() => Object.entries(window.sessionStorage)
     .filter(([key]) => key.startsWith("blogStudio:contentScroll:"))
     .map(([, value]) => value))).toContain(postsScrollPosition.toString());
-  await page.getByRole("button", { name: "←", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(/\/posts$/);
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
   await expect.poll(() => postsScrollContainer.evaluate((element) => element.scrollTop)).toBe(postsScrollPosition);
@@ -587,8 +581,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await page.getByLabel("POST TITLE").fill(postTitle);
   await page.getByLabel("INTRODUCTION").fill("Image lifecycle verification");
   await page.locator(".custom-editor-wrapper textarea").fill(`![${imageAlt}](${imageViewURL})`);
-  await selectPublicationStatus(page, "Published");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 
@@ -606,7 +599,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(postTitle);
   await page.getByText(postTitle, { exact: true }).click();
-  await page.getByRole("button", { name: "←", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(/\/search\?q=/);
   await expect(page.locator("#search-input")).toHaveValue(postTitle);
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
@@ -617,7 +610,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await postSearch.press("Enter");
   await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(postTitle);
   await page.getByText(postTitle, { exact: true }).click();
-  await page.getByRole("button", { name: "←", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(/\/posts\?q=/);
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue(postTitle);
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
@@ -639,6 +632,8 @@ test("administrator can publish an uploaded image and safely remove it after ref
   });
   await page.getByRole("button", { name: "Save", exact: true }).click();
   expect((await filteredPostRefreshPromise).ok()).toBeTruthy();
+  await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to content list" }).click();
   await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await expect(page.getByPlaceholder("Search posts...")).toBeVisible();
@@ -647,7 +642,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
   await clickAtVisibleCenter(page, searchedPostCard.locator(".editor-post-category"));
   await expect(page).toHaveURL(/\/posts\/\d+$/);
-  await page.getByRole("button", { name: "←", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(/\/editor\?tab=posts&q=/);
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue(postTitle);
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();
@@ -719,6 +714,8 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await postEditButton.click();
   await page.locator(".custom-editor-wrapper textarea").fill("# Image reference removed");
   await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to content list" }).click();
   await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: /Files \(/ })).toBeVisible();

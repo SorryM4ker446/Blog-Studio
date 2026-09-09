@@ -104,13 +104,6 @@ func validateOptionalLength(value, field string, maximum int) error {
 	return nil
 }
 
-func validatePostStatus(status string) error {
-	if status != "draft" && status != "published" {
-		return errors.New("status must be either draft or published")
-	}
-	return nil
-}
-
 func validateSearchQuery(c *gin.Context) (string, bool) {
 	query := strings.TrimSpace(c.Query("q"))
 	if query == "" {

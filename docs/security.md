@@ -49,3 +49,11 @@ The Compose deployment mounts PostgreSQL, JWT, and initial administrator secrets
 The backend does not trust forwarded client addresses by default. A production reverse proxy must be listed explicitly in `TRUSTED_PROXIES`; broad public network ranges must not be trusted. This boundary affects request attribution and both rate limiters.
 
 The Prometheus endpoint is intentionally unauthenticated on the backend's private listener. Caddy does not route it and Compose does not publish the backend port. Do not expose that listener to an untrusted network. See [`runtime-operations.md`](runtime-operations.md) for health endpoints, request IDs, cache policy, metrics, structured logging, and operational timeouts.
+
+## Article write conflicts
+
+Article saves, publication and withdrawal require administrator authentication, CSRF protection and a matching article version. Stale writes return `409 post_version_conflict`; clients cannot silently replace the current server version. Article editor requests handle session expiry locally so entered text remains available while the user signs in in another tab. Server permission and session checks remain mandatory; this exception does not authorize expired sessions. See [editor.md](editor.md) for conflict recovery and the current limits of unsaved-input protection.
+
+## Frontend security maintenance
+
+The dependency lockfile uses Next.js and eslint-config-next 16.3.4 with updated sharp and js-yaml dependencies. These updates address the security advisories reported by the September 9, 2026 audit. Run `npm ci` after updating the checkout, rebuild the frontend, and rerun `npm audit`; an earlier clean audit is not evidence for a later dependency state.

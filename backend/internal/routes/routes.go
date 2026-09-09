@@ -98,6 +98,8 @@ func setupRouter(
 
 			auth.POST("/posts", handlers.CreatePost)
 			auth.PUT("/posts/:id", handlers.UpdatePost)
+			auth.POST("/posts/:id/publish", handlers.PublishPost)
+			auth.POST("/posts/:id/unpublish", handlers.UnpublishPost)
 			auth.DELETE("/posts/:id", handlers.DeletePost)
 
 			auth.POST("/categories", handlers.CreateCategory)

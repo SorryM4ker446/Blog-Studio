@@ -1,3 +1,4 @@
+import { createArticle } from "./support/articles";
 import { expect, test } from "@playwright/test";
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL } from "./support/test-env";
 
@@ -17,11 +18,11 @@ test("search pages restore filters and editor deletion corrects the last page", 
     const category = await page.request.post(`${E2E_API_URL}/admin/categories`, { headers, data: { name: q } });
     expect(category.ok()).toBeTruthy(); categoryId = (await category.json()).id;
     for (let i = 0; i < 14; i++) {
-      const response = await page.request.post(`${E2E_API_URL}/admin/posts`, { headers, data: {
+      const response = await createArticle(page.request, { headers, data: {
         title: `${q} article ${i}`, content: `# Visible ${q}\n\n${"Long paragraph. ".repeat(800)}`,
         status: i < 12 ? "published" : "draft", category_id: i < 11 ? categoryId : 0,
       } });
-      expect(response.status()).toBe(201); postIds.push((await response.json()).id);
+      expect(response.ok()).toBeTruthy(); postIds.push((await response.json()).id);
     }
     for (let i = 0; i < 12; i++) {
       const response = await page.request.post(`${E2E_API_URL}/admin/files?system=${i === 11}`, { headers, multipart: {
