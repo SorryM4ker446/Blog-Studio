@@ -164,8 +164,8 @@ func TestPostRulesAndSlugConflicts(t *testing.T) {
 	}, auth, true)
 	requireAPIError(t, conflict.Code, conflict.Body.Bytes(), http.StatusConflict, "slug_conflict")
 
-	publish := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/posts/%d", first.ID), map[string]any{
-		"status": "published",
+	publish := performJSONRequest(t, router, http.MethodPost, fmt.Sprintf("/api/admin/posts/%d/publish", first.ID), map[string]any{
+		"version": first.Version,
 	}, auth, true)
 	if publish.Code != http.StatusOK {
 		t.Fatalf("publish status = %d; body=%s", publish.Code, publish.Body.String())
@@ -177,7 +177,7 @@ func TestPostRulesAndSlugConflicts(t *testing.T) {
 	originalPublishedAt := *published.PublishedAt
 
 	edit := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/posts/%d", first.ID), map[string]any{
-		"summary": "edited while published",
+		"version": published.Version, "summary": "edited while published",
 	}, auth, true)
 	if edit.Code != http.StatusOK {
 		t.Fatalf("published edit status = %d; body=%s", edit.Code, edit.Body.String())
@@ -187,8 +187,8 @@ func TestPostRulesAndSlugConflicts(t *testing.T) {
 	}
 	originalLastEditedAt := *published.LastEditedAt
 
-	unpublish := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/posts/%d", first.ID), map[string]any{
-		"status": "draft",
+	unpublish := performJSONRequest(t, router, http.MethodPost, fmt.Sprintf("/api/admin/posts/%d/unpublish", first.ID), map[string]any{
+		"version": published.Version,
 	}, auth, true)
 	if unpublish.Code != http.StatusOK {
 		t.Fatalf("unpublish status = %d; body=%s", unpublish.Code, unpublish.Body.String())
@@ -197,7 +197,7 @@ func TestPostRulesAndSlugConflicts(t *testing.T) {
 		t.Fatalf("unpublished post lost timeline: %+v; error=%v", published, err)
 	}
 	draftEdit := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/posts/%d", first.ID), map[string]any{
-		"summary": "edited while temporarily unpublished",
+		"version": published.Version, "summary": "edited while temporarily unpublished",
 	}, auth, true)
 	if draftEdit.Code != http.StatusOK {
 		t.Fatalf("draft edit status = %d; body=%s", draftEdit.Code, draftEdit.Body.String())
@@ -207,8 +207,8 @@ func TestPostRulesAndSlugConflicts(t *testing.T) {
 	}
 	latestEditedAt := *published.LastEditedAt
 
-	republish := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/posts/%d", first.ID), map[string]any{
-		"status": "published",
+	republish := performJSONRequest(t, router, http.MethodPost, fmt.Sprintf("/api/admin/posts/%d/publish", first.ID), map[string]any{
+		"version": published.Version,
 	}, auth, true)
 	if republish.Code != http.StatusOK {
 		t.Fatalf("republish status = %d; body=%s", republish.Code, republish.Body.String())

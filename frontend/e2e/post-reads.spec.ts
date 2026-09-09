@@ -1,3 +1,4 @@
+import { createArticle } from "./support/articles";
 import { expect, test } from "@playwright/test";
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL } from "./support/test-env";
 
@@ -18,10 +19,10 @@ test("article summaries stay body-free and editing loads complete content with r
   try {
     const articles: { id: number; title: string; status: string }[] = [];
     for (const status of ["published", "draft"]) {
-      const created = await page.request.post(`${E2E_API_URL}/admin/posts`, {
+      const created = await createArticle(page.request, {
         headers, data: { title: `Summary ${status} ${suffix}`, summary: "Short description", content, status },
       });
-      expect(created.status()).toBe(201);
+      expect(created.ok()).toBeTruthy();
       const article = await created.json();
       ids.push(article.id);
       articles.push(article);

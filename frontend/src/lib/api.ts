@@ -69,6 +69,7 @@ interface PaginatedResponse<T> {
 export type { Category, PostSummary, FileRecord, SearchResult, PaginatedResponse };
 
 export interface PostDetail extends PostSummary {
+  version: number;
   content: string;
 }
 
@@ -78,10 +79,9 @@ export interface CreatePostInput {
   content: string;
   slug?: string;
   category_id?: number;
-  status?: string;
 }
 
-export type UpdatePostInput = Partial<CreatePostInput>;
+export type UpdatePostInput = Partial<CreatePostInput> & { version: number };
 
 export interface FileMutationResult {
   ok: boolean;
@@ -225,13 +225,14 @@ export async function getPost(id: string): Promise<PostDetail | null> {
   }
 }
 
-export async function getAdminPost(id: number, options: { signal?: AbortSignal } = {}): Promise<PostDetail> {
+export async function getAdminPost(id: number, options: { signal?: AbortSignal; handleSessionExpiry?: boolean } = {}): Promise<PostDetail> {
   const post = await apiRequest<PostDetail>(`/admin/posts/${id}`, {
     cache: "no-store",
     auth: true,
     signal: options.signal,
+    handleSessionExpiry: options.handleSessionExpiry,
   });
-  if (!post || post.id !== id || typeof post.content !== "string") {
+  if (!post || post.id !== id || typeof post.content !== "string" || !Number.isSafeInteger(post.version) || post.version < 1) {
     throw new ApiError("The article response is incomplete. Try loading it again.", { kind: "parse" });
   }
   return post;
@@ -241,6 +242,7 @@ export async function createPost(data: CreatePostInput): Promise<PostDetail> {
   return apiRequest<PostDetail>("/admin/posts", {
     method: "POST",
     auth: true,
+    handleSessionExpiry: false,
     csrf: true,
     headers: getMutationHeaders(),
     body: JSON.stringify(data),
@@ -254,9 +256,24 @@ export async function updatePost(
   return apiRequest<PostDetail>(`/admin/posts/${id}`, {
     method: "PUT",
     auth: true,
+    handleSessionExpiry: false,
     csrf: true,
     headers: getMutationHeaders(),
     body: JSON.stringify(data),
+  });
+}
+
+export async function publishPost(id: number, data: UpdatePostInput): Promise<PostDetail> {
+  return apiRequest<PostDetail>(`/admin/posts/${id}/publish`, {
+    method: "POST", auth: true, csrf: true, handleSessionExpiry: false,
+    headers: getMutationHeaders(), body: JSON.stringify(data),
+  });
+}
+
+export async function unpublishPost(id: number, version: number): Promise<PostDetail> {
+  return apiRequest<PostDetail>(`/admin/posts/${id}/unpublish`, {
+    method: "POST", auth: true, csrf: true, handleSessionExpiry: false,
+    headers: getMutationHeaders(), body: JSON.stringify({ version }),
   });
 }
 

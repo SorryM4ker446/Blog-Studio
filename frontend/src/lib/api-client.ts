@@ -120,6 +120,7 @@ function isJSONContentType(value: string): boolean {
 export interface ApiRequestOptions extends Omit<RequestInit, "body"> {
   body?: BodyInit | null;
   auth?: boolean;
+  handleSessionExpiry?: boolean;
   csrf?: boolean;
   forceCSRFRefresh?: boolean;
   responseType?: "json" | "text" | "void";
@@ -231,6 +232,7 @@ async function parseSuccessResponse<T>(response: Response, responseType: ApiRequ
 async function performRequest<T>(path: string, options: ApiRequestOptions, allowCSRFRefresh: boolean): Promise<T> {
   const {
     auth = false,
+    handleSessionExpiry = true,
     csrf = false,
     forceCSRFRefresh = false,
     responseType = "json",
@@ -264,7 +266,7 @@ async function performRequest<T>(path: string, options: ApiRequestOptions, allow
     }
     if (auth && apiError.status === 401) {
       clearCSRFToken();
-      notifySessionExpired(apiError);
+      if (handleSessionExpiry) notifySessionExpired(apiError);
     }
     throw apiError;
   }

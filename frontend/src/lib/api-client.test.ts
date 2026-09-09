@@ -24,6 +24,15 @@ function clearCSRFCookie(): void {
 }
 
 describe("apiRequest", () => {
+  it("lets an editor handle an expired session locally without swallowing the error", async () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeSessionExpired(listener);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "Expired", code: "invalid_session" }, { status: 401 })));
+    try {
+      await expect(apiRequest("/admin/posts/1", { auth: true, handleSessionExpiry: false })).rejects.toMatchObject({ status: 401 });
+      expect(listener).not.toHaveBeenCalled();
+    } finally { unsubscribe(); }
+  });
   beforeEach(() => {
     clearCSRFToken();
     clearCSRFCookie();

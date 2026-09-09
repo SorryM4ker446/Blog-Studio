@@ -37,7 +37,7 @@ describe("administrator article detail", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("requests complete content with the session, no-store and cancellation signal", async () => {
-    const post = { ...makePost(), content: "Complete article body" };
+    const post = { ...makePost(), version: 1, content: "Complete article body" };
     const fetchMock = vi.fn().mockResolvedValue(Response.json(post));
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();

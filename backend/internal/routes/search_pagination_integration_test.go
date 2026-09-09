@@ -315,6 +315,7 @@ func TestArticleWritesSynchronizeSearchText(t *testing.T) {
 	}
 	path := fmt.Sprintf("/api/admin/posts/%d", post.ID)
 	for _, patch := range []map[string]any{{"title": "Renamed"}, {"content": "[secondneedle](target.png)"}, {"content": "![hidden](image.png)"}} {
+		patch["version"] = post.Version
 		updated := performJSONRequest(t, router, http.MethodPut, path, patch, auth, true)
 		if updated.Code != 200 {
 			t.Fatalf("update status %d: %s", updated.Code, updated.Body.String())

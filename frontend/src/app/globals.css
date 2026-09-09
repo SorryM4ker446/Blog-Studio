@@ -260,31 +260,23 @@ a {
   justify-content: center;
   gap: 8px;
   flex-shrink: 0;
-  width: 120px;
-  height: 42px;
+  width: 104px;
+  height: 38px;
   padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 80%, var(--text-primary));
-  border-radius: 10px;
-  background: var(--accent-blue);
-  color: var(--accent-contrast-text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1;
+  border: 1px solid var(--text-primary);
+  border-radius: 7px;
+  background: var(--text-primary);
+  color: var(--bg-base);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  font: 500 0.8125rem/1 var(--font-family);
   cursor: pointer;
   white-space: nowrap;
 }
-
 .editor-save-button:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--text-primary);
   outline-offset: 3px;
 }
-
-.editor-save-button:disabled {
-  cursor: wait;
-  opacity: 1;
-}
+.editor-save-button:disabled { cursor: wait; opacity: 1; }
 
 .editor-form-surface {
   margin: 0;
@@ -2367,3 +2359,72 @@ body.theme-light .custom-select-options {
     line-height: 1.74;
   }
 }
+
+.editor-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.editor-publication-action {
+  min-width: 104px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: 500 0.8125rem/1 var(--font-family);
+  cursor: pointer;
+  opacity: 1;
+}
+.editor-publication-action:disabled { cursor: wait; }
+.editor-publication-action:focus-visible, .editor-view-link:focus-visible,
+.login-home-link:focus-visible, .login-next-button:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 3px;
+}
+.editor-publication-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  margin-right: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+.editor-publication-status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.editor-publication-status[data-published="true"] { color: var(--text-primary); }
+.editor-save-state { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-height: 28px; margin-bottom: 1rem; color: var(--text-muted); font-size: 0.8125rem; }
+.editor-save-state > span { min-width: 136px; }
+.editor-view-link, .login-home-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.editor-view-link svg, .login-home-link svg { display: block; }
+.editor-view-link { flex-basis: 32px; width: 32px; height: 32px; border-radius: 6px; }
+.editor-view-link:hover, .login-home-link:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.editor-view-link[aria-disabled="true"] { cursor: wait; }
+.login-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 2rem; }
+.login-next-button { min-width: 96px; min-height: 38px; padding: 0 16px; border: 1px solid var(--text-primary); border-radius: 7px; background: var(--text-primary); color: var(--bg-base); font: inherit; font-size: 0.875rem; cursor: pointer; }
+.login-next-button:disabled { cursor: not-allowed; opacity: 0.65; }
+@media (prefers-reduced-motion: reduce) { .editor-view-link, .login-home-link { transition: none; } }
+.editor-conflict { padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--accent-blue); border-radius: 12px; }
+.editor-conflict h2 { font-size: 1rem; }
+.editor-conflict p { margin: 0.75rem 0; }
+.editor-conflict button { margin: 0.5rem 0; padding: 0.5rem 0.75rem; }
+.editor-conflict textarea { display: block; width: 100%; min-height: 8rem; }

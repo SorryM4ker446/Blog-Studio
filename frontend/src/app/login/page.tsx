@@ -176,41 +176,13 @@ function LoginPageContent() {
             </div>
           )}
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginTop: "2rem",
-            }}
-          >
-            <Link
-              href="/"
-              style={{
-                color: "var(--accent-blue)",
-                fontSize: "0.9rem",
-                fontWeight: 500,
-                textDecoration: "none",
-              }}
-            >
-              Return Home
+          <div className="login-actions">
+            <Link href="/" className="login-home-link" aria-label="Return Home" title="Return Home">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m11 5-7 7 7 7M4 12h16" />
+              </svg>
             </Link>
-
-            <button
-              type="submit"
-              disabled={loading || retryAfter > 0}
-              style={{
-                background: "var(--accent-blue)",
-                color: "var(--accent-contrast-text)",
-                border: "none",
-                padding: "0.7rem 1.5rem",
-                borderRadius: "8px",
-                fontSize: "0.95rem",
-                fontWeight: 500,
-                cursor: loading || retryAfter > 0 ? "not-allowed" : "pointer",
-                opacity: loading || retryAfter > 0 ? 0.7 : 1,
-              }}
-            >
+            <button type="submit" className="login-next-button" disabled={loading || retryAfter > 0}>
               {loading ? "Signing in..." : retryAfter > 0 ? `Try again in ${retryAfter}s` : "Next"}
             </button>
           </div>

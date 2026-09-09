@@ -23,7 +23,8 @@ Repeated execution is idempotent. Concurrent commands serialize on the database 
 ### Posts
 
 - `title` and `content` are required. Titles are trimmed and limited to 255 characters.
-- `status` is either `draft` or `published`.
+- `status` is either `draft` or `published`. Creation always produces a draft; only the explicit publish/unpublish endpoints change status.
+- Article details carry `version`. Updates match ID and version atomically; concurrent stale writes return `409 post_version_conflict`. Migration `2026090901` starts historical versions at 1 and installs an update trigger covering all row updates, including category deletion. The write and response reload share a transaction; a failed reload rolls both content and version back. See [editor.md](editor.md).
 - `published_at` records the first publication time. Editing, returning to draft, and publishing again never reset it.
 - `last_edited_at` is `NULL` for a post that has not been edited since its first publication. Content or metadata saves after publication update it without changing `published_at`.
 - Public lists and searches sort by `COALESCE(last_edited_at, published_at)`, while the administrator list continues to use the general GORM `updated_at` timestamp.

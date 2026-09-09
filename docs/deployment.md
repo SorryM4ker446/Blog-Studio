@@ -94,7 +94,7 @@ The seed command refuses to replace an existing account. Sign in, change the gen
 
 ## Release upgrade
 
-Lists and search return body-free summaries; Editor reads complete content through protected `GET /api/admin/posts/:id`. Search now defaults to a combined ten-result page and returns exact post/file totals. Build and deploy frontend and backend from the same revision and reload open clients. Prepare the extension prerequisite and apply migration `2026090601` before restarting the API. Keep the previous images and their matched backup; an image-only rollback across the new schema version is unsupported.
+Lists and search return body-free summaries; Editor reads complete content through protected `GET /api/admin/posts/:id`. Search now defaults to a combined ten-result page and returns exact post/file totals. Build and deploy frontend and backend from the same revision and reload open clients. Prepare the extension prerequisite and apply all pending migrations, including `2026090601` and `2026090901`, before restarting the API. The latter adds article versions and an update trigger: old clients without versions cannot save, and publication now uses dedicated endpoints. This version migration changes no historical article content or timestamps and needs no additional extension. Reserve a maintenance window for its table lock; see [editor compatibility and behavior](editor.md). Keep the previous images and their matched backup; an image-only rollback across the new schema version is unsupported.
 
 Migrations are forward-only, and a database backup must match the uploads captured during the same write-free interval. Use this sequence:
 

@@ -72,3 +72,11 @@ go tool cover '-html=coverage.out' '-o=coverage.html'
 ~~~
 
 Quoting dotted Go flags avoids PowerShell argument parsing surprises. Reports are ignored by Git and Docker build contexts. CI retains coverage and backend test artifacts for 30 days even when a test fails; incomplete reports from failed runs do not establish a passing baseline.
+
+## Article editing measurement
+
+The September 9, 2026 passing run retained the same full-source measurement scope. Vitest measured statements 58.92% (1211/2055), branches 55.91% (1120/2003), functions 56.99% and lines 60.11%, with 154 passing tests. The snapshot/dirty-state helper reached 100% on all four metrics; EditorPageClient as a whole remains at 53.55% branch coverage, so this does not establish a 90% publication-flow branch gate.
+
+Go aggregate statement coverage was 70.7%; the shared versioned article mutation function measured 96.1% and the version migration 100%. Integration tests also exercise concurrent save/publication, category deletion, rollback, validation and stale versions. Numerical CI thresholds are still pending; browser tests are not included in either coverage percentage.
+
+The subsequent same-tab article viewing and action-control update passed 160 unit tests with the same measurement scope: statements 59.35%, branches 57.04%, functions 57.77% and lines 60.47%. The in-memory editor viewing helper measured 100% branch coverage and BackButton 90%; these figures do not enable or replace the pending global CI thresholds.
