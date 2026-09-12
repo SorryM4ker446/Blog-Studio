@@ -37,16 +37,16 @@ describe("advanced search input", () => {
       last_edited_at: null, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
     };
     searchResourcesMock.mockResolvedValue({ posts: [post], files: [], posts_total: 1, files_total: 0, total: 1, page: 1, limit: 10 });
-    render(<SearchPageClient initialState={{ categoryId: "", scope: "all", page: 1, totalPages: 1, postsTotal: 0, filesTotal: 0, categories: [], query: "existing query", posts: [post], files: [], searched: true, error: "" }} />);
+    render(<SearchPageClient initialState={{ categoryId: "", scope: "all", postPage: 1, filePage: 1, postTotalPages: 1, fileTotalPages: 1, postsTotal: 0, filesTotal: 0, categories: [], query: "existing query", posts: [post], files: [], searched: true, error: "" }} />);
     expect(screen.getByRole("link", { name: /Article returned by the server/ })).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "Search posts and files" }), { target: { value: "body-only match" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByRole("link", { name: /Article returned by the server/ })).toBeVisible();
-    expect(searchResourcesMock).toHaveBeenCalledWith({ query: "body-only match", scope: "all", categoryId: "", page: 1 });
+    expect(searchResourcesMock).toHaveBeenCalledWith({ query: "body-only match", scope: "posts", categoryId: "", page: 1 });
   });
 
   it("starts from the server snapshot without overwriting new input", () => {
-    render(<SearchPageClient initialState={{ categoryId: "", scope: "all", page: 1, totalPages: 1, postsTotal: 0, filesTotal: 0, categories: [],
+    render(<SearchPageClient initialState={{ categoryId: "", scope: "all", postPage: 1, filePage: 1, postTotalPages: 1, fileTotalPages: 1, postsTotal: 0, filesTotal: 0, categories: [],
       query: "existing query",
       posts: [],
       files: [],
@@ -57,17 +57,18 @@ describe("advanced search input", () => {
     fireEvent.change(input, { target: { value: "new article" } });
     expect(input).toHaveValue("new article");
     expect(searchResourcesMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("combobox", { name: "Search category" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(window.location.search).toBe("?q=new+article");
-    expect(searchResourcesMock).toHaveBeenCalledWith({ query: "new article", scope: "all", categoryId: "", page: 1 });
+    expect(searchResourcesMock).toHaveBeenCalledWith({ query: "new article", scope: "posts", categoryId: "", page: 1 });
   });
 
   it("reconciles a restored URL when the cached server snapshot has an older query", async () => {
     navigationState.searchParams = new URLSearchParams("q=restored%20article");
     window.history.replaceState({}, "", "/search?q=restored%20article");
 
-    render(<SearchPageClient initialState={{ categoryId: "", scope: "all", page: 1, totalPages: 1, postsTotal: 0, filesTotal: 0, categories: [],
+    render(<SearchPageClient initialState={{ categoryId: "", scope: "all", postPage: 1, filePage: 1, postTotalPages: 1, fileTotalPages: 1, postsTotal: 0, filesTotal: 0, categories: [],
       query: "older file",
       posts: [],
       files: [],
@@ -77,7 +78,7 @@ describe("advanced search input", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Search posts and files" })).toHaveValue("restored article");
-      expect(searchResourcesMock).toHaveBeenCalledWith({ query: "restored article", scope: "all", categoryId: "", page: 1 });
+      expect(searchResourcesMock).toHaveBeenCalledWith({ query: "restored article", scope: "posts", categoryId: "", page: 1 });
     });
   });
 
@@ -92,8 +93,10 @@ describe("advanced search input", () => {
       status: "published", published_at: "2026-01-01T00:00:00Z", last_edited_at: null,
       created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
     };
+    navigationState.searchParams = new URLSearchParams("q=existing+query&scope=posts");
+    window.history.replaceState(null, "", `/search?${navigationState.searchParams}`);
     render(<SearchPageClient initialState={{
-      categoryId: "", scope: "all", page: 1, totalPages: 1, postsTotal: 1, filesTotal: 0,
+      categoryId: "", scope: "posts", postPage: 1, filePage: 1, postTotalPages: 1, fileTotalPages: 1, postsTotal: 1, filesTotal: 0,
       categories: [visibleCategory, draftOnlyCategory], posts: [post], files: [], query: "existing query", searched: true, error: "",
     }} />);
 
@@ -104,7 +107,7 @@ describe("advanced search input", () => {
 
     expect(screen.getByRole("link", { name: /Existing result/ })).toBeVisible();
     expect(screen.getByRole("status", { name: "Updating search results…" })).toBeInTheDocument();
-    expect(searchResourcesMock).toHaveBeenCalledWith({ query: "existing query", scope: "all", categoryId: "4", page: 1 });
+    expect(searchResourcesMock).toHaveBeenCalledWith({ query: "existing query", scope: "posts", categoryId: "4", page: 1 });
     resolveSearch?.({ posts: [], files: [], posts_total: 0, files_total: 0, total: 0, page: 1, limit: 10 });
     await waitFor(() => expect(screen.queryByRole("link", { name: /Existing result/ })).not.toBeInTheDocument());
   });
@@ -115,7 +118,7 @@ describe("advanced search input", () => {
     navigationState.searchParams = new URLSearchParams();
     window.history.replaceState({}, "", "/search");
     render(<SearchPageClient initialState={{
-      categoryId: "", scope: "all", page: 1, totalPages: 1, postsTotal: 0, filesTotal: 0,
+      categoryId: "", scope: "all", postPage: 1, filePage: 1, postTotalPages: 1, fileTotalPages: 1, postsTotal: 0, filesTotal: 0,
       categories: [], posts: [], files: [], query: "", searched: false, error: "",
     }} />);
 
@@ -127,4 +130,14 @@ describe("advanced search input", () => {
     resolveCategories?.([]);
     await waitFor(() => expect(getCategoriesMock).toHaveBeenCalledTimes(1));
   });
+  it.each(["posts", "files"] as const)("hides excluded results when scope is %s", scope => {
+    navigationState.searchParams = new URLSearchParams(`q=existing+query&scope=${scope}`);
+    window.history.replaceState(null, "", `/search?${navigationState.searchParams}`);
+    render(<SearchPageClient initialState={{ query: "existing query", scope, categoryId: "", postPage: 1, filePage: 1,
+      postTotalPages: 1, fileTotalPages: 1, postsTotal: 0, filesTotal: 0, categories: [], posts: [], files: [], searched: true, error: "" }} />);
+    expect(screen.getByRole("region", { name: scope === "posts" ? "Post results" : "File results" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: scope === "posts" ? "File results" : "Post results" })).not.toBeInTheDocument();
+    if (scope === "files") expect(screen.queryByRole("combobox", { name: "Search category" })).not.toBeInTheDocument();
+  });
+
 });

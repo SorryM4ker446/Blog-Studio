@@ -1,12 +1,15 @@
 import React from "react";
+import styles from "./Pagination.module.css";
 
 interface PaginationProps {
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  pending?: boolean;
+  edgeArrows?: boolean;
 }
 
-export default function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
+export default function Pagination({ currentPage, totalPages, onPageChange, pending = false, edgeArrows = false }: PaginationProps) {
   if (totalPages <= 1) return null;
 
   // Generate pagination array with ellipsis
@@ -32,14 +35,14 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
   const pages = getPages();
 
   return (
-    <nav aria-label="Pagination" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.4rem", marginTop: "2rem" }}>
+    <nav className={edgeArrows ? styles.edges : undefined} aria-busy={pending} aria-label="Pagination" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.4rem", marginTop: "2rem" }}>
       {/* Prev Button */}
       <button
         type="button"
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 1}
+        onClick={() => { if (!pending) onPageChange(currentPage - 1); }}
+        disabled={pending || currentPage <= 1}
         aria-label="Previous page"
-        className="fade-in"
+        className={styles.previous}
         style={{
           display: "flex",
           alignItems: "center",
@@ -52,7 +55,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
           color: "var(--text-primary)",
           cursor: currentPage === 1 ? "not-allowed" : "pointer",
           opacity: currentPage === 1 ? 0.3 : 1,
-          transition: "all 0.2s ease",
+          transition: "background-color 160ms ease, border-color 160ms ease, color 160ms ease",
           boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
         }}
       >
@@ -84,7 +87,8 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
             <button
               type="button"
               key={`page-${p}`}
-              onClick={() => onPageChange(p as number)}
+              onClick={() => { if (!pending && !isCurrent) onPageChange(p as number); }}
+              disabled={pending}
               aria-label={isCurrent ? `Page ${p}, current page` : `Go to page ${p}`}
               aria-current={isCurrent ? "page" : undefined}
               style={{
@@ -100,7 +104,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
                 fontWeight: isCurrent ? 600 : 500,
                 fontSize: "0.9rem",
                 cursor: "pointer",
-                transition: "all 0.2s ease",
+                transition: "background-color 160ms ease, border-color 160ms ease, color 160ms ease",
                 boxShadow: isCurrent ? "0 4px 12px rgba(168, 199, 250, 0.3)" : "none",
               }}
               onMouseEnter={(e) => {
@@ -125,10 +129,10 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
       {/* Next Button */}
       <button
         type="button"
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage === totalPages}
+        onClick={() => { if (!pending) onPageChange(currentPage + 1); }}
+        disabled={pending || currentPage >= totalPages}
         aria-label="Next page"
-        className="fade-in"
+        className={styles.next}
         style={{
           display: "flex",
           alignItems: "center",
@@ -141,7 +145,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
           color: "var(--text-primary)",
           cursor: currentPage === totalPages ? "not-allowed" : "pointer",
           opacity: currentPage === totalPages ? 0.3 : 1,
-          transition: "all 0.2s ease",
+          transition: "background-color 160ms ease, border-color 160ms ease, color 160ms ease",
           boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
         }}
       >

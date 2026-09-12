@@ -18,6 +18,7 @@ describe("TopBar theme action", () => {
 
   it("places an accessible theme toggle between refresh and more actions", async () => {
     const user = userEvent.setup();
+    localStorage.setItem("blog_theme", "dark");
     render(<ThemeProvider initialTheme="dark"><TopBar /></ThemeProvider>);
 
     expect(screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
@@ -31,7 +32,7 @@ describe("TopBar theme action", () => {
     expect(document.documentElement).toHaveClass("theme-light");
     expect(document.body).toHaveClass("theme-light");
     expect(screen.getByRole("button", { name: "Switch to Dark Mode" })).toBeVisible();
-    expect(localStorage.getItem("blog_theme")).toBe("light");
+    expect(localStorage.getItem("blog_theme")).toBe("dark");
     expect(document.cookie).toContain("blog_theme=light");
   });
 });

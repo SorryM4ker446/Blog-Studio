@@ -1,13 +1,18 @@
 "use client";
 
+import { formatDate } from "@/lib/display-date";
+
 import { useCallback, useState, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { PostSummary, FileRecord, Category } from "@/lib/api";
+import type { FileRecord, Category } from "@/lib/api";
 import { getCategories, searchResources, getPostTimeline } from "@/lib/api";
-import Pagination from "@/components/Pagination";
-import { useResourcePage } from "@/lib/use-resource-page";
-import { readResourceQuery, writeResourceQuery, type ResourceQuery, type SearchScope } from "@/lib/resource-query";
+import PaginatedResults from "@/components/PaginatedResults";
+import { useSearchPage } from "@/lib/use-search-page";
+import { useScopeTransition } from "@/lib/use-scope-transition";
+import { loadSearchResults, type SearchResults } from "@/lib/search-results";
+import { readSearchQuery, writeSearchQuery, type SearchQuery } from "@/lib/search-query";
+import type { SearchScope } from "@/lib/resource-query";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
 import { 
@@ -17,54 +22,46 @@ import {
 } from "@/components/Icons";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 import EditorSelect from "@/components/editor/EditorSelect";
+import styles from "./SearchPageClient.module.css";
 
-export interface SearchPageInitialState {
-  query: string;
-  categoryId: string;
-  scope: SearchScope;
-  page: number;
-  totalPages: number;
-  postsTotal: number;
-  filesTotal: number;
+export interface SearchPageInitialState extends SearchResults {
   categories: Category[];
-  posts: PostSummary[];
-  files: FileRecord[];
   searched: boolean;
   error: string;
 }
 
 export default function SearchPageClient({ initialState }: { initialState: SearchPageInitialState }) {
   const searchParams = useSearchParams();
-  const targetQuery = useMemo(() => readResourceQuery(searchParams), [searchParams]);
+  const targetQuery = useMemo(() => readSearchQuery(searchParams), [searchParams]);
   const [input, setInput] = useState({ forQuery: initialState.query, value: initialState.query });
   if (input.forQuery !== targetQuery.query) setInput({ forQuery: targetQuery.query, value: targetQuery.query });
   const query = input.value;
   function setQuery(value: string) { setInput({ forQuery: targetQuery.query, value }); }
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
-  const load = useCallback(async (target: ResourceQuery): Promise<SearchPageInitialState> => {
-    const [categories, result] = await Promise.all([getCategories(), target.query ? searchResources(target) : Promise.resolve({
-      posts: [], files: [], posts_total: 0, files_total: 0, total: 0, page: 1, limit: 10,
-    })]);
-    return { ...target, posts: result.posts, files: result.files, categories, searched: Boolean(target.query),
-      postsTotal: result.posts_total, filesTotal: result.files_total, page: result.page,
-      totalPages: Math.max(1, Math.ceil(result.total / result.limit)), error: "" };
+  const load = useCallback(async (target: SearchQuery): Promise<SearchPageInitialState> => {
+    const [categories, result] = await Promise.all([getCategories(), loadSearchResults(target, searchResources)]);
+    return { ...result, categories, searched: Boolean(target.query), error: "" };
   }, []);
-  const { state, loading, run, retry } = useResourcePage(initialState, initialState, targetQuery, load, "/search");
-  const { posts, files, searched, error, postsTotal, filesTotal, page, totalPages, categories } = state;
+  const { state, loading, run, retry } = useSearchPage(initialState, targetQuery, load);
+  const { displayed, ref: resultsRef, changing: changingScope } = useScopeTransition(state, targetQuery.scope, loading);
+  const { posts, files, searched, error, postsTotal, filesTotal, postPage, filePage, postTotalPages, fileTotalPages } = displayed;
+  const { categories } = state;
   const visibleCategories = useMemo(
     () => categories.filter((category) => category.post_count === undefined || category.post_count > 0),
     [categories],
   );
 
-  function navigate(target: ResourceQuery) {
-    writeResourceQuery("/search", target, { includeScope: true });
+  function navigate(target: SearchQuery) {
+    writeSearchQuery(target);
     void run(target);
   }
   function submitSearch(value: string) {
-    navigate({ ...readResourceQuery(new URLSearchParams(window.location.search)), query: value.trim(), page: 1 });
+    navigate({ ...readSearchQuery(new URLSearchParams(window.location.search)), query: value.trim(), postPage: 1, filePage: 1 });
   }
-  function changeFilter(patch: Partial<ResourceQuery>) {
-    navigate({ ...readResourceQuery(new URLSearchParams(window.location.search)), ...patch, page: 1 });
+  function changeFilter(patch: Partial<SearchQuery>) {
+    const target = { ...readSearchQuery(new URLSearchParams(window.location.search)), ...patch, postPage: 1, filePage: 1 };
+    if (target.scope !== "posts") target.categoryId = "";
+    navigate(target);
   }
   function handleKeyDown(event: React.KeyboardEvent) {
     if (event.key === "Enter") submitSearch(query);
@@ -147,7 +144,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
             onChange={(scope) => changeFilter({ scope })}
           />
         </div>
-        <div className="search-filter-field">
+        {targetQuery.scope === "posts" && <div className={`search-filter-field ${styles.categoryReveal}`}>
           <span>Article category</span>
           <EditorSelect
             ariaLabel="Search category"
@@ -161,9 +158,9 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
             ]}
             onChange={(categoryId) => changeFilter({ categoryId })}
           />
-        </div>
+        </div>}
       </div>
-      <section aria-label="Search results" aria-busy={loading}>
+      <section ref={resultsRef} aria-label="Search results" aria-busy={loading || changingScope} inert={changingScope}>
       {error && (
         <ErrorState
           title="Search unavailable"
@@ -185,7 +182,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
             </span>
           )}
           {/* 文章结果 */}
-          <div style={{ marginBottom: "2rem" }}>
+          {displayed.scope !== "files" && <section aria-label="Post results" style={{ marginBottom: "2rem" }}>
             <div
               style={{
                 color: "var(--text-secondary)",
@@ -198,6 +195,9 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                 <FileTextIcon size={16} /> Posts ({postsTotal} results)
               </div>
             </div>
+            <PaginatedResults page={postPage} totalPages={postTotalPages} pending={loading} edgeArrows
+              transitionGroup={displayed.scope}
+              resultKey={JSON.stringify([displayed.query, displayed.categoryId, postPage])} onPageChange={(next) => navigate({ ...targetQuery, postPage: next })}>
             {posts.length === 0 ? (
               <div
                 style={{
@@ -259,7 +259,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                           }}
                         >
                           {getPostTimeline(post).label} on{" "}
-                          {new Date(getPostTimeline(post).timestamp).toLocaleDateString()} •{" "}
+                          {formatDate(getPostTimeline(post).timestamp)} •{" "}
                           {post.category?.name || "Uncategorized"}
                         </div>
                       </div>
@@ -268,10 +268,11 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                 ))}
               </div>
             )}
-          </div>
+            </PaginatedResults>
+          </section>}
 
           {/* 文件结果 */}
-          <div>
+          {displayed.scope !== "posts" && <section aria-label="File results">
             <div
               style={{
                 color: "var(--text-secondary)",
@@ -284,6 +285,9 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                 <FolderIcon size={16} /> Files ({filesTotal} results)
               </div>
             </div>
+            <PaginatedResults page={filePage} totalPages={fileTotalPages} pending={loading} edgeArrows
+              transitionGroup={displayed.scope}
+              resultKey={JSON.stringify([displayed.query, filePage])} onPageChange={(next) => navigate({ ...targetQuery, filePage: next })}>
             {files.length === 0 ? (
               <div
                 style={{
@@ -316,7 +320,8 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                 ))}
               </div>
             )}
-          </div>
+            </PaginatedResults>
+          </section>}
         </div>
       )}
 
@@ -338,7 +343,6 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
           </div>
         </div>
       )}
-      {!error && searched && !loading && <Pagination currentPage={page} totalPages={totalPages} onPageChange={(next) => navigate({ ...targetQuery, page: next })} />}
       </section>
 
       <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(null)} />

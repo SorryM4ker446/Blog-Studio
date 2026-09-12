@@ -7,7 +7,7 @@ import { getFiles, searchResources } from "@/lib/api";
 import { readResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib/resource-query";
 import { useResourcePage } from "@/lib/use-resource-page";
 import SearchInput from "@/components/SearchInput";
-import Pagination from "@/components/Pagination";
+import PaginatedResults from "@/components/PaginatedResults";
 import { CloudIcon, FolderIcon } from "@/components/Icons";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
@@ -80,22 +80,16 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
           icon={<FolderIcon size={48} />}
         />
       ) : (
+        <PaginatedResults page={page} totalPages={totalPages} pending={loading}
+          resultKey={JSON.stringify([state.query, page])} onPageChange={handlePageChange}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
           {files.map((file) => (
             <FileCard key={file.id} file={file} onPreview={setPreviewFile} showDescription={false} />
           ))}
         </div>
+        </PaginatedResults>
       )}
       </section>
-
-      {/* Pagination */}
-      {!error && !loading && files.length > 0 && (
-        <Pagination 
-          currentPage={page} 
-          totalPages={totalPages} 
-          onPageChange={handlePageChange}
-        />
-      )}
 
       <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>

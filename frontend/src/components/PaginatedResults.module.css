@@ -1,0 +1,2 @@
+.frame { position: relative; }
+.viewport { overflow: clip; overflow-clip-margin: 6px; }

@@ -89,3 +89,23 @@ The subsequent sidebar-motion update passed 183 tests in 34 files: statements 62
 
 
 The themed recovery/leave-confirmation and stable editor-width update passed 187 tests in 34 files with unchanged measurement scope: statements 62.69% (1726/2753), branches 58.37% (1422/2436), functions 61.04% (387/634), and lines 62.96% (1452/2306). Asynchronous continuation tests cover cancellation during flush, duplicate requests and stale completion invalidation. The native modal, theme rendering, keyboard focus and editor geometry are additionally exercised by the complete 24-workflow Chromium suite, whose coverage is not merged into Vitest. Numerical gates remain pending.
+
+## Appearance preference measurement
+
+The cookie preference update passed 199 tests in 35 files on September 12, 2026, retaining the same full-source scope: statements 62.83% (1731/2755), branches 58.7% (1436/2446), functions 61.19% (388/634), and lines 63.14% (1458/2309). The shared preference-cookie module reached 100% across all four metrics. Server HTML, hydration, reloads and browser storage denial are additionally verified in Chromium and are not merged into these percentages. No coverage exclusions or numerical gates were added.
+
+The subsequent deterministic date-display fix passed 203 tests in 36 files with the same measurement scope: statements 62.95% (1740/2764), branches 58.89% (1447/2457), functions 61.44% (392/638), and lines 63.23% (1464/2315). Both the date-display and preference-cookie modules reached 100% across all four metrics. Cross-locale/time-zone browser regressions use populated article and file pages; they are not counted in these unit coverage totals.
+
+## Independent search section measurement
+
+The grouped advanced-search update passed 218 tests in 39 files with unchanged full-source measurement scope: statements 63.75% (1815/2847), branches 60.46% (1523/2519), functions 62.12% (410/660), and lines 64.06% (1526/2382). The search navigation hook measured 93.54% branch coverage. Tests cover separate section requests/pages, excluded scopes, legacy links, stale responses, retry and exhausted-page correction. Chromium additionally verifies populated server HTML and independent browser navigation. No coverage exclusions or numerical gates changed.
+
+The subsequent stable-pagination and directional-motion update passed 219 unit/coverage tests in 39 files: statements 63.86% (1836/2875), branches 60.44% (1537/2543), functions 62.1% (413/665), and lines 64.16% (1542/2403). The animation component remains in the production-source denominator; real Web Animations, resize geometry and reduced-motion behavior are exercised in Chromium rather than counted as unit coverage. No measurement exclusions or numerical gates changed.
+
+Reusing the result-motion component on All Posts and Cloud Drive retained 219 passing tests in 39 files on September 13, 2026: statements 63.86% (1836/2875), branches 60.33% (1530/2536), functions 62.1% (413/665), and lines 64.16% (1542/2403). The source scope and exclusions are unchanged; browser tests additionally verify both list routes and file-only advanced search through delayed responses, paging and history.
+
+The Posts-only category control update passed 220 tests in 39 files: statements 63.86% (1838/2878), branches 60.41% (1537/2544), functions 62.1% (413/665), and lines 64.19% (1544/2405). Shared query tests cover category normalization outside Posts scope; browser checks cover the entry animation, reduced motion, hidden controls and history restoration. Measurement scope and exclusions remain unchanged.
+
+The scope-transition update, including Content Editor pagination reuse, passed 223 tests in 40 files: statements 64.27% (1873/2914), branches 60.76% (1561/2569), functions 62.44% (419/671), and lines 64.65% (1575/2436). The scope presentation hook measured 96% branch coverage, including cancelled callbacks, error recovery and unavailable animation support. Real fade timing and scope navigation are additionally exercised by Chromium. No coverage exclusions or numerical gates changed.
+
+The separated exit/entrance and stable editor-page-height refinement retained 223 passing tests in 40 files: statements 64.65% (1913/2959), branches 60.83% (1583/2602), functions 62.7% (422/673), and lines 65.13% (1616/2481). Chromium additionally pauses real exit animations to verify outgoing-tree retention, checks editor height reservations through paging/resizing, and prevents nested page animation during scope changes. Measurement scope and exclusions remain unchanged.

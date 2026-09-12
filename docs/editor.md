@@ -2,6 +2,10 @@
 
 The editor reads complete articles through authenticated `GET /api/admin/posts/:id`. Article details and successful writes include a positive `version`; list and search summaries remain body-free. Existing article URLs use `edit=ID`, while new articles use `edit=new`.
 
+## Content list pagination
+
+Both Posts and Files in Content Editor keep pagination in a bottom row. Page changes let the old cards exit before new cards enter with a short directional fade. The content area reserves the tallest page measured at the current width, so a short last page does not collapse the grid or pull pagination upward; resizing the available width resets that height reservation. Existing rows remain visible while loading; pagination rejects repeated clicks without fading or remounting. System reduced-motion preferences disable the result animation. Each resource retains its existing filters, page URL, history restoration and last-page correction after deletion.
+
 ## Explicit actions
 
 | Action | Request | Behavior |

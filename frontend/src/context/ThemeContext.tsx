@@ -1,8 +1,9 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from "react";
+import { writePreference, type Theme } from "@/lib/preference-cookies";
 
-export type Theme = "dark" | "light";
+export type { Theme } from "@/lib/preference-cookies";
 
 interface ThemeContextType {
   theme: Theme;
@@ -29,9 +30,8 @@ export function ThemeProvider({
   const toggleTheme = () => {
     const newTheme = theme === "dark" ? "light" : "dark";
     setTheme(newTheme);
-    localStorage.setItem("blog_theme", newTheme);
-    document.cookie = `blog_theme=${newTheme}; path=/; max-age=31536000; samesite=lax`;
     applyTheme(newTheme);
+    writePreference("blog_theme", newTheme);
   };
 
   return (

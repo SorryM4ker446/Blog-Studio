@@ -76,3 +76,55 @@ test("unavailable categories stay explicit and long dropdowns keep keyboard choi
   await category.press("Escape");
   await expect(category).toHaveAttribute("aria-expanded", "false");
 });
+
+for (const reducedMotion of ["no-preference", "reduce"] as const) {
+  test(`article category appears only for posts with ${reducedMotion} motion`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion });
+    const response = await page.goto("/search?q=category-reveal&scope=all&category=0");
+    expect(await response!.text()).not.toContain("Article category");
+    const category = page.getByRole("combobox", { name: "Search category" });
+    await expect(category).toHaveCount(0);
+    await expect.poll(() => new URL(page.url()).searchParams.has("category")).toBe(false);
+    await page.evaluate(() => {
+      const entries: Keyframe[][] = [];
+      Object.assign(window, { categoryEntries: entries });
+      document.addEventListener("animationstart", event => {
+        const node = event.target;
+        if (node instanceof HTMLElement && node.classList.contains("search-filter-field") && node.textContent?.includes("Article category")) {
+          const effect = node.getAnimations()[0]?.effect;
+          if (effect instanceof KeyframeEffect) entries.push(effect.getKeyframes());
+        }
+      });
+    });
+    const chooseScope = async (label: string) => {
+      await page.getByRole("combobox", { name: "Search scope" }).click();
+      await page.getByRole("option", { name: label, exact: true }).click();
+    };
+    await chooseScope("Posts");
+    await expect(category).toBeVisible();
+    const field = page.locator(".search-filter-field").filter({ has: category });
+    await expect(field).toHaveCSS("opacity", "1");
+    if (reducedMotion === "reduce") {
+      await expect(field).toHaveCSS("animation-name", "none");
+      expect(await page.evaluate(() => (window as unknown as { categoryEntries: unknown[] }).categoryEntries.length)).toBe(0);
+    } else {
+      await expect.poll(() => page.evaluate(() => (window as unknown as { categoryEntries: unknown[] }).categoryEntries.length)).toBe(1);
+      const frames = await page.evaluate(() => (window as unknown as { categoryEntries: Keyframe[][] }).categoryEntries[0]);
+      expect(frames[0].opacity).toBe("0");
+      expect(frames[0].transform).toMatch(/^translate(?:X)?\(-10px(?:, 0px)?\)$/);
+      expect(frames.at(-1)?.opacity).toBe("1");
+    }
+    await category.click();
+    await page.getByRole("option", { name: "Uncategorized", exact: true }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("category")).toBe("0");
+    await chooseScope("Posts and files");
+    await expect(category).toHaveCount(0);
+    expect(new URL(page.url()).searchParams.has("category")).toBe(false);
+    await page.goBack();
+    await expect(category).toContainText("Uncategorized");
+    expect(new URL(page.url()).searchParams.get("category")).toBe("0");
+    await chooseScope("Files");
+    await expect(category).toHaveCount(0);
+    expect(new URL(page.url()).searchParams.has("category")).toBe(false);
+  });
+}

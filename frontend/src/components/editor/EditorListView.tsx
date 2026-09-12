@@ -1,8 +1,10 @@
 "use client";
 
+import { formatDate } from "@/lib/display-date";
+
 import type { Category, FileRecord, PostSummary } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
-import Pagination from "@/components/Pagination";
+import PaginatedResults from "@/components/PaginatedResults";
 import FileCard, { EditActionButton } from "@/components/files/FileCard";
 import { EditIcon, FileTextIcon, FolderIcon, InboxIcon, UploadIcon } from "@/components/Icons";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
@@ -83,7 +85,7 @@ function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onVie
       </div>
       <div className="editor-post-card-footer">
         <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-          <span>{new Date(post.updated_at).toLocaleDateString()}</span>
+          <span>{formatDate(post.updated_at)}</span>
           <span className={post.category_id == null ? "editor-post-category editor-post-category-empty" : "editor-post-category"}>
             {post.category_id == null ? "无标签" : post.category?.name || "Uncategorized"}
           </span>
@@ -101,6 +103,7 @@ export default function EditorListView(props: EditorListViewProps) {
   const error = props.activeTab === "posts" ? props.postsError : props.filesError;
   const hasItems = props.activeTab === "posts" ? props.posts.length > 0 : props.files.length > 0;
   const retry = props.activeTab === "posts" ? props.onRetryPosts : props.onRetryFiles;
+  const page = props.activeTab === "posts" ? props.postPage : props.filePage;
 
   return (
     <div>
@@ -182,34 +185,37 @@ export default function EditorListView(props: EditorListViewProps) {
             icon={<InboxIcon size={54} />}
           />
         ) : (
-          <div className="editor-resource-grid">
-            {props.activeTab === "posts"
-              ? props.posts.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    onView={() => props.onViewPost(post)}
-                    onEdit={() => props.onEditPost(post)}
-                    onDelete={() => props.onDeletePost(post.id)}
-                  />
-                ))
-              : props.files.map((file) => (
-                  <FileCard
-                    key={file.id}
-                    file={file}
-                    onPreview={props.onPreviewFile}
-                    onEdit={props.onEditFile}
-                    onDelete={(item) => props.onDeleteFile(item.id)}
-                  />
-                ))}
-          </div>
-        )}
-
-        {!error && props.activeTab === "posts" && props.posts.length > 0 && (
-          <Pagination currentPage={props.postPage} totalPages={props.postTotalPages} onPageChange={props.onLoadPosts} />
-        )}
-        {!error && props.activeTab === "files" && props.files.length > 0 && (
-          <Pagination currentPage={props.filePage} totalPages={props.fileTotalPages} onPageChange={props.onLoadFiles} />
+          <PaginatedResults
+            stablePageHeight
+            key={props.activeTab}
+            page={page}
+            totalPages={props.activeTab === "posts" ? props.postTotalPages : props.fileTotalPages}
+            resultKey={String(page)}
+            pending={loading}
+            onPageChange={props.activeTab === "posts" ? props.onLoadPosts : props.onLoadFiles}
+          >
+            <div className="editor-resource-grid">
+              {props.activeTab === "posts"
+                ? props.posts.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      onView={() => props.onViewPost(post)}
+                      onEdit={() => props.onEditPost(post)}
+                      onDelete={() => props.onDeletePost(post.id)}
+                    />
+                  ))
+                : props.files.map((file) => (
+                    <FileCard
+                      key={file.id}
+                      file={file}
+                      onPreview={props.onPreviewFile}
+                      onEdit={props.onEditFile}
+                      onDelete={(item) => props.onDeleteFile(item.id)}
+                    />
+                  ))}
+            </div>
+          </PaginatedResults>
         )}
       </section>
     </div>

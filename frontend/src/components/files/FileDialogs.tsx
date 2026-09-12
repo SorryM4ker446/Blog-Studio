@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDateTime } from "@/lib/display-date";
+
 import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { FileMutationResult, FileRecord } from "@/lib/api";
 import { getDownloadUrl, getFileViewUrl } from "@/lib/api";
@@ -168,7 +170,7 @@ export function FilePreviewDialog({ file, onClose, onEdit }: FilePreviewDialogPr
         </div>
         <div className={styles.detail}>
           <dt>Uploaded</dt>
-          <dd>{new Date(file.created_at).toLocaleString()}</dd>
+          <dd>{formatDateTime(file.created_at)}</dd>
         </div>
         <div className={`${styles.detail} ${styles.descriptionBlock}`}>
           <dt>Description</dt>

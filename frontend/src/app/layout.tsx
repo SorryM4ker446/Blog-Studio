@@ -3,6 +3,7 @@ import { Providers } from "@/components/Providers";
 import ClientLayout from "@/components/ClientLayout";
 import { cookies } from "next/headers";
 import { loadInitialAppShellState } from "@/lib/server-app-shell";
+import { readPreference } from "@/lib/preference-cookies";
 
 export const metadata = {
   title: "Blog Studio",
@@ -15,10 +16,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  const isSidebarCollapsed = cookieStore.get("sidebar_collapsed")?.value === "true";
-  const areSidebarPostsExpanded = cookieStore.get("sidebar_posts_expanded")?.value === "true";
-  const areAllSidebarCategoriesShown = cookieStore.get("sidebar_categories_all")?.value === "true";
-  const isLightTheme = cookieStore.get("blog_theme")?.value === "light";
+  const isSidebarCollapsed = readPreference(cookieStore, "sidebar_collapsed") === "true";
+  const areSidebarPostsExpanded = readPreference(cookieStore, "sidebar_posts_expanded") === "true";
+  const areAllSidebarCategoriesShown = readPreference(cookieStore, "sidebar_categories_all") === "true";
+  const isLightTheme = readPreference(cookieStore, "blog_theme") === "light";
   const initialAppShellState = await loadInitialAppShellState(cookieStore.toString());
 
   return (

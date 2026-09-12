@@ -52,4 +52,21 @@ describe("Pagination", () => {
     expect(screen.queryByRole("button", { name: "Go to page 2" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Go to page 9" })).not.toBeInTheDocument();
   });
+  it("keeps controls mounted and visually stable while blocking pending page requests", async () => {
+    const onPageChange = vi.fn(); const user = userEvent.setup();
+    const view = render(<Pagination currentPage={1} totalPages={3} onPageChange={onPageChange} edgeArrows />);
+    const next = screen.getByRole("button", { name: "Next page" });
+    const before = next.getAttribute("style");
+    view.rerender(<Pagination currentPage={1} totalPages={3} onPageChange={onPageChange} pending edgeArrows />);
+    expect(screen.getByRole("button", { name: "Next page" })).toBe(next);
+    expect(next.getAttribute("style")).toBe(before);
+    expect(next).toBeDisabled();
+    await user.click(next);
+    await user.click(screen.getByRole("button", { name: "Go to page 3" }));
+    expect(onPageChange).not.toHaveBeenCalled();
+    view.rerender(<Pagination currentPage={2} totalPages={3} onPageChange={onPageChange} edgeArrows />);
+    expect(screen.getByRole("button", { name: "Next page" })).toBe(next);
+    expect(next).toBeEnabled();
+  });
+
 });
