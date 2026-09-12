@@ -37,6 +37,11 @@ export function readEditorTab(params: QueryInput): "posts" | "files" { return si
 
 export type EditorTarget = number | "new" | null;
 
+export function readEditorDraft(params: QueryInput): string {
+  const value = single(params, "draft");
+  return /^[a-zA-Z0-9-]{1,80}$/.test(value) ? value : "";
+}
+
 export function readEditorTarget(params: QueryInput): EditorTarget {
   if (readEditorTab(params) === "files") return null;
   const value = single(params, "edit");
@@ -47,6 +52,8 @@ export function readEditorTarget(params: QueryInput): EditorTarget {
 
 export function writeEditorTarget(target: EditorTarget, replace = false): void {
   const params = new URLSearchParams(window.location.search);
+  if (target !== "new") params.delete("draft");
+  else if (readEditorTarget(params) !== "new" || !readEditorDraft(params)) params.set("draft", crypto.randomUUID());
   if (target === null) params.delete("edit");
   else { params.set("tab", "posts"); params.set("edit", String(target)); }
   const url = resourceURL("/editor", params);

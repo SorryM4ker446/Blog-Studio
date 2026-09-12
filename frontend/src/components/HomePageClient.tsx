@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { getApiErrorMessage, getPostTimeline, getPosts } from "@/lib/api";
 import type { PostSummary } from "@/lib/api";
 import { 

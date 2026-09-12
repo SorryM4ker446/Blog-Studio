@@ -1,12 +1,13 @@
 "use client";
 
-import { ReactNode, useEffect, useState, useRef, useCallback, createContext, useContext } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useState, useRef, useCallback, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, type Theme } from "@/context/ThemeContext";
 import { getCategories, Category } from "@/lib/api";
 import type { InitialAppShellState, SidebarCategory } from "@/lib/app-shell-state";
+import EditorLeaveDialog from "./editor/EditorLeaveDialog";
 import {
   GridIcon,
   ListIcon,
@@ -54,15 +55,17 @@ export function Providers({
 }) {
   const [isCollapsed, setIsCollapsed] = useState(initialSidebarCollapsed);
 
-  // Sync state to html class for CSS-only initial state (Fix FUS bug)
-  useEffect(() => {
+  // Keep the server-rendered selector and the hydrated sidebar in the same paint.
+  useLayoutEffect(() => {
     if (isCollapsed) {
       document.documentElement.setAttribute("data-sidebar-state", "collapsed");
     } else {
       document.documentElement.removeAttribute("data-sidebar-state");
     }
+  }, [isCollapsed]);
 
-    localStorage.setItem("sidebar_collapsed", String(isCollapsed));
+  useEffect(() => {
+    try { localStorage.setItem("sidebar_collapsed", String(isCollapsed)); } catch { /* Browser storage is optional. */ }
     document.cookie = `sidebar_collapsed=${isCollapsed ? "true" : "false"}; path=/; max-age=31536000; samesite=lax`;
   }, [isCollapsed]);
 
@@ -82,6 +85,7 @@ export function Providers({
           initialShowAllCategories: initialSidebarShowAllCategories,
         }}>
           {children}
+          <EditorLeaveDialog />
         </SidebarContext.Provider>
       </AuthProvider>
     </ThemeProvider>

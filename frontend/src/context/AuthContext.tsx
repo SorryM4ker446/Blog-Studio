@@ -1,8 +1,9 @@
 "use client";
 
-import { clearEditorPreview } from "@/lib/editor-preview";
+import { recoveryStorage, openRecoveryChannel } from "@/lib/editor-recovery-store";
+import { preserveExpiredEditor, releaseEditorNavigation } from "@/lib/editor-navigation";
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { getCurrentUser, getSettings, logoutUser, normalizeFileViewUrl } from "@/lib/api";
 import { ApiError, clearCSRFToken, isApiError, subscribeSessionExpired } from "@/lib/api-client";
 import type {
@@ -19,7 +20,7 @@ interface AuthContextType {
   profile: PublicProfile | null;
   login: (user: AuthUser) => void;
   logout: () => Promise<void>;
-  completeLogout: () => void;
+  completeLogout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isLoading: boolean;
@@ -46,11 +47,13 @@ export function AuthProvider({
     requiresInitialAuthCheck ? "checking" : initialState?.authStatus || "checking",
   );
   const [authError, setAuthError] = useState<ApiError | null>(null);
+  const [recoveryCleanupWarning, setRecoveryCleanupWarning] = useState("");
   const router = useRouter();
   const initialStateRef = useRef(initialState);
   const isMountedRef = useRef(true);
   const profileRequestIdRef = useRef(0);
   const sessionExpiryHandledRef = useRef(false);
+  const authRevisionRef = useRef(0);
 
   async function verifyAuth(silent = false) {
     if (!silent) {
@@ -94,8 +97,7 @@ export function AuthProvider({
     if (!initialSnapshot?.profileResolved) {
       void fetchProfile();
     }
-    localStorage.removeItem("blog_token");
-    localStorage.removeItem("blog_user");
+    try { localStorage.removeItem("blog_token"); localStorage.removeItem("blog_user"); } catch { /* Legacy storage cleanup is optional. */ }
     if (initialSnapshot?.authNeedsClientCheck) {
       void verifyAuth();
     } else if (!initialSnapshot) {
@@ -108,11 +110,14 @@ export function AuthProvider({
   }, []);
 
   useEffect(() => {
-    return subscribeSessionExpired(() => {
+    return subscribeSessionExpired(async () => {
       if (sessionExpiryHandledRef.current) {
         return;
       }
       sessionExpiryHandledRef.current = true;
+      const revision = authRevisionRef.current;
+      await preserveExpiredEditor();
+      if (!isMountedRef.current || revision !== authRevisionRef.current) return;
       setUser(null);
       setIsLoading(false);
       setAuthStatus("anonymous");
@@ -131,6 +136,21 @@ export function AuthProvider({
       }
     });
   }, [router]);
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = openRecoveryChannel();
+    if (!channel) return;
+    channel.onmessage = event => {
+      if (event.data?.action !== "logout" || event.data?.userId !== user.id) return;
+      authRevisionRef.current++;
+      sessionExpiryHandledRef.current = true;
+      window.dispatchEvent(new Event("blog:recovery-logout"));
+      releaseEditorNavigation(); clearCSRFToken();
+      setUser(null); setIsLoading(false); setAuthStatus("anonymous"); setAuthError(null);
+    };
+    return () => channel.close();
+  }, [user]);
 
   async function fetchProfile() {
     const requestId = ++profileRequestIdRef.current;
@@ -161,9 +181,9 @@ export function AuthProvider({
     }
   }
 
-  useEffect(() => { clearEditorPreview(); }, [user?.id]);
 
   const login = (newUser: AuthUser) => {
+    authRevisionRef.current++;
     sessionExpiryHandledRef.current = false;
     setUser(newUser);
     setIsLoading(false);
@@ -172,7 +192,19 @@ export function AuthProvider({
     fetchProfile(); // Fetch profile immediately after login
   };
 
-  const completeLogout = () => {
+  const completeLogout = async () => {
+    authRevisionRef.current++;
+    window.dispatchEvent(new Event("blog:recovery-logout"));
+    if (user) {
+      const channel = openRecoveryChannel();
+      if (channel) {
+        channel.postMessage({ action: "logout", userId: user.id }); channel.close();
+      }
+      await recoveryStorage.clearUser(user.id).catch(() => {
+        setRecoveryCleanupWarning("Signed out. Browser recovery copies could not be removed. Clear this site's browser data before sharing this browser.");
+      });
+    }
+    releaseEditorNavigation();
     sessionExpiryHandledRef.current = true;
     clearCSRFToken();
     setUser(null);
@@ -184,7 +216,7 @@ export function AuthProvider({
 
   const logout = async () => {
     await logoutUser();
-    completeLogout();
+    await completeLogout();
   };
 
   return (
@@ -201,6 +233,7 @@ export function AuthProvider({
       authStatus,
       authError,
     }}>
+      {recoveryCleanupWarning && <p role="alert">{recoveryCleanupWarning}</p>}
       {children}
     </AuthContext.Provider>
   );

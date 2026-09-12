@@ -27,6 +27,7 @@ interface PostEditorFormProps {
   dirty: boolean;
   action: PostAction;
   conflict: boolean;
+  recoveryPending?: boolean;
   latestPost: PostDetail | null;
   loadingLatest: boolean;
   latestError: string;
@@ -92,11 +93,11 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </div>
         <div className="editor-header-actions">
           <span className="editor-publication-status" data-published={props.editingPost?.status === "published"}>{props.editingPost?.status === "published" ? "Published" : "Draft"}</span>
-          <button type="button" className="editor-publication-action" disabled={props.saving || props.conflict}
+          <button type="button" className="editor-publication-action" disabled={props.saving || props.conflict || props.recoveryPending}
             onClick={() => void (props.editingPost?.status === "published" ? props.onUnpublish() : props.onPublish())}>
             {props.saving && props.action === "publish" ? "Publishing…" : (props.editingPost?.status === "published" ? "Draft" : "Publish")}
           </button>
-          <button type="submit" disabled={props.saving || props.conflict} className="editor-save-button">
+          <button type="submit" disabled={props.saving || props.conflict || props.recoveryPending} className="editor-save-button">
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z" />
               <path d="M7 3v6h10V3M7 21v-8h10v8" />
@@ -128,7 +129,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
           <button type="button" onClick={props.onUseLatest} disabled={props.loadingLatest}>Discard my edits and use latest</button>
         </>}
       </section>}
-      <fieldset className="editor-form-surface" disabled={props.saving} inert={props.saving}>
+      <fieldset className="editor-form-surface" disabled={props.saving || props.recoveryPending} inert={props.saving || props.recoveryPending}>
         <div style={{ marginBottom: "2rem" }}>
           <label htmlFor="post-title" style={labelStyle}>POST TITLE</label>
           <input

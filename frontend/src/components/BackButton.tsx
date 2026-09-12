@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { editorReturnPath } from "@/lib/editor-preview";
 
 interface BackButtonProps {
