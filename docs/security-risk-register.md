@@ -32,6 +32,13 @@
 - Rationale: uploads are restricted to administrators in the current operating model.
 - Revisit when: uploads are opened to untrusted accounts or served to a wider audience.
 
+### Browser recovery retention
+
+- Current state: unsaved article fields are stored unencrypted in IndexedDB, with user-scoped discovery, seven-day expiry and bounded copy capacity.
+- Impact: access to the browser profile or same-origin script execution can expose unpublished text; browser denial, eviction or abrupt termination can prevent recovery or cleanup.
+- Mitigation: no credentials in copies, explicit restore/discard, version checks, confirmed-logout cleanup with persisted writer invalidation, and visible failure feedback. Use trusted browser profiles and clear site data when cleanup is unavailable.
+- Revisit when: shared-device administration, stronger at-rest protection or durable cross-device drafts become requirements. See [editor.md](editor.md).
+
 ## Validation checklist
 
 - Confirm public API reads hide drafts and public browser `fetch` calls use `credentials: omit`.

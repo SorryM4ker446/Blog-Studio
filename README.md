@@ -61,4 +61,4 @@ go run ./cmd/seed
 - `var(--bg-sidebar)` 和 `var(--nav-active)` 控制着侧边栏明暗基调。
 - 如需更改系统强调色，可修改 CSS 中的 `var(--accent-*)` 系列色卡。
 
-Article editing now uses version-checked saves and explicit publication actions. See [editor behavior and API compatibility](docs/editor.md); apply pending migrations and deploy matching frontend/backend revisions before using the updated editor.
+Article editing uses version-checked saves, explicit publication actions, browser recovery copies and unsaved-change leave protection. See [editor behavior and API compatibility](docs/editor.md); apply pending migrations and deploy matching frontend/backend revisions before using the updated editor.

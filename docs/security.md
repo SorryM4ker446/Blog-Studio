@@ -57,3 +57,7 @@ Article saves, publication and withdrawal require administrator authentication, 
 ## Frontend security maintenance
 
 The dependency lockfile uses Next.js and eslint-config-next 16.3.4 with updated sharp and js-yaml dependencies. These updates address the security advisories reported by the September 9, 2026 audit. Run `npm ci` after updating the checkout, rebuild the frontend, and rerun `npm audit`; an earlier clean audit is not evidence for a later dependency state.
+
+## Local article recovery privacy
+
+Unsaved editor fields are stored unencrypted in origin-local IndexedDB for up to seven days, within a 20-copy/4-MiB application limit. The application offers copies only to the matching authenticated user, but browser-profile access and same-origin script execution can read them. Copies never contain authentication credentials and are not uploaded automatically. Confirmed logout clears that user's records and invalidates old writers; session expiry preserves work for explicit recovery. Browser denial can prevent cleanup as well as saving, in which case the user is warned to clear site data. See [editor.md](editor.md) for retention, multiple-tab ownership, conflict protection and browser lifecycle limits.
