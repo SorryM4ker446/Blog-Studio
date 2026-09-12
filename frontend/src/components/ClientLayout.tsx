@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useSidebar, SidebarContent, SidebarFooter } from "./Providers";
 import TopBar from "./TopBar";
 import { TriangleIcon, StudioLogo } from "./Icons";
+import { createSidebarLayoutMotion } from "@/lib/sidebar-layout-motion";
 
 const contentScrollStoragePrefix = "blogStudio:contentScroll:";
 
@@ -52,6 +53,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const contentScrollRef = useRef<HTMLDivElement>(null);
+  const sidebarMotionRef = useRef<ReturnType<typeof createSidebarLayoutMotion> | null>(null);
   const historyTraversalRef = useRef(false);
   const navigationStartedRef = useRef(false);
   const restorationInProgressRef = useRef(false);
@@ -60,6 +62,19 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const routeKey = categoryId ? `${pathname}?category=${categoryId}` : pathname;
   const locationKey = getLocationKey(pathname, searchParams);
   const scrollStorageKey = getContentScrollStorageKey(locationKey);
+
+  useEffect(() => () => {
+    sidebarMotionRef.current?.dispose();
+    sidebarMotionRef.current = null;
+  }, [locationKey]);
+
+  function handleSidebarToggle() {
+    if (contentScrollRef.current) {
+      sidebarMotionRef.current ??= createSidebarLayoutMotion(contentScrollRef.current);
+      sidebarMotionRef.current.start();
+    }
+    toggleSidebar();
+  }
 
   useEffect(() => {
     const markHistoryTraversal = () => {
@@ -178,7 +193,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           
           <button
             className="sidebar-toggle"
-            onClick={toggleSidebar}
+            onClick={handleSidebarToggle}
+            aria-expanded={!isCollapsed}
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <TriangleIcon size={16} />

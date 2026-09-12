@@ -1,0 +1,184 @@
+import { expect, test } from "@playwright/test";
+import { createArticle } from "./support/articles";
+import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL, E2E_APP_URL } from "./support/test-env";
+
+for (const theme of ["dark", "light"]) {
+  test(`sidebar reversals and component reflow stay continuous in ${theme} mode`, async ({ page, context }, testInfo) => {
+    await page.setViewportSize({ width: 1920, height: 1000 });
+    await context.addCookies([
+      { name: "sidebar_collapsed", value: "true", url: E2E_APP_URL },
+      { name: "blog_theme", value: theme, url: E2E_APP_URL },
+    ]);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const result = await page.evaluate(async () => {
+      const sidebar = document.querySelector<HTMLElement>(".sidebar")!;
+      const toggle = document.querySelector<HTMLButtonElement>(".sidebar-toggle")!;
+      const postsLink = sidebar.querySelector('a[href="/posts"]')!;
+      const logo = sidebar.querySelector(".sidebar-logo-container")!;
+      const card = document.querySelectorAll<HTMLElement>(".card-grid > *")[3];
+      const frames: { x: number; y: number; width: number; translate: string; time: number }[] = [];
+      const sample = () => {
+        const rect = card.getBoundingClientRect();
+        frames.push({ x: rect.x, y: rect.y, width: sidebar.getBoundingClientRect().width,
+          translate: getComputedStyle(card).translate, time: performance.now() });
+      };
+      sample();
+      toggle.click();
+      const end = performance.now() + 1100;
+      while (performance.now() < end) { await new Promise(requestAnimationFrame); sample(); }
+      const expanded = frames.at(-1)!;
+      // Reverse twice before completion; the original link/logo must survive.
+      toggle.click();
+      await new Promise(resolve => setTimeout(resolve, 90));
+      toggle.click();
+      await new Promise(resolve => setTimeout(resolve, 70));
+      toggle.click();
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      return { frames, expanded, collapsed: sidebar.getBoundingClientRect().width,
+        sameNodes: postsLink === sidebar.querySelector('a[href="/posts"]') && logo === sidebar.querySelector(".sidebar-logo-container"),
+        running: document.getAnimations().filter(animation => animation.playState === "running").length,
+        translate: getComputedStyle(card).translate,
+        hiddenInert: [...sidebar.querySelectorAll(".hide-on-collapse")].every(element => element.hasAttribute("inert")),
+      };
+    });
+    expect(result.expanded.width).toBeCloseTo(240, 0);
+    expect(result.collapsed).toBeCloseTo(52, 0);
+    expect(result.sameNodes).toBe(true);
+    expect(result.hiddenInert).toBe(true);
+    expect(result.running).toBe(0);
+    expect(result.translate).toBe("none");
+    expect(result.expanded.y - result.frames[0].y).toBeGreaterThan(80);
+    expect(result.frames.some(frame => frame.translate !== "none" && frame.translate !== "0px")).toBe(true);
+    const steps = result.frames.slice(1).map((frame, index) => {
+      const previous = result.frames[index];
+      return Math.hypot(frame.x - previous.x, frame.y - previous.y) * 16.67 / Math.max(16.67, frame.time - previous.time);
+    });
+    // A direct column jump is over 800px at this breakpoint. This checks
+    // intermediate positions. Normalize delayed samples to a nominal frame so
+    // parallel build/test load does not turn a sampling gap into a layout jump.
+    expect(Math.max(...steps)).toBeLessThan(300);
+    await testInfo.attach("Component motion samples", { body: JSON.stringify(result), contentType: "application/json" });
+    await page.getByRole("button", { name: "Expand sidebar" }).click();
+    await expect.poll(() => page.evaluate(() => document.getAnimations().filter(animation => animation.playState === "running").length)).toBe(0);
+    await testInfo.attach("Expanded sidebar", { body: await page.screenshot({ path: testInfo.outputPath("expanded-sidebar.png") }), contentType: "image/png" });
+    // Route replacement while motion is active must cancel its frame loop and
+    // must not carry temporary positioning into the next page.
+    await page.evaluate(async () => {
+      document.querySelector<HTMLButtonElement>(".sidebar-toggle")!.click();
+      await new Promise(resolve => setTimeout(resolve, 90));
+      document.querySelector<HTMLAnchorElement>('.nav-posts-link')!.click();
+    });
+    await expect(page).toHaveURL(/\/posts$/);
+    await expect(page.getByRole("heading", { name: "All Posts" })).toBeVisible();
+    expect(await page.locator(".content-scroll").evaluate(element => [...element.querySelectorAll<HTMLElement>("*")]
+      .every(child => getComputedStyle(child).translate === "none"))).toBe(true);
+  });
+}
+
+test("reduced motion changes sidebar layout immediately and preserves search input", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/search?q=layout");
+  const field = page.getByRole("textbox").first();
+  await field.fill("Unsubmitted search");
+  const url = page.url();
+  const toggle = page.locator(".sidebar-toggle");
+  await toggle.click();
+  await expect(page.locator(".sidebar")).toHaveCSS("transition-duration", "0s");
+  await expect(field).toHaveValue("Unsubmitted search");
+  await expect(page).toHaveURL(url);
+  await toggle.click();
+  expect(await page.locator(".sidebar").evaluate(element => element.getAnimations({ subtree: true })
+    .filter(animation => animation.playState === "running").length)).toBe(0);
+  expect(await page.locator(".content-scroll").evaluate(element => element.getAnimations({ subtree: true })
+    .filter(animation => animation.playState === "running" && animation.effect instanceof KeyframeEffect
+      && animation.effect.getKeyframes().some(frame => "translate" in frame)).length)).toBe(0);
+});
+
+test("sidebar toggles preserve article dimensions, scroll and unsaved editor content", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1000 });
+  const csrf = await page.request.get(`${E2E_API_URL}/csrf`);
+  const login = await page.request.post(`${E2E_API_URL}/login`, {
+    headers: { "X-CSRF-Token": (await csrf.json()).csrf_token },
+    data: { username: E2E_ADMIN_USER, password: E2E_ADMIN_PASS },
+  });
+  expect(login.ok()).toBeTruthy();
+  const headers = { "X-CSRF-Token": (await login.json()).csrf_token };
+  const created = await createArticle(page.request, { headers, data: {
+    title: `Sidebar reading ${Date.now()}`, content: "A paragraph for reading.\n\n".repeat(120), status: "published",
+  } });
+  const post = await created.json();
+  try {
+    await page.goto(`/posts/${post.id}`);
+    const body = page.locator(".post-body");
+    await body.waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const result = await page.evaluate(async () => {
+      const body = document.querySelector<HTMLElement>(".post-body")!;
+      const scroll = document.querySelector<HTMLElement>(".content-scroll")!;
+      scroll.scrollTop = 300;
+      const before = body.getBoundingClientRect();
+      const samples: { width: number; height: number; scale: string; translate: string; scroll: number }[] = [];
+      for (let round = 0; round < 2; round++) {
+        document.querySelector<HTMLButtonElement>(".sidebar-toggle")!.click();
+        const end = performance.now() + 950;
+        while (performance.now() < end) {
+          await new Promise(requestAnimationFrame);
+          const rect = body.getBoundingClientRect();
+          samples.push({ width: rect.width, height: rect.height, scale: getComputedStyle(body).scale,
+            translate: getComputedStyle(body).translate, scroll: scroll.scrollTop });
+        }
+      }
+      return { before: { width: before.width, height: before.height }, samples,
+        sameNode: body === document.querySelector(".post-body") };
+    });
+    expect(result.sameNode).toBe(true);
+    for (const sample of result.samples) {
+      expect(sample.width).toBeCloseTo(result.before.width, 0);
+      expect(sample.height).toBeCloseTo(result.before.height, 0);
+      expect(sample.scale).toBe("none");
+      expect(sample.translate).toBe("none");
+      expect(sample.scroll).toBe(300);
+    }
+    await page.goto(`/editor?tab=posts&edit=${post.id}`);
+    const field = page.getByLabel("POST TITLE");
+    await field.fill("Unsaved sidebar check");
+    const url = page.url();
+    let writes = 0;
+    page.on("request", request => { if (["POST", "PUT"].includes(request.method()) && request.url().includes("/admin/posts")) writes++; });
+    const dialogs: string[] = [];
+    page.on("dialog", dialog => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+    const editor = await page.evaluate(async () => {
+      const elements = [".editor-detail-frame", ".editor-form-header", ".editor-form-surface", ".custom-editor-wrapper textarea"]
+        .map(selector => document.querySelector<HTMLElement>(selector)!);
+      const scroll = document.querySelector<HTMLElement>(".content-scroll")!;
+      scroll.scrollTop = 140;
+      const before = elements.map(element => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
+      const xs: number[] = [];
+      let stable = true;
+      for (let round = 0; round < 2; round++) {
+        document.querySelector<HTMLButtonElement>(".sidebar-toggle")!.click();
+        const end = performance.now() + 900;
+        while (performance.now() < end) {
+          await new Promise(requestAnimationFrame);
+          elements.forEach((element, index) => {
+            const rect = element.getBoundingClientRect();
+            if (Math.abs(rect.width - before[index].width) > .5 || Math.abs(rect.height - before[index].height) > .5) stable = false;
+          });
+          if (scroll.scrollTop !== 140) stable = false;
+          xs.push(elements[0].getBoundingClientRect().x);
+        }
+      }
+      return { stable, displacement: Math.max(...xs) - Math.min(...xs) };
+    });
+    expect(editor.stable).toBe(true);
+    expect(editor.displacement).toBeGreaterThan(50);
+    await expect(field).toHaveValue("Unsaved sidebar check");
+    await expect(page).toHaveURL(url);
+    expect(dialogs).toEqual([]);
+    expect(writes).toBe(0);
+  } finally {
+    await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers });
+  }
+});

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InitialAppShellState } from "@/lib/app-shell-state";
-import { Providers, SidebarContent, SidebarFooter } from "./Providers";
+import { Providers, SidebarContent, SidebarFooter, useSidebar } from "./Providers";
 
 const { getCategoriesMock, replaceMock, navigationState } = vi.hoisted(() => ({
   getCategoriesMock: vi.fn(),
@@ -45,6 +45,33 @@ const anonymousState: InitialAppShellState = {
 };
 
 describe("sidebar first render state", () => {
+  it("preserves navigation and category nodes across reversals while hiding collapsed controls from interaction", () => {
+    function Toggle() {
+      const { toggleSidebar } = useSidebar();
+      return <button onClick={toggleSidebar}>Toggle sidebar</button>;
+    }
+    render(<Providers initialAppShellState={initialState} initialSidebarPostsExpanded>
+      <Toggle /><SidebarContent />
+    </Providers>);
+    const link = screen.getByRole("link", { name: "All Posts" });
+    const category = screen.getByRole("link", { name: /TypeScript/ });
+    const categories = category.closest(".sidebar-categories")!;
+    const chevron = screen.getByRole("button", { name: "Toggle categories" });
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(document.documentElement).toHaveAttribute("data-sidebar-state", "collapsed");
+    expect(link).toBe(screen.getByRole("link", { name: "All Posts" }));
+    expect(category).toBeInTheDocument();
+    expect(categories).toHaveAttribute("inert");
+    expect(chevron).toHaveAttribute("inert");
+    expect(screen.queryByRole("button", { name: "Toggle categories" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(document.documentElement).not.toHaveAttribute("data-sidebar-state");
+    expect(category).toBe(screen.getByRole("link", { name: /TypeScript/ }));
+    expect(categories).not.toHaveAttribute("inert");
+    expect(categories).toHaveClass("expanded");
+    expect(chevron).toBe(screen.getByRole("button", { name: "Toggle categories" }));
+  });
+
   it("ignores older category refresh responses after a newer snapshot arrives", async () => {
     let resolveOld!: (value: typeof initialState.categories) => void;
     getCategoriesMock.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
