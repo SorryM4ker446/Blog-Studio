@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { useAuth } from "@/context/AuthContext";
 import type { Category, FileRecord, PostDetail, PostSummary } from "@/lib/api";
 import {
@@ -27,9 +28,11 @@ import {
   uploadFile,
   uploadFileWithMetadata,
 } from "@/lib/api";
-import { readResourceQuery, readEditorTab, readEditorTarget, writeEditorTarget, resourceURL, setResourceQuery, writeResourceQuery, type EditorTarget, type ResourceQuery } from "@/lib/resource-query";
+import { readResourceQuery, readEditorTab, readEditorTarget, readEditorDraft, writeEditorTarget, resourceURL, setResourceQuery, writeResourceQuery, type EditorTarget, type ResourceQuery } from "@/lib/resource-query";
 import { isPostDirty, postSnapshot, type PostAction } from "@/lib/post-editor";
-import { clearEditorPreview, readEditorPreview, rememberEditorPreview } from "@/lib/editor-preview";
+import { requestEditorNavigation } from "@/lib/editor-navigation";
+import { useEditorRecovery } from "@/lib/use-editor-recovery";
+import RecoveryNotice from "@/components/editor/RecoveryNotice";
 import { useResourcePage } from "@/lib/use-resource-page";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
@@ -72,8 +75,14 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const urlTab: EditorTab = readEditorTab(searchParams);
   const searchQuery = readResourceQuery(searchParams).query;
   const editTarget = readEditorTarget(searchParams);
-  const [previewReturn] = useState(() => readEditorPreview(user?.id, editTarget));
-  useEffect(() => { clearEditorPreview(); }, []);
+  const draftId = readEditorDraft(searchParams);
+  useEffect(() => {
+    if (editTarget !== "new" || /^[a-zA-Z0-9-]{1,80}$/.test(draftId)) return;
+    const frame = requestAnimationFrame(() => {
+      if (window.location.pathname === "/editor" && readEditorTarget(new URLSearchParams(window.location.search)) === "new") writeEditorTarget("new", true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editTarget, draftId]);
 
   const isMountedRef = useRef(true);
   const editorSessionRef = useRef(0);
@@ -102,15 +111,16 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const postsLoading = postResource.loading;
   const filesLoading = fileResource.loading;
   const [formTarget, setFormTarget] = useState<EditorTarget>(editTarget);
+  const [formDraft, setFormDraft] = useState(draftId);
   const [categories, setCategories] = useState<Category[]>(initialState.categories);
   const [categoriesLoading, setCategoriesLoading] = useState(Boolean(initialState.categoriesError));
   const [categoriesError, setCategoriesError] = useState(initialState.categoriesError);
-  const [editingPost, setEditingPost] = useState<PostDetail | null>(previewReturn?.post ?? null);
-  const [postToLoad, setPostToLoad] = useState<number | null>(!previewReturn && typeof editTarget === "number" ? editTarget : null);
-  const [editTitle, setEditTitle] = useState(previewReturn?.fields.title ?? "");
-  const [editSummary, setEditSummary] = useState(previewReturn?.fields.summary ?? "");
-  const [editContent, setEditContent] = useState(previewReturn?.fields.content ?? "");
-  const [editCategoryId, setEditCategoryId] = useState(previewReturn?.fields.category_id ?? 0);
+  const [editingPost, setEditingPost] = useState<PostDetail | null>(null);
+  const [postToLoad, setPostToLoad] = useState<number | null>(typeof editTarget === "number" ? editTarget : null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editSummary, setEditSummary] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editCategoryId, setEditCategoryId] = useState(0);
   const [conflict, setConflict] = useState(false);
   const [latestPost, setLatestPost] = useState<PostDetail | null>(null);
   const [loadingLatest, setLoadingLatest] = useState(false);
@@ -121,6 +131,21 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const dirty = isPostDirty(currentSnapshot, postSnapshot(editingPost));
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+
+  const recovery = useEditorRecovery({
+    userId: authorized ? user?.id : undefined,
+    target: typeof editTarget === "number" ? `post:${editTarget}` : editTarget === "new" && draftId ? `new:${draftId}` : null,
+    ready: editTarget !== null && postToLoad === null, dirty, busy: saving,
+    version: editingPost?.version ?? null, baseline: postSnapshot(editingPost), fields: currentSnapshot,
+    onRestore: copy => {
+      setEditTitle(copy.fields.title); setEditSummary(copy.fields.summary);
+      setEditContent(copy.fields.content); setEditCategoryId(copy.fields.category_id);
+      if (editingPost && copy.version !== editingPost.version) {
+        setLatestPost(editingPost); setConflict(true);
+        setEditingPost({ ...editingPost, ...copy.baseline, version: copy.version! });
+      }
+    },
+  });
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
@@ -137,6 +162,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
 
   function resetForm(target: EditorTarget) {
     setFormTarget(target);
+    setFormDraft(draftId);
     setPostToLoad(typeof target === "number" ? target : null);
     setEditingPost(null);
     setEditTitle("");
@@ -148,12 +174,13 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
     setSaving(false);
   }
 
-  if (formTarget !== editTarget) resetForm(editTarget);
+  if (formTarget !== editTarget || (editTarget === "new" && formDraft && formDraft !== draftId)) resetForm(editTarget);
+  else if (editTarget === "new" && formDraft !== draftId) setFormDraft(draftId);
 
   useEffect(() => {
     editorSessionRef.current++;
     saveOperationRef.current = null;
-  }, [editTarget]);
+  }, [editTarget, draftId]);
 
   function notifyUpdate() {
     window.dispatchEvent(new CustomEvent("blog:refresh-sidebar"));
@@ -262,8 +289,8 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
 
   function closeEditor() {
     if (saveOperationRef.current) return;
-    writeEditorTarget(null, true);
-    resetForm(null);
+    const proceed = () => { writeEditorTarget(null, true); resetForm(null); };
+    if (requestEditorNavigation("/editor", proceed)) proceed();
   }
 
   async function loadLatestPost() {
@@ -285,7 +312,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   }
 
   async function handleSave(action: PostAction = "save") {
-    if (postToLoad || saveOperationRef.current || conflict) return;
+    if (postToLoad || saveOperationRef.current || conflict || recovery.checking || recovery.copies.length) return;
     if (action !== "unpublish" && (!editTitle.trim() || !editContent.trim())) {
       setSaveMessage("❌ Title and content are required.");
       if (!editTitle.trim()) document.getElementById("post-title")?.focus();
@@ -325,7 +352,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
       const previousStatus = editingPost?.status;
       const previousCategoryId = editingPost?.category_id ?? null;
       if (action === "unpublish") setEditingPost(result);
-      else applyPostDetail(result);
+      else { await recovery.clear(); if (!isCurrentSave()) return; applyPostDetail(result); }
       await refreshPosts(editingPost ? postPage : 1);
       if (!isCurrentSave()) return;
       const publicCategoryMembershipChanged = (previousStatus === "published") !== (result.status === "published")
@@ -342,10 +369,10 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
       if (publicCategoryMembershipChanged) notifyUpdate();
     } catch (error) {
       if (!isCurrentSave()) return;
+      if (savedDraft) { await recovery.clear(); if (!isCurrentSave()) return; applyPostDetail(savedDraft); retainArticle(savedDraft); }
       setSaving(false);
-      if (savedDraft) retainArticle(savedDraft);
       if (isApiError(error) && (error.code === "post_version_conflict" || error.code === "post_state_conflict")) setConflict(true);
-      if (isApiError(error) && error.status === 401) setSessionExpired(true);
+      if (isApiError(error) && error.status === 401) { setSessionExpired(true); void recovery.flush(); }
       setSaveMessage(`❌ ${savedDraft ? "Draft created; publication failed. " : ""}${getApiErrorMessage(error, "Failed to save post.")}`);
     } finally {
       if (isCurrentSave()) setSaving(false);
@@ -516,6 +543,9 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
           onBack={closeEditor}
         />
       ) : (
+        <div className="editor-detail-frame">
+        <RecoveryNotice copies={recovery.copies} checking={recovery.checking} error={recovery.error}
+          onRestore={recovery.restore} onDiscard={recovery.discard} />
         <PostEditorForm
           editingPost={editingPost}
           title={editTitle}
@@ -525,17 +555,18 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
           dirty={dirty}
           action={saveAction}
           conflict={conflict}
+          recoveryPending={recovery.checking || recovery.copies.length > 0 || (editTarget === "new" && !draftId)}
           latestPost={latestPost}
           loadingLatest={loadingLatest}
           latestError={latestError}
           sessionExpired={sessionExpired}
           onLoadLatest={() => void loadLatestPost()}
-          onUseLatest={() => { if (latestPost) { applyPostDetail(latestPost); setSaveMessage(""); } }}
+          onUseLatest={() => { if (latestPost) { void recovery.clear(); applyPostDetail(latestPost); setSaveMessage(""); } }}
           onPublish={() => handleSave("publish")}
           onUnpublish={() => handleSave("unpublish")}
           onViewArticle={() => {
             if (!editingPost || !user || saveOperationRef.current) return;
-            rememberEditorPreview(user.id, `${window.location.pathname}${window.location.search}`, editingPost, currentSnapshot);
+            void recovery.flush();
           }}
           categories={categories}
           categoriesLoading={categoriesLoading}
@@ -554,6 +585,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
           onRetryCategories={() => void loadCategories()}
           onImageUpload={handleImageUpload}
         />
+        </div>
       )}
 
       {uploadDialogOpen && <FileUploadDialog open onClose={() => setUploadDialogOpen(false)} onUpload={handleManagedFileUpload} />}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { useAuth } from "@/context/AuthContext";
 import { getApiErrorMessage, isApiError, loginUser } from "@/lib/api";
 import { KeyIcon, AlertIcon } from "@/components/Icons";

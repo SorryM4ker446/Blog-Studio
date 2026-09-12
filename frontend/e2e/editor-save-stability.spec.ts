@@ -129,6 +129,7 @@ for (const theme of ["dark", "light"]) {
       await page.screenshot({ path: controlsScreenshot });
       await testInfo.attach(`Editor controls (${theme})`, { path: controlsScreenshot, contentType: "image/png" });
       await categoryControl.press("Escape");
+      await save.scrollIntoViewIfNeeded();
       await expect(sidebar.getByRole("link", { name: `${name} 1`, exact: true })).toBeVisible();
       await page.evaluate(() => document.fonts.ready.then(() => undefined));
       await monitorSidebar(sidebar);

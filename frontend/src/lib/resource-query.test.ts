@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readPage, readResourceQuery, readEditorTarget, writeEditorTarget, resourceQueryKey, resourceURL, searchAPIParams, setResourceQuery, toSearchParams, writeResourceQuery, type ResourceQuery } from "./resource-query";
+import { readPage, readResourceQuery, readEditorTarget, readEditorDraft, writeEditorTarget, resourceQueryKey, resourceURL, searchAPIParams, setResourceQuery, toSearchParams, writeResourceQuery, type ResourceQuery } from "./resource-query";
 
 const query: ResourceQuery = { query: "中文 & traces", categoryId: "2", scope: "posts", page: 3 };
 
@@ -18,11 +18,25 @@ describe("resource URL contracts", () => {
     const replace = vi.spyOn(window.history, "replaceState");
     writeEditorTarget("new");
     expect(push).toHaveBeenCalledTimes(1);
+    const draft = new URLSearchParams(window.location.search).get("draft");
+    expect(draft).toMatch(/^[a-zA-Z0-9-]+$/);
+    writeEditorTarget("new", true);
+    expect(new URLSearchParams(window.location.search).get("draft")).toBe(draft);
     writeEditorTarget(7, true);
     expect(replace).toHaveBeenCalledTimes(1);
     expect(readEditorTarget(new URLSearchParams(window.location.search))).toBe(7);
+    expect(new URLSearchParams(window.location.search).has("draft")).toBe(false);
     writeEditorTarget(null, true);
     expect(window.location.search).toBe("?tab=posts&q=needle&category=2&post_page=3&file_page=4");
+  });
+  it("gives a later new draft a separate identity and normalizes an invalid identifier", () => {
+    expect(readEditorDraft(new URLSearchParams("draft=a&draft=b"))).toBe("");
+    history.replaceState({}, "", "/editor?edit=new&draft=invalid%20value");
+    writeEditorTarget("new", true);
+    const first = new URLSearchParams(location.search).get("draft");
+    expect(first).not.toContain(" ");
+    writeEditorTarget(null); writeEditorTarget("new");
+    expect(new URLSearchParams(location.search).get("draft")).not.toBe(first);
   });
   beforeEach(() => { window.history.replaceState(null, "", "/search"); });
   it.each(["", "0", "-1", "+2", "1.5", "2abc", "1000001", "9007199254740993", "１", " 2 "])("normalizes invalid page %j", (raw) => {

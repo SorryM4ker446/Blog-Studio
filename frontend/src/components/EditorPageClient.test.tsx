@@ -88,11 +88,11 @@ vi.mock("@/components/editor/PostEditorForm", () => ({
       <input aria-label="Article title" value={props.title} onChange={event => props.onTitleChange(event.target.value)} />
       <textarea aria-label="Loaded article body" value={props.content} onChange={event => props.onContentChange(event.target.value)} />
       <span role="status">{props.saveMessage}</span>
-      <button disabled={props.saving || props.conflict} onClick={() => void props.onSave()}>Save article</button>
+      <button disabled={props.saving || props.conflict || props.recoveryPending} onClick={() => void props.onSave()}>Save article</button>
       <button onClick={props.onBack}>Back to content list</button>
       <span>{props.dirty ? "Unsaved changes" : "All changes saved"}</span>
-      <button disabled={props.saving || props.conflict} onClick={() => void props.onPublish()}>Publish article</button>
-      <button disabled={props.saving || props.conflict} onClick={() => void props.onUnpublish()}>Unpublish article</button>
+      <button disabled={props.saving || props.conflict || props.recoveryPending} onClick={() => void props.onPublish()}>Publish article</button>
+      <button disabled={props.saving || props.conflict || props.recoveryPending} onClick={() => void props.onUnpublish()}>Unpublish article</button>
       {props.conflict && <button onClick={props.onLoadLatest}>Load latest</button>}
       {props.latestPost && <button onClick={props.onUseLatest}>Discard and use latest</button>}
       {props.sessionExpired && <span>Sign in again</span>}
@@ -154,6 +154,7 @@ describe("Editor article detail loading", () => {
     fireEvent.click(screen.getByRole("button", { name: "New article" }));
     fireEvent.change(screen.getByLabelText("Article title"), { target: { value: draft.title } });
     fireEvent.change(screen.getByLabelText("Loaded article body"), { target: { value: draft.content } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish article" })).toBeEnabled());
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Publish article" }));
     });
@@ -180,6 +181,7 @@ describe("Editor article detail loading", () => {
     expect(unpublishPostMock).toHaveBeenCalledWith(fullPost.id, 1);
     expect(screen.getByLabelText("Loaded article body")).toHaveValue("Local edit");
     expect(screen.getByText("Unsaved changes")).toBeVisible();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await waitFor(() => expect(updatePostMock).toHaveBeenCalledWith(fullPost.id, expect.objectContaining({ version: 2, content: "Local edit" })));
     await screen.findByText("All changes saved");
@@ -192,6 +194,7 @@ describe("Editor article detail loading", () => {
     fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
     await screen.findByLabelText("Loaded article body");
     fireEvent.change(screen.getByLabelText("Loaded article body"), { target: { value: "Local edit" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     fireEvent.click(await screen.findByRole("button", { name: "Load latest" }));
     const adopt = await screen.findByRole("button", { name: "Discard and use latest" });
@@ -209,9 +212,11 @@ describe("Editor article detail loading", () => {
     render(<EditorPageClient initialState={readyState} />);
     fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
     await screen.findByLabelText("Loaded article body");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await screen.findByText("Sign in again");
     expect(screen.getByLabelText("Loaded article body")).toHaveValue(fullPost.content);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await screen.findByText("✅ Saved successfully!");
     expect(screen.getByLabelText("Loaded article body")).toHaveValue(fullPost.content);
@@ -234,6 +239,7 @@ describe("Editor article detail loading", () => {
     await act(async () => pending.resolve(fullPost));
     expect(screen.getByTestId("editing-title")).toHaveTextContent("Fresh server title");
     expect(screen.getByRole("textbox", { name: "Loaded article body" })).toHaveValue(fullPost.content);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await waitFor(() => expect(updatePostMock).toHaveBeenCalledWith(7, expect.objectContaining({
       title: fullPost.title, content: fullPost.content, version: 1,
@@ -265,6 +271,7 @@ describe("Editor article detail loading", () => {
     render(<EditorPageClient initialState={readyState} />);
     fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
     await screen.findByRole("button", { name: "Save article" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to content list" }));
     expect(screen.queryByTestId("editor-list")).not.toBeInTheDocument();
@@ -275,6 +282,7 @@ describe("Editor article detail loading", () => {
     getAdminPostMock.mockResolvedValue({ ...draft, id: 8, title: "Another article" });
     fireEvent.click(screen.getByRole("button", { name: "Another article" }));
     await screen.findByRole("button", { name: "Save article" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await waitFor(() => expect(updatePostMock).toHaveBeenLastCalledWith(8, expect.objectContaining({ title: "Another article" })));
   });
@@ -287,8 +295,10 @@ describe("Editor article detail loading", () => {
     fireEvent.click(screen.getByRole("button", { name: "New article" }));
     fireEvent.change(screen.getByLabelText("Article title"), { target: { value: fullPost.title } });
     fireEvent.change(screen.getByLabelText("Loaded article body"), { target: { value: fullPost.content } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await screen.findByText("✅ Saved successfully!");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await waitFor(() => expect(updatePostMock).toHaveBeenCalledWith(draft.id, expect.objectContaining({ content: draft.content })));
     expect(createPostMock).toHaveBeenCalledTimes(1);
@@ -302,6 +312,7 @@ describe("Editor article detail loading", () => {
     const view = render(<EditorPageClient initialState={readyState} />);
     fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
     await screen.findByRole("button", { name: "Save article" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     view.unmount();
     getAdminPostsMock.mockClear();
@@ -317,9 +328,11 @@ describe("Editor article detail loading", () => {
     render(<EditorPageClient initialState={readyState} />);
     fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
     await screen.findByRole("button", { name: "Save article" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await screen.findByText("❌ Failed to save post.");
     expect(screen.getByLabelText("Loaded article body")).toHaveValue(fullPost.content);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await screen.findByText("✅ Saved successfully!");
     expect(updatePostMock).toHaveBeenCalledTimes(2);
@@ -375,6 +388,7 @@ describe("Editor article detail loading", () => {
     window.history.replaceState(null, "", "/editor?edit=7");
     const view = render(<EditorPageClient initialState={readyState} />);
     await screen.findByRole("button", { name: "Save article" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     window.history.replaceState(null, "", "/editor?edit=8");
     view.rerender(<EditorPageClient initialState={readyState} />);
@@ -385,6 +399,7 @@ describe("Editor article detail loading", () => {
     expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled();
     expect(new URLSearchParams(window.location.search).get("edit")).toBe("8");
     updatePostMock.mockResolvedValue({ ...fullPost, id: 8 });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
     await waitFor(() => expect(updatePostMock).toHaveBeenLastCalledWith(8, expect.objectContaining({ title: "Article B", content: "Body B" })));
   });

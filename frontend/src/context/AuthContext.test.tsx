@@ -159,6 +159,24 @@ describe("AuthProvider", () => {
     expect(mocks.replace).not.toHaveBeenCalled();
   });
 
+  it("clears identity only for a matching cross-tab logout notification", async () => {
+    const channels: { onmessage: ((event: { data: unknown }) => void) | null; close: () => void }[] = [];
+    vi.stubGlobal("BroadcastChannel", class {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      close = vi.fn();
+      constructor() { channels.push(this); }
+    });
+    mocks.getCurrentUser.mockResolvedValue({ id: 1, username: "admin", role: "admin" });
+    render(<AuthProvider><AuthProbe /></AuthProvider>);
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+    await waitFor(() => expect(channels[0]?.onmessage).toBeTypeOf("function"));
+    await act(async () => channels[0].onmessage?.({ data: { action: "logout", userId: 2 } }));
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+    await act(async () => channels[0].onmessage?.({ data: { action: "logout", userId: 1 } }));
+    expect(screen.getByTestId("user")).toHaveTextContent("none");
+    expect(screen.getByTestId("status")).toHaveTextContent("anonymous");
+  });
+
   it("clears an expired session and redirects an admin path only once", async () => {
     mocks.getCurrentUser.mockResolvedValue({ id: 1, username: "admin", role: "admin" });
     window.history.replaceState({}, "", "/editor?tab=files");

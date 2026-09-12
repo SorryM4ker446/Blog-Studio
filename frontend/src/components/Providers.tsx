@@ -1,12 +1,13 @@
 "use client";
 
-import { ReactNode, useEffect, useState, useRef, useCallback, createContext, useContext } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useState, useRef, useCallback, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, type Theme } from "@/context/ThemeContext";
 import { getCategories, Category } from "@/lib/api";
 import type { InitialAppShellState, SidebarCategory } from "@/lib/app-shell-state";
+import EditorLeaveDialog from "./editor/EditorLeaveDialog";
 import {
   GridIcon,
   ListIcon,
@@ -54,15 +55,17 @@ export function Providers({
 }) {
   const [isCollapsed, setIsCollapsed] = useState(initialSidebarCollapsed);
 
-  // Sync state to html class for CSS-only initial state (Fix FUS bug)
-  useEffect(() => {
+  // Keep the server-rendered selector and the hydrated sidebar in the same paint.
+  useLayoutEffect(() => {
     if (isCollapsed) {
       document.documentElement.setAttribute("data-sidebar-state", "collapsed");
     } else {
       document.documentElement.removeAttribute("data-sidebar-state");
     }
+  }, [isCollapsed]);
 
-    localStorage.setItem("sidebar_collapsed", String(isCollapsed));
+  useEffect(() => {
+    try { localStorage.setItem("sidebar_collapsed", String(isCollapsed)); } catch { /* Browser storage is optional. */ }
     document.cookie = `sidebar_collapsed=${isCollapsed ? "true" : "false"}; path=/; max-age=31536000; samesite=lax`;
   }, [isCollapsed]);
 
@@ -82,6 +85,7 @@ export function Providers({
           initialShowAllCategories: initialSidebarShowAllCategories,
         }}>
           {children}
+          <EditorLeaveDialog />
         </SidebarContext.Provider>
       </AuthProvider>
     </ThemeProvider>
@@ -152,7 +156,7 @@ export function SidebarContent() {
   return (
     <nav className="nav-menu">
       {/* Posts Playground */}
-      <Link href="/" className="nav-item hide-on-collapse">
+      <Link href="/" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
         <GridIcon className="nav-icon" style={{ color: "var(--accent-yellow)" }} />
         <span className="nav-item-label">Posts Playground</span>
       </Link>
@@ -160,51 +164,41 @@ export function SidebarContent() {
       <div className="nav-group-title">Features</div>
 
       {/* ── All Posts row ──────────────────────────────────────────────────── */}
-      {isCollapsed ? (
-        // Collapsed: whole row is a navigation link, sub-menu is hidden
-        <Link
-          href="/posts"
-          className={`nav-item${isAllPostsActive ? " active" : ""}`}
-          data-tooltip="All Posts"
-          aria-current={isAllPostsActive ? "page" : undefined}
-        >
+      <div className={`nav-posts-row${isAllPostsActive ? " active" : ""}`}>
+        <Link href="/posts" className="nav-posts-link" aria-label="All Posts" data-tooltip={isCollapsed ? "All Posts" : undefined} aria-current={isAllPostsActive ? "page" : undefined}>
           <ListIcon className="nav-icon active-icon-blue" />
+          <span className="nav-item-label">All Posts</span>
         </Link>
-      ) : (
-        // Expanded: link + separate chevron button
-        <div className={`nav-posts-row${isAllPostsActive ? " active" : ""}`}>
-          <Link href="/posts" className="nav-posts-link" aria-current={isAllPostsActive ? "page" : undefined}>
-            <ListIcon className="nav-icon active-icon-blue" />
-            <span className="nav-item-label">All Posts</span>
-          </Link>
-          <button
-            type="button"
-            className="nav-posts-chevron"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsPostsExpanded((current) => {
-                const next = !current;
-                document.cookie = `sidebar_posts_expanded=${next}; path=/; max-age=31536000; samesite=lax`;
-                return next;
-              });
-            }}
-            aria-label="Toggle categories"
-            aria-expanded={isPostsExpanded}
-          >
-            <ChevronDownIcon
-              className="nav-posts-chevron-icon"
-              size={14}
-            />
-          </button>
-        </div>
-      )}
+        <button
+          type="button"
+          className="nav-posts-chevron"
+          inert={isCollapsed}
+          aria-hidden={isCollapsed}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsPostsExpanded((current) => {
+              const next = !current;
+              document.cookie = `sidebar_posts_expanded=${next}; path=/; max-age=31536000; samesite=lax`;
+              return next;
+            });
+          }}
+          aria-label="Toggle categories"
+          aria-expanded={isPostsExpanded}
+        >
+          <ChevronDownIcon
+            className="nav-posts-chevron-icon"
+            size={14}
+          />
+        </button>
+      </div>
 
       {/* Categories sub-menu */}
-      {!isCollapsed && categories.length > 0 && (
+      {categories.length > 0 && (
         <div
-          className={`sidebar-categories${isPostsExpanded ? " expanded" : ""}`}
-          aria-hidden={!isPostsExpanded}
+          className={`sidebar-categories${!isCollapsed && isPostsExpanded ? " expanded" : ""}`}
+          aria-hidden={isCollapsed || !isPostsExpanded}
+          inert={isCollapsed || !isPostsExpanded}
         >
           <div className="sidebar-categories-inner">
             {categories.slice(0, showAllCategories ? categories.length : 3).map((cat) => {
@@ -240,14 +234,14 @@ export function SidebarContent() {
       )}
 
       {/* Cloud Drive */}
-      <Link href="/drive" className={`nav-item hide-on-collapse nav-cloud-drive${!isCollapsed && isPostsExpanded ? " categories-expanded" : ""}`}>
+      <Link href="/drive" inert={isCollapsed} aria-hidden={isCollapsed} className={`nav-item hide-on-collapse nav-cloud-drive${!isCollapsed && isPostsExpanded ? " categories-expanded" : ""}`}>
         <CloudIcon className="nav-icon" style={{ color: "var(--accent-green)" }} />
         <span className="nav-item-label">Cloud Drive</span>
       </Link>
 
       {/* Content Editor */}
       {user?.role === "admin" && (
-        <Link href="/editor" className="nav-item hide-on-collapse">
+        <Link href="/editor" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
           <EditIcon className="nav-icon" style={{ color: "var(--accent-red)" }} />
           <span className="nav-item-label">Content Editor</span>
         </Link>
@@ -264,7 +258,7 @@ export function SidebarFooter() {
   return (
     <div className="sidebar-footer">
       {/* Advanced Search */}
-      <Link href="/search" className="nav-item hide-on-collapse">
+      <Link href="/search" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
         <SearchIcon className="nav-icon" />
         <span className="nav-item-label">Advanced Search</span>
       </Link>

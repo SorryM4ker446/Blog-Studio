@@ -1,3 +1,4 @@
+import { answerLeaveDialog } from "./support/editor-navigation";
 import { expect, test } from "@playwright/test";
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL } from "./support/test-env";
 
@@ -14,6 +15,7 @@ test("article publication protects local edits and rejects stale browser tabs", 
   let creates = 0;
   page.on("request", request => { if (request.method() === "POST" && new URL(request.url()).pathname === "/api/admin/posts") creates++; });
   const other = await context.newPage();
+  other.on("dialog", dialog => dialog.accept());
   try {
     await page.goto("/editor?tab=posts&edit=new");
     await page.getByLabel("POST TITLE").fill(title);
@@ -51,16 +53,20 @@ test("article publication protects local edits and rejects stale browser tabs", 
     const editURL = other.url();
     const tabs = context.pages().length;
     await other.getByRole("link", { name: "View article" }).click();
+    await answerLeaveDialog(other, true);
     await expect(other.getByRole("heading", { name: title, exact: true })).toBeVisible();
     expect(context.pages().length).toBe(tabs);
     expect(new URL(other.url()).pathname).toBe(`/posts/${id}`);
     await other.getByRole("button", { name: "Back", exact: true }).click();
     await expect(other).toHaveURL(editURL);
+    await other.getByRole("button", { name: "Restore copy 1", exact: true }).click();
     await expect(otherBody).toHaveValue("Unsaved withdrawal text");
     await expect(other.getByText("Unsaved changes", { exact: true })).toBeVisible();
     await other.getByRole("link", { name: "View article" }).click();
+    await answerLeaveDialog(other, true);
     await expect(other.getByRole("heading", { name: title, exact: true })).toBeVisible();
     await other.goBack();
+    await other.getByRole("button", { name: "Restore copy 1", exact: true }).click();
     await expect(otherBody).toHaveValue("Unsaved withdrawal text");
     await other.getByRole("button", { name: "Draft", exact: true }).click();
     await expect(other.locator("#post-save-message")).toContainText("Publication withdrawn");
