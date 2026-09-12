@@ -65,12 +65,39 @@ test("search pages restore filters and editor deletion corrects the last page", 
     await expect(page.getByRole("textbox", { name: "Search files..." })).toHaveValue(q);
     await expect(page.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
 
-    await page.goto(`/search?q=${q}`);
-    const results = page.getByRole("region", { name: "Search results" });
+    const searchResponse = await page.goto(`/search?q=${q}`);
+    const html = await searchResponse!.text();
+    expect((html.match(/data-file-id="/g) || []).length).toBe(10);
+    const results = page.getByRole("region", { name: "Search results", exact: true });
+    const postResults = page.getByRole("region", { name: "Post results", exact: true });
+    const fileResults = page.getByRole("region", { name: "File results", exact: true });
     await expect(results.getByText("Posts (12 results)", { exact: true })).toBeVisible();
-    await expect(results.locator('a[href^="/posts/"]').or(results.locator("[data-file-id]"))).toHaveCount(10);
-    await page.getByRole("button", { name: "Next page" }).click();
-    await expect(page.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
+    await expect(postResults.locator('a[href^="/posts/"]')).toHaveCount(10);
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(10);
+    const filePageOne = await fileResults.locator("[data-file-id]").evaluateAll(elements => elements.map(element => element.getAttribute("data-file-id")));
+    await postResults.getByRole("button", { name: "Next page" }).click();
+    await expect(postResults.locator('a[href^="/posts/"]')).toHaveCount(2);
+    expect(await fileResults.locator("[data-file-id]").evaluateAll(elements => elements.map(element => element.getAttribute("data-file-id")))).toEqual(filePageOne);
+    await fileResults.getByRole("button", { name: "Next page" }).click();
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(1);
+    await expect(postResults.locator('a[href^="/posts/"]')).toHaveCount(2);
+    expect(new URL(page.url()).searchParams.get("post_page")).toBe("2");
+    expect(new URL(page.url()).searchParams.get("file_page")).toBe("2");
+    await page.goBack();
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(10);
+    await expect(postResults.locator('a[href^="/posts/"]')).toHaveCount(2);
+    await page.goForward();
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(1);
+    await page.reload();
+    await expect(postResults.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
+    await expect(fileResults.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
+    const returnURL = page.url();
+    await postResults.locator('a[href^="/posts/"]').first().click();
+    await expect(page).toHaveURL(/\/posts\/\d+$/);
+    await page.goBack();
+    await expect(page).toHaveURL(returnURL);
+    await expect(postResults.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
+    await expect(fileResults.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
     let releaseFilterRequest!: () => void;
     const filterRequestBlocked = new Promise<void>((resolve) => { releaseFilterRequest = resolve; });
     await page.route(/\/api\/search\?/, async (route) => {
@@ -84,9 +111,14 @@ test("search pages restore filters and editor deletion corrects the last page", 
     await page.getByRole("combobox", { name: "Search scope" }).click();
     await page.getByRole("option", { name: "Posts", exact: true }).click();
     await expect.poll(() => new URL(page.url()).searchParams.has("page")).toBe(false);
-    await expect(results.locator("[data-file-id]")).toHaveCount(1);
+    await expect(fileResults).toHaveCount(1);
+    await expect(results).toHaveAttribute("inert", "");
+    expect(new URL(page.url()).searchParams.has("post_page")).toBe(false);
+    expect(new URL(page.url()).searchParams.has("file_page")).toBe(false);
     await expect(results).toHaveAttribute("aria-busy", "true");
     releaseFilterRequest();
+    await expect(fileResults).toHaveCount(0);
+    await expect(results).not.toHaveAttribute("inert");
     await expect(results.locator('a[href^="/posts/"]')).toHaveCount(10);
     await page.getByRole("combobox", { name: "Search category" }).click();
     await page.getByRole("option", { name: q, exact: true }).click();
@@ -97,6 +129,28 @@ test("search pages restore filters and editor deletion corrects the last page", 
     await expect(page.getByRole("combobox", { name: "Search scope" })).toHaveText(/^Posts/);
     await expect(page.getByRole("combobox", { name: "Search category" })).toContainText(q);
     await expect(page.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
+
+    await page.getByRole("combobox", { name: "Search scope" }).click();
+    await page.getByRole("option", { name: "Files", exact: true }).click();
+    await expect(postResults).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Search category" })).toHaveCount(0);
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(10);
+    await fileResults.getByRole("button", { name: "Next page" }).click();
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(1);
+    await page.reload();
+    await expect(postResults).toHaveCount(0);
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(1);
+
+    // Legacy links remain usable, and an exhausted kind corrects only its own page.
+    await page.goto(`/search?q=${q}&page=2`);
+    await expect(postResults.locator('a[href^="/posts/"]')).toHaveCount(2);
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(1);
+    await expect.poll(() => new URL(page.url()).searchParams.has("page")).toBe(false);
+    await page.goto(`/search?q=${q}&post_page=999&file_page=1`);
+    await expect(postResults.locator('a[href^="/posts/"]')).toHaveCount(2);
+    await expect(fileResults.locator("[data-file-id]")).toHaveCount(10);
+    await expect.poll(() => new URL(page.url()).searchParams.get("post_page")).toBe("2");
+    expect(new URL(page.url()).searchParams.has("file_page")).toBe(false);
 
     await page.goto(`/editor?tab=posts&q=${q}&category=${categoryId}&post_page=2&file_page=2`);
     await expect(page.locator(".editor-post-card")).toHaveCount(1);

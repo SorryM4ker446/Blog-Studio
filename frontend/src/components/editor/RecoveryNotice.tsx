@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDateTime } from "@/lib/display-date";
+
 import type { RecoveryCopy } from "@/lib/editor-recovery-store";
 import { useState } from "react";
 import styles from "./EditorFeedback.module.css";
@@ -32,7 +34,7 @@ export default function RecoveryNotice({ copies, checking, error, onRestore, onD
         {copies.map((copy, index) => <li className={styles.copy} key={copy.id}>
           <div className={styles.copyDetails}>
             <p className={styles.copyTitle}>{copy.fields.title || "Untitled draft"}</p>
-            <time className={styles.timestamp} dateTime={new Date(copy.updatedAt).toISOString()}>{new Date(copy.updatedAt).toLocaleString()}</time>
+            <time className={styles.timestamp} dateTime={new Date(copy.updatedAt).toISOString()}>{formatDateTime(copy.updatedAt)}</time>
           </div>
           <button type="button" className={`${styles.button} ${styles.secondary}`} disabled={discarding}
             aria-label={`Restore copy ${index + 1}`} onClick={() => onRestore(copy)}>Restore <span aria-hidden="true">↗</span></button>

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InitialAppShellState } from "@/lib/app-shell-state";
 import { Providers, SidebarContent, SidebarFooter, useSidebar } from "./Providers";
 
@@ -45,6 +45,52 @@ const anonymousState: InitialAppShellState = {
 };
 
 describe("sidebar first render state", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+    document.documentElement.removeAttribute("data-sidebar-state");
+  });
+
+  it("does not rewrite a cookie on hydration and ignores contradictory legacy storage", () => {
+    localStorage.setItem("sidebar_collapsed", "false");
+    document.cookie = "sidebar_collapsed=true; path=/";
+    const setter = vi.spyOn(document, "cookie", "set");
+    function Toggle() {
+      const { isCollapsed, toggleSidebar } = useSidebar();
+      return <button onClick={toggleSidebar}>{isCollapsed ? "Expand" : "Collapse"}</button>;
+    }
+    render(<Providers initialAppShellState={initialState} initialSidebarCollapsed><Toggle /></Providers>);
+    expect(screen.getByRole("button", { name: "Expand" })).toBeVisible();
+    expect(setter).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(document.cookie).toContain("sidebar_collapsed=false");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(document.cookie).toContain("sidebar_collapsed=true");
+    expect(localStorage.getItem("sidebar_collapsed")).toBe("false");
+  });
+
+  it("keeps sidebar and category toggles usable when cookie writes and legacy storage access throw", () => {
+    const denied = () => { throw new DOMException("Denied", "SecurityError"); };
+    vi.spyOn(window, "localStorage", "get").mockImplementation(denied);
+    vi.spyOn(document, "cookie", "set").mockImplementation(denied);
+    function Toggle() {
+      const { toggleSidebar } = useSidebar();
+      return <button onClick={toggleSidebar}>Toggle sidebar</button>;
+    }
+    const state = { ...initialState, categories: [...initialState.categories,
+      { id: 3, name: "CSS", post_count: 1 }, { id: 4, name: "HTML", post_count: 1 }] };
+    render(<Providers initialAppShellState={state}><Toggle /><SidebarContent /></Providers>);
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    expect(document.documentElement).toHaveAttribute("data-sidebar-state", "collapsed");
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle categories" }));
+    expect(screen.getByRole("button", { name: "Toggle categories" })).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.getByRole("link", { name: /HTML/ })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Less" }));
+    expect(screen.queryByRole("link", { name: /HTML/ })).not.toBeInTheDocument();
+  });
+
   it("preserves navigation and category nodes across reversals while hiding collapsed controls from interaction", () => {
     function Toggle() {
       const { toggleSidebar } = useSidebar();

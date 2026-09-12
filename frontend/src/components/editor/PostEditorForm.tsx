@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDateTime } from "@/lib/display-date";
+
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -88,7 +90,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
             {props.editingPost ? `Editing: ${props.editingPost.title}` : "New Post"}
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "4px 0 0" }}>
-            {props.editingPost ? `Last updated: ${new Date(props.editingPost.updated_at).toLocaleString()}` : "Not saved yet"}
+            {props.editingPost ? `Last updated: ${formatDateTime(props.editingPost.updated_at)}` : "Not saved yet"}
           </p>
         </div>
         <div className="editor-header-actions">
@@ -124,7 +126,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         <button type="button" onClick={props.onLoadLatest} disabled={props.loadingLatest}>{props.loadingLatest ? "Loading…" : "Load latest version"}</button>
         {props.latestError && <p role="alert">{props.latestError}</p>}
         {props.latestPost && <>
-          <p>Latest: {props.latestPost.title} · {new Date(props.latestPost.updated_at).toLocaleString()}</p>
+          <p>Latest: {props.latestPost.title} · {formatDateTime(props.latestPost.updated_at)}</p>
           <label>Latest saved content<textarea readOnly value={props.latestPost.content} /></label>
           <button type="button" onClick={props.onUseLatest} disabled={props.loadingLatest}>Discard my edits and use latest</button>
         </>}

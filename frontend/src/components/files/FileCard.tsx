@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/display-date";
 import type { MouseEventHandler } from "react";
 import type { FileRecord } from "@/lib/api";
 import { getDownloadUrl } from "@/lib/api";
@@ -48,7 +49,7 @@ export default function FileCard({ file, onPreview, onEdit, onDelete, showDescri
           <span className={styles.name}>{label}</span>
           {showDescription && file.description && <span className={styles.description}>{file.description}</span>}
           <span className={styles.meta}>
-            {formatSize(file.size)} · {file.mime_type} · {new Date(file.created_at).toLocaleDateString()}
+            {formatSize(file.size)} · {file.mime_type} · {formatDate(file.created_at)}
           </span>
         </span>
       </button>

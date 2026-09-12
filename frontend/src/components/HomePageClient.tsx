@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDate } from "@/lib/display-date";
+
 import { useState, useRef } from "react";
 import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { getApiErrorMessage, getPostTimeline, getPosts } from "@/lib/api";
@@ -166,7 +168,7 @@ export default function HomePageClient({
                       }}
                     >
                       {getPostTimeline(post).label} on{" "}
-                      {new Date(getPostTimeline(post).timestamp).toLocaleDateString()} •{" "}
+                      {formatDate(getPostTimeline(post).timestamp)} •{" "}
                       {post.category ? post.category.name : "Uncategorized"}
                     </div>
                   </div>

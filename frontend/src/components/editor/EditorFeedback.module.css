@@ -32,8 +32,8 @@
 .secondary:hover { background: var(--bg-hover); }
 .primary { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-base); }
 .primary:hover { background: var(--text-secondary); border-color: var(--text-secondary); }
-.quiet { border-color: transparent; background: transparent; color: var(--text-secondary); }
-.quiet:hover { background: var(--bg-hover); color: var(--text-primary); }
+.quiet { background: var(--bg-base); color: var(--text-secondary); }
+.quiet:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
 .button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
 .button:disabled { cursor: wait; }
 .hint { margin: 16px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.7; }

@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, type Theme } from "@/context/ThemeContext";
 import { getCategories, Category } from "@/lib/api";
 import type { InitialAppShellState, SidebarCategory } from "@/lib/app-shell-state";
+import { writePreference } from "@/lib/preference-cookies";
 import EditorLeaveDialog from "./editor/EditorLeaveDialog";
 import {
   GridIcon,
@@ -64,13 +65,10 @@ export function Providers({
     }
   }, [isCollapsed]);
 
-  useEffect(() => {
-    try { localStorage.setItem("sidebar_collapsed", String(isCollapsed)); } catch { /* Browser storage is optional. */ }
-    document.cookie = `sidebar_collapsed=${isCollapsed ? "true" : "false"}; path=/; max-age=31536000; samesite=lax`;
-  }, [isCollapsed]);
-
   const toggleSidebar = () => {
-    setIsCollapsed((prev) => !prev);
+    const next = !isCollapsed;
+    setIsCollapsed(next);
+    writePreference("sidebar_collapsed", next ? "true" : "false");
   };
 
   return (
@@ -177,11 +175,9 @@ export function SidebarContent() {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setIsPostsExpanded((current) => {
-              const next = !current;
-              document.cookie = `sidebar_posts_expanded=${next}; path=/; max-age=31536000; samesite=lax`;
-              return next;
-            });
+            const next = !isPostsExpanded;
+            setIsPostsExpanded(next);
+            writePreference("sidebar_posts_expanded", next ? "true" : "false");
           }}
           aria-label="Toggle categories"
           aria-expanded={isPostsExpanded}
@@ -222,8 +218,8 @@ export function SidebarContent() {
                 className="sidebar-categories-more"
                 onClick={() => {
                   const next = !showAllCategories;
-                  document.cookie = `sidebar_categories_all=${next}; path=/; max-age=31536000; samesite=lax`;
                   setShowAllCategories(next);
+                  writePreference("sidebar_categories_all", next ? "true" : "false");
                 }}
               >
                 {showAllCategories ? "Less" : "More"}

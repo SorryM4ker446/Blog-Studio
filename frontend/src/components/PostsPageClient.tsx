@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDate } from "@/lib/display-date";
+
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getPostTimeline, getPosts, searchResources, getCategories } from "@/lib/api";
@@ -8,7 +10,7 @@ import Link from "next/link";
 import { readResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib/resource-query";
 import { useResourcePage } from "@/lib/use-resource-page";
 import SearchInput from "@/components/SearchInput";
-import Pagination from "@/components/Pagination";
+import PaginatedResults from "@/components/PaginatedResults";
 import { FolderIcon, ClipboardIcon, InboxIcon, FileTextIcon } from "@/components/Icons";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
@@ -100,6 +102,8 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
           icon={<InboxIcon size={48} />}
         />
       ) : (
+        <PaginatedResults page={page} totalPages={totalPages} pending={loading}
+          resultKey={JSON.stringify([state.query, state.categoryId, page])} onPageChange={handlePageChange}>
         <div
           style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}
         >
@@ -169,7 +173,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
                     >
                       <span>
                       {getPostTimeline(post).label} on{" "}
-                      {new Date(getPostTimeline(post).timestamp).toLocaleDateString()}
+                      {formatDate(getPostTimeline(post).timestamp)}
                     </span>
                     <span
                       style={{
@@ -188,17 +192,9 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
             </Link>
           ))}
         </div>
+        </PaginatedResults>
       )}
       </section>
-
-      {/* Pagination component */}
-      {!error && !loading && posts.length > 0 && (
-        <Pagination 
-          currentPage={page} 
-          totalPages={totalPages} 
-          onPageChange={handlePageChange}
-        />
-      )}
 
     </div>
   );
