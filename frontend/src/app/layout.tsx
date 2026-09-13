@@ -4,6 +4,7 @@ import ClientLayout from "@/components/ClientLayout";
 import { cookies } from "next/headers";
 import { loadInitialAppShellState } from "@/lib/server-app-shell";
 import { readPreference } from "@/lib/preference-cookies";
+import { initialViewScript } from "@/lib/initial-view";
 
 export const metadata = {
   title: "Blog Studio",
@@ -29,6 +30,7 @@ export default async function RootLayout({
       data-sidebar-state={isSidebarCollapsed ? "collapsed" : undefined}
       suppressHydrationWarning
     >
+      <head><script dangerouslySetInnerHTML={{ __html: initialViewScript }} /></head>
       <body className={isLightTheme ? "theme-light" : undefined} suppressHydrationWarning>
         <Providers
           initialSidebarCollapsed={isSidebarCollapsed}

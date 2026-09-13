@@ -2,7 +2,7 @@
 
 import { formatDate } from "@/lib/display-date";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getPostTimeline, getPosts, searchResources, getCategories } from "@/lib/api";
 import type { PostSummary } from "@/lib/api";
@@ -25,6 +25,7 @@ export interface PostsPageInitialState {
 }
 
 export default function PostsPageClient({ initialState }: { initialState: PostsPageInitialState }) {
+  const [animateChanges, setAnimateChanges] = useState(false);
   const searchParams = useSearchParams();
   const query = useMemo(() => readResourceQuery(searchParams, "posts"), [searchParams]);
   const searchQuery = query.query;
@@ -38,17 +39,19 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
       page: result.page, totalPages: Math.max(1, Math.ceil(total / result.limit)),
       currentCategoryName: target.categoryId === "0" ? "Uncategorized" : categories.find((item) => String(item.id) === target.categoryId)?.name || null, error: "" };
   }, []);
-  const { state, loading, run, retry: retryLastRequest } = useResourcePage(
-    initialState, { query: initialState.query, categoryId: initialState.categoryId, scope: "posts", page: initialState.page }, query, load, "/posts",
+  const { state, loading, restoring, run, retry: retryLastRequest } = useResourcePage(
+    initialState, { query: initialState.query, categoryId: initialState.categoryId, scope: "posts", page: initialState.page }, query, load, "/posts", "page", true, "public",
   );
   const { posts, error, page, totalPages, currentCategoryName } = state;
 
   function handleSearch(value: string) {
+    setAnimateChanges(true);
     const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "posts"), query: value.trim(), page: 1 };
     writeResourceQuery("/posts", target);
     void run(target);
   }
   function handlePageChange(page: number) {
+    setAnimateChanges(true);
     const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "posts"), page };
     writeResourceQuery("/posts", target);
     void run(target);
@@ -89,7 +92,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
       <section aria-label="Posts" aria-busy={loading}>
       {error ? (
         <ErrorState message={error} onRetry={retryLastRequest} retrying={loading} />
-      ) : loading && posts.length === 0 ? (
+      ) : restoring || (loading && posts.length === 0) ? (
         <LoadingState label={searchQuery ? "Searching posts…" : "Loading posts…"} />
       ) : posts.length === 0 ? (
         <EmptyState
@@ -102,7 +105,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
           icon={<InboxIcon size={48} />}
         />
       ) : (
-        <PaginatedResults page={page} totalPages={totalPages} pending={loading}
+        <PaginatedResults page={page} totalPages={totalPages} pending={loading} animateChanges={animateChanges}
           resultKey={JSON.stringify([state.query, state.categoryId, page])} onPageChange={handlePageChange}>
         <div
           style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}

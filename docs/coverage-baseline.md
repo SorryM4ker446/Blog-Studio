@@ -117,3 +117,18 @@ The September 13, 2026 responsive-navigation and keyboard-access update passed 2
 The category-expansion and search-entry transition refinement passed 228 tests in 41 files: statements 62.56% (1977/3160), branches 59.54% (1634/2744), functions 61.23% (436/712), and lines 63.09% (1660/2631). Search snapshot regressions now cover keyword changes and obsolete exit callbacks; real browser tests verify reversible category height and non-overlapping search/page transitions. Measurement scope and exclusions remain unchanged.
 
 Initial-search feedback refinement passed 230 tests in 42 files: statements 62.69% (1988/3171), branches 59.71% (1647/2758), functions 61.45% (440/716), and lines 63.21% (1669/2640). Tests cover delayed visible feedback, timer cleanup and first-result entry without a placeholder exit; measurement exclusions and gates are unchanged.
+
+## List return and navigation regression measurement
+
+Measured on 2026-09-14 after list-return snapshots, reserved editor height, source-aware sidebar selection, category rename focus restoration, and canonical editor URL assertions. All 240 unit tests in 45 files pass; the original baseline and proposed floors remain unchanged.
+
+| Metric | Covered / total | Result |
+| --- | ---: | ---: |
+| Vitest statements | 2,065 / 3,252 | 63.49% |
+| Vitest branches | 1,728 / 2,848 | 60.67% |
+| Vitest functions | 452 / 729 | 62.00% |
+| Vitest lines | 1,738 / 2,711 | 64.10% |
+
+The new checks cover snapshot expiry/eviction, cleanup generations, owner isolation, reused pagination content, and sidebar source restoration. No source files were excluded to improve these measurements. Backend code did not change and its coverage was not remeasured.
+
+The subsequent persistent-layout and silent-refresh fixes passed 249 unit tests in 47 files: statements 63.00% (2124/3371), branches 60.31% (1775/2943), functions 62.26% (462/742), and lines 63.66% (1791/2813). The inline bootstrap is tested by evaluating its emitted script and by holding production hydration in Chromium; execution of the emitted string is not attributed back to its function body in this Vitest report. That source remains in the denominator. No coverage exclusions or numerical gates changed.

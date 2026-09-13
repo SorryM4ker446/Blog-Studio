@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL } from "./support/test-env";
+import { createArticle } from "./support/articles";
 
 const cases = [
   { route: "/posts", input: "Search posts...", region: "Posts", kind: "posts", sideArrows: false },
@@ -13,14 +14,22 @@ for (const scenario of cases) {
   test(`${scenario.route} keeps pagination stable and animates result changes`, async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 1100 });
     const editor = scenario.route.startsWith("/editor");
-    if (editor) {
+    const checksArticleReturn = scenario.route === "/posts" || scenario.route === "/editor";
+    let headers: Record<string, string> = {};
+    let returnPost: { id: number } | undefined;
+    if (editor || checksArticleReturn) {
       const csrf = await page.request.get(`${E2E_API_URL}/csrf`);
       const login = await page.request.post(`${E2E_API_URL}/login`, {
         headers: { "X-CSRF-Token": (await csrf.json()).csrf_token },
         data: { username: E2E_ADMIN_USER, password: E2E_ADMIN_PASS },
       });
       expect(login.ok()).toBeTruthy();
+      headers = { "X-CSRF-Token": (await (await page.request.get(`${E2E_API_URL}/csrf`)).json()).csrf_token };
     }
+    if (checksArticleReturn) returnPost = await (await createArticle(page.request, { headers, data: {
+      title: "Motion article 11", content: "Real article used to verify list return navigation.", status: "published", category_id: 0,
+    } })).json();
+    try {
     await page.goto(scenario.route);
     await page.evaluate(() => {
       const original = Element.prototype.animate;
@@ -44,7 +53,7 @@ for (const scenario of cases) {
       const date = "2026-09-12T00:00:00Z";
       const rows = Array.from({ length: number === 1 ? 10 : 1 }, (_, index) => {
         const id = (number - 1) * 10 + index + 1;
-        return scenario.kind === "posts" ? { id, title: `Motion article ${id}`, summary: "", slug: `motion-${id}`,
+        return scenario.kind === "posts" ? { id: number === 2 && returnPost ? returnPost.id : id, title: `Motion article ${id}`, summary: "", slug: `motion-${id}`,
           category_id: null, category: null, status: "published", published_at: date, last_edited_at: null, created_at: date, updated_at: date }
           : { id, orig_name: `motion-${id}.txt`, display_name: `Motion file ${id}`, description: "", mime_type: "text/plain", size: 32, created_at: date, is_system: false };
       });
@@ -113,11 +122,39 @@ for (const scenario of cases) {
     await page.goForward();
     await expect(rows).toHaveCount(10);
     await expect(input).toHaveValue("list-motion");
+    if (scenario.route === "/posts" || scenario.route === "/editor") {
+      await next.click();
+      await expect(rows).toHaveCount(1);
+      if (editor) await rows.first().getByRole("button", { name: "Open Motion article 11", exact: true }).click();
+      else await rows.first().click();
+      await expect(page).toHaveURL(url => url.pathname === `/posts/${returnPost!.id}`);
+      await expect(page.getByRole("heading", { name: "Motion article 11", exact: true })).toBeVisible();
+      await expect(page.locator("aside.sidebar").getByRole("link", { name: editor ? "Content Editor" : "All Posts", exact: true })).toHaveAttribute("aria-current", "page");
+      const countBeforeReturn = (await records()).length;
+      gate = new Promise(resolve => { release = resolve; });
+      await page.goBack();
+      await expect(region.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
+      await expect(rows).toHaveCount(1);
+      await expect(region.getByRole("button", { name: "Page 1, current page" })).toHaveCount(0);
+      gate = null; release();
+      await expect(previous).toBeEnabled();
+      expect((await records()).length).toBe(countBeforeReturn);
+      if (editor) expect(await content.evaluate(node => node.parentElement!.getBoundingClientRect().height)).toBeCloseTo(initialFrameHeight, 0);
+      await expect(content).toHaveCSS("opacity", "1");
+      await previous.click();
+      await expect(rows).toHaveCount(10);
+    }
     await page.emulateMedia({ reducedMotion: "reduce" });
     const before = (await records()).length;
     await next.click();
     await expect(rows).toHaveCount(1);
     expect((await records()).length).toBe(before);
+    if (editor) {
+      await page.reload();
+      await expect(region.getByRole("button", { name: "Page 2, current page" })).toBeVisible();
+      await expect(rows).toHaveCount(1);
+      expect(await content.evaluate(node => node.parentElement!.getBoundingClientRect().height)).toBeCloseTo(initialFrameHeight, 0);
+    }
     await page.setViewportSize({ width: 760, height: 1000 });
     const narrowContent = await content.boundingBox();
     if (editor) {
@@ -126,5 +163,8 @@ for (const scenario of cases) {
     expect((await previous.boundingBox())!.y).toBeGreaterThan(narrowContent!.y + narrowContent!.height);
     expect((await next.boundingBox())!.y).toBeGreaterThan(narrowContent!.y + narrowContent!.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    } finally {
+      if (returnPost) await page.request.delete(`${E2E_API_URL}/admin/posts/${returnPost.id}`, { headers });
+    }
   });
 }

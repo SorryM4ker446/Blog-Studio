@@ -27,7 +27,8 @@ test(`keyboard login, category management, Markdown editing and resource tabs in
   if (await navigation.isVisible()) { await tabTo(page, navigation); await page.keyboard.press("Enter"); }
   await tabTo(page, page.getByRole("link", { name: "Content Editor", exact: true }));
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/editor$/);
+  await expect(page).toHaveURL(url => url.pathname === "/editor" && url.searchParams.get("tab") === "posts");
+  await expect(page.getByRole("tab", { name: /^Posts/ })).toHaveAttribute("aria-selected", "true");
   const csrf = await page.request.get(`${E2E_API_URL}/csrf`);
   const headers = { "X-CSRF-Token": (await csrf.json()).csrf_token };
   try {
@@ -56,6 +57,7 @@ test(`keyboard login, category management, Markdown editing and resource tabs in
     await page.keyboard.type(`${name} renamed`); await page.keyboard.press("Enter");
     await expect(select).toBeFocused();
     await expect(select).toHaveText(new RegExp(`${name} renamed`));
+    await expect(select).toHaveAttribute("aria-expanded", "true");
     await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: `Delete ${name} renamed`, exact: true })).toBeFocused();
     await page.keyboard.press("Enter");

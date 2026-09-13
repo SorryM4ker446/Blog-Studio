@@ -1,6 +1,7 @@
 "use client";
 
 import { recoveryStorage, openRecoveryChannel } from "@/lib/editor-recovery-store";
+import { clearListReturnCache } from "@/lib/list-return-cache";
 import { preserveExpiredEditor, releaseEditorNavigation } from "@/lib/editor-navigation";
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
@@ -115,6 +116,7 @@ export function AuthProvider({
         return;
       }
       sessionExpiryHandledRef.current = true;
+      clearListReturnCache();
       const revision = authRevisionRef.current;
       await preserveExpiredEditor();
       if (!isMountedRef.current || revision !== authRevisionRef.current) return;
@@ -145,6 +147,7 @@ export function AuthProvider({
       if (event.data?.action !== "logout" || event.data?.userId !== user.id) return;
       authRevisionRef.current++;
       sessionExpiryHandledRef.current = true;
+      clearListReturnCache();
       window.dispatchEvent(new Event("blog:recovery-logout"));
       releaseEditorNavigation(); clearCSRFToken();
       setUser(null); setIsLoading(false); setAuthStatus("anonymous"); setAuthError(null);
@@ -193,6 +196,7 @@ export function AuthProvider({
   };
 
   const completeLogout = async () => {
+    clearListReturnCache();
     authRevisionRef.current++;
     window.dispatchEvent(new Event("blog:recovery-logout"));
     if (user) {

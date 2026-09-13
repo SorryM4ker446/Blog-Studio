@@ -103,11 +103,13 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   }, []);
   const authorized = authStatus === "authenticated" && user?.role === "admin";
   const postResource = useResourcePage({ ...initialState.posts, error: initialState.postsError }, initialState.postQuery, postQuery,
-    loadPostPage, "/editor", "post_page", authorized && urlTab === "posts");
+    loadPostPage, "/editor", "post_page", authorized && urlTab === "posts", authorized ? `user:${user.id}` : undefined);
   const fileResource = useResourcePage({ ...initialState.files, error: initialState.filesError }, initialState.fileQuery, fileQuery,
-    loadFilePage, "/editor", "file_page", authorized && urlTab === "files");
-  const { data: posts, total: postCount, page: postPage, totalPages: postTotalPages, error: postsError } = postResource.state;
-  const { data: files, total: fileCount, page: filePage, totalPages: fileTotalPages, error: filesError } = fileResource.state;
+    loadFilePage, "/editor", "file_page", authorized && urlTab === "files", authorized ? `user:${user.id}` : undefined);
+  const { data: postData, total: postCount, page: postPage, totalPages: postTotalPages, error: postsError } = postResource.state;
+  const { data: fileData, total: fileCount, page: filePage, totalPages: fileTotalPages, error: filesError } = fileResource.state;
+  const posts = postResource.restoring ? [] : postData;
+  const files = fileResource.restoring ? [] : fileData;
   const postsLoading = postResource.loading;
   const filesLoading = fileResource.loading;
   const [formTarget, setFormTarget] = useState<EditorTarget>(editTarget);
@@ -503,6 +505,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
     <>
       {editTarget === null ? (
         <EditorListView
+          ownerId={user?.id}
           activeTab={urlTab}
           searchQuery={searchQuery}
           posts={posts}

@@ -53,6 +53,24 @@ describe("ClientLayout route transitions", () => {
     expect(screen.getByRole("main")).not.toHaveFocus();
   });
 
+  it("retains route entry animation when returning from an article to its list", () => {
+    navigationState.pathname = "/posts/12";
+    const view = render(<ClientLayout><p>Article</p></ClientLayout>);
+    navigationState.pathname = "/posts";
+    navigationState.searchParams = new URLSearchParams("category=2&page=2");
+    view.rerender(<ClientLayout><p>Restored list</p></ClientLayout>);
+    expect(screen.getByText("Restored list").parentElement).toHaveClass("route-transition-active");
+  });
+
+  it("retains route entry animation when returning from an article to Content Editor", () => {
+    navigationState.pathname = "/posts/12";
+    const view = render(<ClientLayout><p>Article</p></ClientLayout>);
+    navigationState.pathname = "/editor";
+    navigationState.searchParams = new URLSearchParams("page=2");
+    view.rerender(<ClientLayout><p>Editor list</p></ClientLayout>);
+    expect(screen.getByText("Editor list").parentElement).toHaveClass("route-transition-active");
+  });
+
   it("animates client route changes without animating the initial page", () => {
     const view = render(<ClientLayout><p>Home</p></ClientLayout>);
     let frame = screen.getByText("Home").parentElement!;
@@ -102,6 +120,26 @@ describe("ClientLayout route transitions", () => {
     const storedKey = Object.keys(window.sessionStorage).find((key) => key.startsWith("blogStudio:contentScroll:"));
     expect(storedKey).toBe("blogStudio:contentScroll:%2F");
     expect(window.sessionStorage.getItem(storedKey!)).toBe("640");
+  });
+
+  it("records the latest position synchronously before refresh or closing the page", () => {
+    render(<ClientLayout><p>Contents</p></ClientLayout>);
+    const content = document.querySelector<HTMLElement>(".content-scroll")!;
+    content.scrollTop = 241;
+    fireEvent.scroll(content);
+    window.dispatchEvent(new Event("beforeunload"));
+    expect(window.sessionStorage.getItem("blogStudio:contentScroll:%2F")).toBe("241");
+    content.scrollTop = 320;
+    window.dispatchEvent(new Event("pagehide"));
+    expect(window.sessionStorage.getItem("blogStudio:contentScroll:%2F")).toBe("320");
+  });
+
+  it("restores a reload before paint without triggering entry animation", () => {
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue([{ type: "reload" } as PerformanceNavigationTiming]);
+    window.sessionStorage.setItem("blogStudio:contentScroll:%2F", "280");
+    render(<ClientLayout><p>Reloaded content</p></ClientLayout>);
+    expect(document.querySelector(".content-scroll")).toHaveProperty("scrollTop", 280);
+    expect(screen.getByText("Reloaded content").parentElement).not.toHaveClass("route-transition-active");
   });
 
   it("keeps recording scroll after the skip link focuses main content without navigation", async () => {
