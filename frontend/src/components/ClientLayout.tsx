@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useSidebar, SidebarContent, SidebarFooter } from "./Providers";
 import TopBar from "./TopBar";
@@ -58,6 +58,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const mainRef = useRef<HTMLElement>(null);
   const sidebarMotionRef = useRef<ReturnType<typeof createSidebarLayoutMotion> | null>(null);
   const historyTraversalRef = useRef(false);
+  const initialLocationRef = useRef(true);
+  const focusAfterNavigationRef = useRef(false);
   const navigationStartedRef = useRef(false);
   const restorationInProgressRef = useRef(false);
   const scrollSaveFrameRef = useRef(0);
@@ -87,14 +89,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     return () => window.removeEventListener("popstate", markHistoryTraversal);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigationStartedRef.current = false;
+    const navigation = initialLocationRef.current ? performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined : undefined;
+    const reloaded = navigation?.type === "reload" || navigation?.type === "back_forward";
+    initialLocationRef.current = false;
     const pathChanged = previousPathRef.current !== pathname;
     previousPathRef.current = pathname;
-    if (!historyTraversalRef.current) {
-      if (pathChanged && !(document.activeElement instanceof HTMLInputElement) && !(document.activeElement instanceof HTMLTextAreaElement)) {
-        mainRef.current?.focus({ preventScroll: true });
-      }
+    focusAfterNavigationRef.current = false;
+    if (!historyTraversalRef.current && !reloaded) {
+      focusAfterNavigationRef.current = pathChanged;
       restorationInProgressRef.current = false;
       return;
     }
@@ -128,12 +132,35 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       }
       restoreFrame = window.requestAnimationFrame(restorePosition);
     };
-    restoreFrame = window.requestAnimationFrame(restorePosition);
+    restorePosition();
     return () => {
       if (restoreFrame) window.cancelAnimationFrame(restoreFrame);
       restorationInProgressRef.current = false;
     };
   }, [scrollStorageKey, pathname]);
+
+  useEffect(() => {
+    // The mobile drawer releases modal isolation in its effect before focus moves.
+    if (focusAfterNavigationRef.current && !(document.activeElement instanceof HTMLInputElement) && !(document.activeElement instanceof HTMLTextAreaElement)) {
+      mainRef.current?.focus({ preventScroll: true });
+    }
+    focusAfterNavigationRef.current = false;
+  }, [scrollStorageKey, pathname]);
+
+  useEffect(() => {
+    const saveBeforeLeaving = () => {
+      if (restorationInProgressRef.current || navigationStartedRef.current || !contentScrollRef.current) return;
+      if (scrollSaveFrameRef.current) window.cancelAnimationFrame(scrollSaveFrameRef.current);
+      scrollSaveFrameRef.current = 0;
+      storeContentScroll(scrollStorageKey, contentScrollRef.current.scrollTop);
+    };
+    window.addEventListener("beforeunload", saveBeforeLeaving);
+    window.addEventListener("pagehide", saveBeforeLeaving);
+    return () => {
+      window.removeEventListener("beforeunload", saveBeforeLeaving);
+      window.removeEventListener("pagehide", saveBeforeLeaving);
+    };
+  }, [scrollStorageKey]);
 
   useEffect(() => () => {
     if (scrollSaveFrameRef.current) window.cancelAnimationFrame(scrollSaveFrameRef.current);

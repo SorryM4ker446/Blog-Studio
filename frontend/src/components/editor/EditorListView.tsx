@@ -1,6 +1,7 @@
 "use client";
 
 import { formatDate } from "@/lib/display-date";
+import { useState } from "react";
 
 import type { Category, FileRecord, PostSummary } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
@@ -13,6 +14,7 @@ import EditorSelect from "@/components/editor/EditorSelect";
 export type EditorTab = "posts" | "files";
 
 interface EditorListViewProps {
+  ownerId?: number;
   activeTab: EditorTab;
   searchQuery: string;
   categories: Category[];
@@ -99,6 +101,7 @@ function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onVie
 }
 
 export default function EditorListView(props: EditorListViewProps) {
+  const [animatePages, setAnimatePages] = useState(false);
   const loading = props.activeTab === "posts" ? props.postsLoading : props.filesLoading;
   const error = props.activeTab === "posts" ? props.postsError : props.filesError;
   const hasItems = props.activeTab === "posts" ? props.posts.length > 0 : props.files.length > 0;
@@ -196,12 +199,17 @@ export default function EditorListView(props: EditorListViewProps) {
         ) : (
           <PaginatedResults
             stablePageHeight
+            heightCacheKey={JSON.stringify(["editor-height", props.ownerId, props.activeTab, props.searchQuery, props.categoryId])}
+            animateChanges={animatePages}
             key={props.activeTab}
             page={page}
             totalPages={props.activeTab === "posts" ? props.postTotalPages : props.fileTotalPages}
             resultKey={String(page)}
             pending={loading}
-            onPageChange={props.activeTab === "posts" ? props.onLoadPosts : props.onLoadFiles}
+            onPageChange={(page) => {
+              setAnimatePages(true);
+              (props.activeTab === "posts" ? props.onLoadPosts : props.onLoadFiles)(page);
+            }}
           >
             <div className="editor-resource-grid">
               {props.activeTab === "posts"

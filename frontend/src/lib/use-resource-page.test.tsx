@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useResourcePage } from "./use-resource-page";
+import { clearListReturnCache } from "./list-return-cache";
 import type { ResourceQuery } from "./resource-query";
 
 const initialQuery: ResourceQuery = {query:"needle", categoryId:"2", scope:"posts", page:2};
@@ -8,6 +9,22 @@ const initial = { page:2, totalPages:3, error:"", data:"server snapshot" };
 function pending<T>() { let resolve!: (value:T)=>void; let reject!: (error:Error)=>void; const promise = new Promise<T>((yes,no)=>{resolve=yes;reject=no;}); return {promise,resolve,reject}; }
 
 describe("resource page navigation", () => {
+  it("restores the last visited page before revalidation completes, isolated by owner", async () => {
+    clearListReturnCache();
+    const target = { ...initialQuery, page: 3 };
+    const load = vi.fn().mockResolvedValue({ ...initial, page: 3, data: "last visited" });
+    const first = renderHook(() => useResourcePage(initial, initialQuery, initialQuery, load, "/editor", "post_page", true, "user:1"));
+    await act(() => first.result.current.run(target));
+    first.unmount();
+    const response = pending<typeof initial>();
+    const returning = renderHook(() => useResourcePage(initial, initialQuery, target, () => response.promise, "/editor", "post_page", true, "user:1"));
+    expect(returning.result.current.state).toMatchObject({ page: 3, data: "last visited" });
+    returning.unmount();
+    const other = renderHook(() => useResourcePage(initial, initialQuery, target, () => response.promise, "/editor", "post_page", true, "user:2"));
+    expect(other.result.current.state.data).toBe("server snapshot");
+    other.unmount();
+    clearListReturnCache();
+  });
   it("defers initial URL normalization and skips it after a newer navigation", () => {
     let frame!: FrameRequestCallback;
     vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frame = callback; return 1; });

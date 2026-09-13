@@ -8,6 +8,7 @@ import { ThemeProvider, type Theme } from "@/context/ThemeContext";
 import { getCategories, Category } from "@/lib/api";
 import type { InitialAppShellState, SidebarCategory } from "@/lib/app-shell-state";
 import { writePreference } from "@/lib/preference-cookies";
+import { useSidebarSelection } from "@/lib/use-sidebar-selection";
 import EditorLeaveDialog from "./editor/EditorLeaveDialog";
 import {
   GridIcon,
@@ -31,6 +32,7 @@ interface SidebarContextType {
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
+const SidebarSelectionContext = createContext<string | null>(null);
 
 export function useSidebar() {
   const context = useContext(SidebarContext);
@@ -55,6 +57,7 @@ export function Providers({
   initialAppShellState?: InitialAppShellState;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(initialSidebarCollapsed);
+  const selection = useSidebarSelection();
 
   // Keep the server-rendered selector and the hydrated sidebar in the same paint.
   useLayoutEffect(() => {
@@ -82,7 +85,7 @@ export function Providers({
           initialPostsExpanded: initialSidebarPostsExpanded,
           initialShowAllCategories: initialSidebarShowAllCategories,
         }}>
-          {children}
+          <SidebarSelectionContext.Provider value={selection}>{children}</SidebarSelectionContext.Provider>
           <EditorLeaveDialog />
         </SidebarContext.Provider>
       </AuthProvider>
@@ -93,14 +96,16 @@ export function Providers({
 // ─── Sidebar Nav ──────────────────────────────────────────────────────────────
 function SidebarPageLink({ href, className = "", ...props }: ComponentProps<typeof Link> & { href: string }) {
   const pathname = usePathname();
-  const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
-  return <Link {...props} href={href} className={`${className}${active && href !== "/" ? " active" : ""}`} aria-current={active ? "page" : undefined} />;
+  const selection = useContext(SidebarSelectionContext) ?? pathname;
+  const active = selection === href;
+  return <Link {...props} href={href} data-sidebar-section={href} className={`${className}${active && href !== "/" ? " active" : ""}`} aria-current={active ? "page" : undefined} />;
 }
 
 export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}) {
   const { user } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const selection = useContext(SidebarSelectionContext);
   const {
     isCollapsed: desktopCollapsed,
     initialCategories,
@@ -110,8 +115,8 @@ export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}
   } = useSidebar();
   const isCollapsed = !expanded && desktopCollapsed;
   const [categories, setCategories] = useState<SidebarCategory[]>(initialCategories);
-  const selectedCategoryId = pathname === "/posts" ? searchParams.get("category") : null;
-  const isAllPostsActive = (pathname === "/posts" && !selectedCategoryId) || pathname.startsWith("/posts/");
+  const selectedCategoryId = selection?.startsWith("/posts?") ? new URLSearchParams(selection.split("?")[1]).get("category") : pathname === "/posts" ? searchParams.get("category") : null;
+  const isAllPostsActive = selection !== null ? selection === "/posts" : (pathname === "/posts" && !selectedCategoryId) || pathname.startsWith("/posts/");
   const [isPostsExpanded, setIsPostsExpanded] = useState(initialPostsExpanded || Boolean(selectedCategoryId));
   const [showAllCategories, setShowAllCategories] = useState(initialShowAllCategories);
   const categoryRefreshRef = useRef({ id: 0 });
@@ -165,6 +170,7 @@ export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}
       <Link
         key={cat.id}
         href={`/posts?category=${cat.id}`}
+        data-sidebar-section={`/posts?category=${cat.id}`}
         className={`sidebar-category-link${isActive ? " active" : ""}`}
         aria-current={isActive ? "page" : undefined}
       >
@@ -185,7 +191,7 @@ export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}
       <div className="nav-group-title">Features</div>
 
       {/* ── All Posts row ──────────────────────────────────────────────────── */}
-      <div className={`nav-posts-row${isAllPostsActive ? " active" : ""}`}>
+      <div data-sidebar-section="/posts" className={`nav-posts-row${isAllPostsActive ? " active" : ""}`}>
         <Link href="/posts" className="nav-posts-link" aria-label="All Posts" data-tooltip={isCollapsed ? "All Posts" : undefined} aria-current={isAllPostsActive ? "page" : undefined}>
           <ListIcon className="nav-icon active-icon-blue" />
           <span className="nav-item-label">All Posts</span>

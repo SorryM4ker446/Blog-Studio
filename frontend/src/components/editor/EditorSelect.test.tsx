@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import EditorSelect from "./EditorSelect";
@@ -9,6 +9,26 @@ const options = [
 ];
 
 describe("EditorSelect", () => {
+  it("restores rename focus after a disabled refresh without closing the management menu", async () => {
+    const user = userEvent.setup();
+    let finish!: (result: null) => void;
+    const rename = vi.fn(() => new Promise<null>(resolve => { finish = resolve; }));
+    const props = { value: "draft", options, onChange: vi.fn(), ariaLabel: "Category", onRenameOption: rename, onDeleteOption: vi.fn() };
+    const view = render(<EditorSelect {...props} />);
+    const trigger = screen.getByRole("combobox");
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "Rename Draft" }));
+    await user.type(screen.getByLabelText("New category name"), " renamed{Enter}");
+    view.rerender(<EditorSelect {...props} disabled />);
+    await act(async () => finish(null));
+    view.rerender(<EditorSelect {...props} options={[{ value: "draft", label: "Draft renamed" }, options[1]]} />);
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Rename Draft renamed" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Delete Draft renamed" })).toHaveFocus();
+  });
   it("identifies an unavailable selection without selecting the first option", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

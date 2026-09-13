@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { ChevronDownIcon, EditIcon, TrashIcon } from "@/components/Icons";
 
@@ -42,6 +42,7 @@ export default function EditorSelect<T extends SelectValue>({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const savingRef = useRef(false);
+  const restoringFocusRef = useRef(false);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(selectedIndex);
@@ -53,6 +54,12 @@ export default function EditorSelect<T extends SelectValue>({
   const menuOpen = open && !disabled;
   const managedOption = options.find(option => option.value === editingValue) ?? options[highlightedIndex];
   const manageable = Boolean(managedOption && (onRenameOption || onDeleteOption) && isOptionManageable(managedOption));
+
+  useLayoutEffect(() => {
+    if (!restoringFocusRef.current || disabled || editingValue !== null) return;
+    triggerRef.current?.focus({ preventScroll: true });
+    restoringFocusRef.current = false;
+  }, [disabled, editingValue]);
 
   useEffect(() => {
     if (!open || disabled) return;
@@ -81,7 +88,7 @@ export default function EditorSelect<T extends SelectValue>({
   }
 
   function closeMenu() {
-    if (savingRef.current) return;
+    if (savingRef.current || restoringFocusRef.current) return;
     setOpen(false);
     setEditingValue(null);
     setEditName("");
@@ -121,9 +128,9 @@ export default function EditorSelect<T extends SelectValue>({
         setManagementError(message);
         return;
       }
+      restoringFocusRef.current = true;
       setEditingValue(null);
       setEditName("");
-      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
     } catch {
       setManagementError("Failed to rename category.");
     } finally {
