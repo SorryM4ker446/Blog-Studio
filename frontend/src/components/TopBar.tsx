@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { MoonIcon, SunIcon } from "@/components/Icons";
 
-export default function TopBar() {
+export default function TopBar({ navigation }: { navigation?: React.ReactNode }) {
   const { profile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
@@ -16,13 +16,14 @@ export default function TopBar() {
   // but once loaded, it stays in sync without flickering on navigation.
   return (
     <header className="top-bar">
+      {navigation}
       <div className="top-bar-profile">
         <div className="top-bar-avatar">
           {profile?.avatar && !avatarFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.avatar}
-              alt="avatar"
+              alt={profile?.name ? `${profile.name} avatar` : "Site author avatar"}
               fetchPriority="high"
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
               onError={() => setFailedAvatarUrl(profile.avatar)}
@@ -77,14 +78,7 @@ export default function TopBar() {
         >
           {theme === "dark" ? <SunIcon size={15} /> : <MoonIcon size={15} />}
         </button>
-        <button
-          type="button"
-          className="top-bar-action"
-          title="More options"
-          aria-label="More options"
-        >
-          <span aria-hidden="true">⋮</span>
-        </button>
+
       </div>
     </header>
   );

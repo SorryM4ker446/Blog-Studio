@@ -1,5 +1,7 @@
 "use client";
 
+import { useModalIsolation } from "@/lib/use-modal-isolation";
+
 import { useEffect, useId, useRef } from "react";
 
 interface EditorDeleteDialogProps {
@@ -25,6 +27,7 @@ export default function EditorDeleteDialog({
   const descriptionId = useId();
   const errorId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  useModalIsolation(panelRef, open);
   const busyRef = useRef(busy);
   const onCancelRef = useRef(onCancel);
 

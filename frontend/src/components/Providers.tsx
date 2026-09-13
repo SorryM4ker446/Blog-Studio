@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useLayoutEffect, useState, useRef, useCallback, createContext, useContext } from "react";
+import { ReactNode, type ComponentProps, useEffect, useLayoutEffect, useId, useState, useRef, useCallback, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -91,23 +91,31 @@ export function Providers({
 }
 
 // ─── Sidebar Nav ──────────────────────────────────────────────────────────────
-export function SidebarContent() {
+function SidebarPageLink({ href, className = "", ...props }: ComponentProps<typeof Link> & { href: string }) {
+  const pathname = usePathname();
+  const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+  return <Link {...props} href={href} className={`${className}${active && href !== "/" ? " active" : ""}`} aria-current={active ? "page" : undefined} />;
+}
+
+export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}) {
   const { user } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const {
-    isCollapsed,
+    isCollapsed: desktopCollapsed,
     initialCategories,
     categoriesResolved,
     initialPostsExpanded,
     initialShowAllCategories,
   } = useSidebar();
+  const isCollapsed = !expanded && desktopCollapsed;
   const [categories, setCategories] = useState<SidebarCategory[]>(initialCategories);
   const selectedCategoryId = pathname === "/posts" ? searchParams.get("category") : null;
-  const isAllPostsActive = pathname === "/posts" && !selectedCategoryId;
+  const isAllPostsActive = (pathname === "/posts" && !selectedCategoryId) || pathname.startsWith("/posts/");
   const [isPostsExpanded, setIsPostsExpanded] = useState(initialPostsExpanded || Boolean(selectedCategoryId));
   const [showAllCategories, setShowAllCategories] = useState(initialShowAllCategories);
   const categoryRefreshRef = useRef({ id: 0 });
+  const extraCategoriesId = useId();
 
   const refreshCategories = useCallback(async () => {
     const requestId = ++categoryRefreshRef.current.id;
@@ -151,13 +159,28 @@ export function SidebarContent() {
     };
   }, [categoriesResolved, refreshCategories]);
 
+  const renderCategory = (cat: SidebarCategory) => {
+    const isActive = selectedCategoryId === cat.id.toString();
+    return (
+      <Link
+        key={cat.id}
+        href={`/posts?category=${cat.id}`}
+        className={`sidebar-category-link${isActive ? " active" : ""}`}
+        aria-current={isActive ? "page" : undefined}
+      >
+        <span className="sidebar-category-name">{cat.name}</span>
+        <span className="sidebar-category-count">{cat.post_count}</span>
+      </Link>
+    );
+  };
+
   return (
-    <nav className="nav-menu">
+    <nav className="nav-menu" aria-label="Primary navigation">
       {/* Posts Playground */}
-      <Link href="/" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
+      <SidebarPageLink href="/" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
         <GridIcon className="nav-icon" style={{ color: "var(--accent-yellow)" }} />
         <span className="nav-item-label">Posts Playground</span>
-      </Link>
+      </SidebarPageLink>
 
       <div className="nav-group-title">Features</div>
 
@@ -197,85 +220,84 @@ export function SidebarContent() {
           inert={isCollapsed || !isPostsExpanded}
         >
           <div className="sidebar-categories-inner">
-            {categories.slice(0, showAllCategories ? categories.length : 3).map((cat) => {
-              const isActive = selectedCategoryId === cat.id.toString();
-              return (
-                <Link
-                  key={cat.id}
-                  href={`/posts?category=${cat.id}`}
-                  className={`sidebar-category-link${isActive ? " active" : ""}`}
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  <span className="sidebar-category-name">{cat.name}</span>
-                  <span className="sidebar-category-count">{cat.post_count}</span>
-                </Link>
-              );
-            })}
+            {categories.slice(0, 3).map(renderCategory)}
+            {categories.length > 3 && <div id={extraCategoriesId}
+              className="sidebar-categories-extra" data-expanded={showAllCategories}
+              inert={!showAllCategories} aria-hidden={!showAllCategories}>
+              <div className="sidebar-categories-extra-content">{categories.slice(3).map(renderCategory)}</div>
+            </div>}
 
             {categories.length > 3 && (
+              <div className="sidebar-categories-toggle" data-expanded={showAllCategories}>
               <button
                 type="button"
                 className="sidebar-categories-more"
+                aria-expanded={showAllCategories}
+                aria-controls={extraCategoriesId}
                 onClick={() => {
                   const next = !showAllCategories;
                   setShowAllCategories(next);
                   writePreference("sidebar_categories_all", next ? "true" : "false");
                 }}
               >
-                {showAllCategories ? "Less" : "More"}
+                <span className="sidebar-categories-more-label">{showAllCategories ? "Less" : "More"}</span>
+                <span className="sidebar-categories-more-icon" aria-hidden="true"><ChevronDownIcon size={14} /></span>
               </button>
+              </div>
             )}
           </div>
         </div>
       )}
 
       {/* Cloud Drive */}
-      <Link href="/drive" inert={isCollapsed} aria-hidden={isCollapsed} className={`nav-item hide-on-collapse nav-cloud-drive${!isCollapsed && isPostsExpanded ? " categories-expanded" : ""}`}>
+      <SidebarPageLink href="/drive" inert={isCollapsed} aria-hidden={isCollapsed} className={`nav-item hide-on-collapse nav-cloud-drive${!isCollapsed && isPostsExpanded ? " categories-expanded" : ""}`}>
         <CloudIcon className="nav-icon" style={{ color: "var(--accent-green)" }} />
         <span className="nav-item-label">Cloud Drive</span>
-      </Link>
+      </SidebarPageLink>
 
       {/* Content Editor */}
       {user?.role === "admin" && (
-        <Link href="/editor" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
+        <SidebarPageLink href="/editor" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
           <EditIcon className="nav-icon" style={{ color: "var(--accent-red)" }} />
           <span className="nav-item-label">Content Editor</span>
-        </Link>
+        </SidebarPageLink>
       )}
     </nav>
   );
 }
 
 // ─── Sidebar Footer ───────────────────────────────────────────────────────────
-export function SidebarFooter() {
+export function SidebarFooter({ expanded = false }: { expanded?: boolean } = {}) {
   const { user, authStatus } = useAuth();
-  const { isCollapsed } = useSidebar();
+  const { isCollapsed: desktopCollapsed } = useSidebar();
+  const isCollapsed = !expanded && desktopCollapsed;
 
   return (
     <div className="sidebar-footer">
       {/* Advanced Search */}
-      <Link href="/search" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
+      <SidebarPageLink href="/search" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
         <SearchIcon className="nav-icon" />
         <span className="nav-item-label">Advanced Search</span>
-      </Link>
+      </SidebarPageLink>
 
       {/* Login — above Settings, guest only */}
       {authStatus === "anonymous" && !user && (
-        <Link href="/login" className="nav-item" data-tooltip={isCollapsed ? "Login" : undefined}>
+        <SidebarPageLink href="/login" aria-label="Login" className="nav-item" data-tooltip={isCollapsed ? "Login" : undefined}>
           <LoginIcon className="nav-icon" />
           <span className="nav-item-label">Login</span>
-        </Link>
+        </SidebarPageLink>
       )}
 
       {user && (
-        <Link
+        <SidebarPageLink
           href="/settings"
+          aria-label={`Settings${user.role === "admin" ? " (Admin)" : ""}`}
           className="nav-item"
           data-tooltip={isCollapsed ? `Settings${user.role === "admin" ? " (Admin)" : ""}` : undefined}
         >
           <SettingsIcon className="nav-icon" />
           <span className="nav-item-label">Settings{user.role === "admin" && " (Admin)"}</span>
-        </Link>
+        </SidebarPageLink>
       )}
     </div>
   );

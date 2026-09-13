@@ -2,10 +2,10 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useScopeTransition } from "./use-scope-transition";
 
-interface Value { scope: string; error: string; title: string }
+interface Value { scope: string; error: string; title: string; query?: string; searched?: boolean }
 const initial: Value = { scope: "all", error: "", title: "Original results" };
-function Probe({ value = initial, scope = "all", pending = false }: { value?: Value; scope?: string; pending?: boolean }) {
-  const { displayed, ref, changing } = useScopeTransition(value, scope, pending);
+function Probe({ value = initial, scope = "all", pending = false, query = "" }: { value?: Value; scope?: string; pending?: boolean; query?: string }) {
+  const { displayed, ref, changing } = useScopeTransition(value, scope, pending, { query });
   return <section ref={ref} inert={changing} style={{ opacity: 1 }}>{displayed.error || displayed.title}</section>;
 }
 
@@ -41,6 +41,39 @@ describe("search scope presentation", () => {
     view.unmount();
     act(() => obsolete.onfinish?.());
     expect(screen.queryByText(posts.title)).not.toBeInTheDocument();
+  });
+
+  it("reveals first results immediately with only an entrance animation", () => {
+    const animate = vi.spyOn(Element.prototype, "animate").mockReturnValue({ cancel: vi.fn() } as unknown as Animation);
+    const view = render(<Probe value={{ ...initial, searched: false }} />);
+    view.rerender(<Probe value={{ ...initial, query: "first", searched: true, title: "First matches" }} query="first" />);
+    expect(screen.getByText("First matches")).not.toHaveAttribute("inert");
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(animate.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ opacity: "0" }), expect.objectContaining({ opacity: 1 }),
+    ]);
+  });
+
+  it("retains the previous keyword until its exit finishes and ignores superseded callbacks", () => {
+    const animations: { cancel: ReturnType<typeof vi.fn>; onfinish: (() => void) | null }[] = [];
+    vi.spyOn(Element.prototype, "animate").mockImplementation(() => {
+      const animation = { cancel: vi.fn(), onfinish: null as (() => void) | null };
+      animations.push(animation);
+      return animation as unknown as Animation;
+    });
+    const view = render(<Probe />);
+    const first = { ...initial, query: "first", title: "First matches" };
+    view.rerender(<Probe query="first" pending />);
+    expect(screen.getByText(initial.title)).toHaveAttribute("inert");
+    view.rerender(<Probe value={first} query="first" />);
+    const stale = animations.at(-1)!;
+    expect(screen.queryByText(first.title)).not.toBeInTheDocument();
+    view.rerender(<Probe value={first} query="latest" pending />);
+    act(() => stale.onfinish?.());
+    expect(screen.queryByText(first.title)).not.toBeInTheDocument();
+    view.rerender(<Probe value={{ ...initial, query: "latest", title: "Latest matches" }} query="latest" />);
+    act(() => animations.at(-1)!.onfinish?.());
+    expect(screen.getByText("Latest matches")).not.toHaveAttribute("inert");
   });
 
   it("keeps failures recoverable when their response snapshot still has the previous scope", () => {

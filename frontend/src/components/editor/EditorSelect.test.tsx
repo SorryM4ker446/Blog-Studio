@@ -29,7 +29,7 @@ describe("EditorSelect", () => {
     const trigger = screen.getByRole("combobox", { name: "Publication status" });
     expect(trigger).toHaveClass("custom-select-trigger");
     await user.click(trigger);
-    expect(screen.getByRole("listbox", { name: "Publication status" })).toHaveClass("custom-select-options");
+    expect(screen.getByRole("listbox", { name: "Publication status" })).toHaveClass("custom-select-list");
     await user.click(screen.getByRole("option", { name: "Published" }));
 
     expect(onChange).toHaveBeenCalledWith("published");

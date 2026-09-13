@@ -1,5 +1,7 @@
 "use client";
 
+import { useModalIsolation } from "@/lib/use-modal-isolation";
+
 import React, { useEffect, useId, useRef } from "react";
 
 interface ConfirmModalProps {
@@ -25,7 +27,10 @@ export default function ConfirmModal({
 }: ConfirmModalProps) {
   const titleId = useId();
   const descriptionId = useId();
+  const cancelRef = useRef(onCancel);
+  useEffect(() => { cancelRef.current = onCancel; }, [onCancel]);
   const panelRef = useRef<HTMLDivElement>(null);
+  useModalIsolation(panelRef, isOpen);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -43,7 +48,7 @@ export default function ConfirmModal({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onCancel();
+        cancelRef.current();
         return;
       }
       if (event.key !== "Tab" || !panelRef.current) return;
@@ -63,9 +68,9 @@ export default function ConfirmModal({
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
-      previousFocus?.focus();
+      previousFocus?.focus({ preventScroll: true });
     };
-  }, [isOpen, onCancel]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

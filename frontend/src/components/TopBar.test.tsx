@@ -16,7 +16,7 @@ describe("TopBar theme action", () => {
     localStorage.clear();
   });
 
-  it("places an accessible theme toggle between refresh and more actions", async () => {
+  it("provides working refresh and accessible theme actions", async () => {
     const user = userEvent.setup();
     localStorage.setItem("blog_theme", "dark");
     render(<ThemeProvider initialTheme="dark"><TopBar /></ThemeProvider>);
@@ -24,7 +24,6 @@ describe("TopBar theme action", () => {
     expect(screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
       "Refresh page",
       "Switch to Light Mode",
-      "More options",
     ]);
 
     await user.click(screen.getByRole("button", { name: "Switch to Light Mode" }));

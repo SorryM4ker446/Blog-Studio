@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useSidebar, SidebarContent, SidebarFooter } from "./Providers";
 import TopBar from "./TopBar";
+import MobileNavigation from "./MobileNavigation";
 import { TriangleIcon, StudioLogo } from "./Icons";
 import { createSidebarLayoutMotion } from "@/lib/sidebar-layout-motion";
 
@@ -53,6 +54,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const contentScrollRef = useRef<HTMLDivElement>(null);
+  const previousPathRef = useRef(pathname);
+  const mainRef = useRef<HTMLElement>(null);
   const sidebarMotionRef = useRef<ReturnType<typeof createSidebarLayoutMotion> | null>(null);
   const historyTraversalRef = useRef(false);
   const navigationStartedRef = useRef(false);
@@ -86,7 +89,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     navigationStartedRef.current = false;
+    const pathChanged = previousPathRef.current !== pathname;
+    previousPathRef.current = pathname;
     if (!historyTraversalRef.current) {
+      if (pathChanged && !(document.activeElement instanceof HTMLInputElement) && !(document.activeElement instanceof HTMLTextAreaElement)) {
+        mainRef.current?.focus({ preventScroll: true });
+      }
       restorationInProgressRef.current = false;
       return;
     }
@@ -125,7 +133,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (restoreFrame) window.cancelAnimationFrame(restoreFrame);
       restorationInProgressRef.current = false;
     };
-  }, [scrollStorageKey]);
+  }, [scrollStorageKey, pathname]);
 
   useEffect(() => () => {
     if (scrollSaveFrameRef.current) window.cancelAnimationFrame(scrollSaveFrameRef.current);
@@ -169,7 +177,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     }
 
     const destination = new URL(link.href, window.location.href);
-    if (destination.origin !== window.location.origin) {
+    if (destination.origin !== window.location.origin
+      || (destination.pathname === window.location.pathname && destination.search === window.location.search)) {
       return;
     }
 
@@ -181,6 +190,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="app-container" onClickCapture={rememberContentScroll}>
+      <a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); mainRef.current?.focus({ preventScroll: true }); }}>Skip to main content</a>
       {/* 左侧导航栏 */}
       <aside className={`sidebar ${isCollapsed ? "collapsed" : ""}`}>
         {/* Header: logo text animates out via CSS, toggle always visible */}
@@ -206,8 +216,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       </aside>
 
       {/* 右侧主内容区 */}
-      <main className="main-content">
-        <TopBar />
+      <main ref={mainRef} id="main-content" tabIndex={-1} className="main-content">
+        <TopBar navigation={<MobileNavigation />} />
         <div className="content-scroll" ref={contentScrollRef} onScroll={handleContentScroll}>
           <RouteTransitionContent routeKey={routeKey}>
             {children}

@@ -82,7 +82,7 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("loading")).toHaveTextContent("false");
     expect(screen.getByTestId("profile-name")).toHaveTextContent("Ada");
     expect(screen.getByTestId("profile-loading")).toHaveTextContent("false");
-    expect(screen.getByRole("img", { name: "avatar" })).toHaveAttribute(
+    expect(screen.getByRole("img", { name: "Ada avatar" })).toHaveAttribute(
       "src",
       "http://localhost:8080/api/files/7/view",
     );

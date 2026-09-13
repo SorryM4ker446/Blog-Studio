@@ -62,7 +62,7 @@ export default function HomePageClient({
 
       {/* 网格四象限卡片 */}
       <div className="card-grid">
-        <div className="ai-card">
+        <div className="ai-card static-card">
           <div className="card-header">
             <div className="card-icon" style={{ backgroundColor: "rgba(251, 210, 132, 0.15)", color: "var(--accent-yellow)" }}>
               <StarIcon size={18} />
@@ -74,7 +74,7 @@ export default function HomePageClient({
           </p>
         </div>
 
-        <div className="ai-card">
+        <div className="ai-card static-card">
           <div className="card-header">
             <div className="card-icon" style={{ backgroundColor: "rgba(168, 199, 250, 0.15)", color: "var(--accent-blue)" }}>
               <GridIcon size={18} />
@@ -86,7 +86,7 @@ export default function HomePageClient({
           </p>
         </div>
 
-        <div className="ai-card">
+        <div className="ai-card static-card">
           <div className="card-header">
             <div className="card-icon" style={{ backgroundColor: "rgba(109, 214, 140, 0.15)", color: "var(--accent-green)" }}>
               <LayoutIcon size={18} />
@@ -98,7 +98,7 @@ export default function HomePageClient({
           </p>
         </div>
 
-        <div className="ai-card">
+        <div className="ai-card static-card">
           <div className="card-header">
             <div className="card-icon" style={{ backgroundColor: "rgba(242, 139, 130, 0.15)", color: "var(--accent-red)" }}>
               <ZapIcon size={18} />
@@ -213,6 +213,7 @@ export default function HomePageClient({
             placeholder="Search articles or type a prompt to explore my writings..."
             style={{
               flex: 1,
+              minWidth: 0,
               background: "transparent",
               border: "none",
               color: "var(--text-primary)",

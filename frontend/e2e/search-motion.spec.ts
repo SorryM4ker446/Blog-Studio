@@ -38,6 +38,8 @@ for (const theme of ["dark", "light"]) {
     const previous = posts.getByRole("button", { name: "Previous page", includeHidden: true });
     await expect(posts.locator('a[href^="/posts/"]')).toHaveCount(10);
     await expect(next).toBeEnabled();
+    await expect.poll(() => page.locator('section[aria-label="Search results"]')
+      .evaluate(section => section.getAnimations().length)).toBe(0);
     const card = await posts.locator(".ai-card").first().boundingBox();
     expect((await previous.boundingBox())!.x + (await previous.boundingBox())!.width).toBeLessThan(card!.x);
     expect((await next.boundingBox())!.x).toBeGreaterThan(card!.x + card!.width);
@@ -47,6 +49,9 @@ for (const theme of ["dark", "light"]) {
     });
     gate = new Promise(resolve => { release = resolve; });
     await page.getByRole("combobox", { name: "Search scope" }).click();
+    // Wait for the popup entrance before clicking so retry scroll alignment cannot move the page.
+    await expect.poll(() => page.getByRole("listbox", { name: "Search scope" })
+      .evaluate(menu => menu.parentElement!.getAnimations().length)).toBe(0);
     await page.getByRole("option", { name: "Posts", exact: true }).click();
     await expect(next).toBeDisabled();
     await expect(next).toHaveAttribute("data-stable-control", "original");

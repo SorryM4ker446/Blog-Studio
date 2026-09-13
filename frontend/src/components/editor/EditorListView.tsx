@@ -67,7 +67,7 @@ function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onVie
             </span>
           </span>
           <span className="editor-post-summary">
-            {post.summary || <span style={{ opacity: 0.5 }}>No introduction provided.</span>}
+            {post.summary || <span>No introduction provided.</span>}
           </span>
         </div>
         <button
@@ -115,11 +115,18 @@ export default function EditorListView(props: EditorListViewProps) {
       </header>
 
       <div className="editor-list-toolbar">
-        <div role="tablist" aria-label="Editor resources" className="editor-tabs">
+        <div role="tablist" aria-label="Editor resources" className="editor-tabs" onKeyDown={event => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const tab = event.key === "Home" ? "posts" : event.key === "End" ? "files" : props.activeTab === "posts" ? "files" : "posts";
+          props.onTabChange(tab);
+          document.getElementById(`editor-${tab}-tab`)?.focus({ preventScroll: true });
+        }}>
           <button
             type="button"
             role="tab"
             id="editor-posts-tab"
+            tabIndex={props.activeTab === "posts" ? 0 : -1}
             aria-controls="editor-resource-panel"
             aria-selected={props.activeTab === "posts"}
             className={props.activeTab === "posts" ? "editor-tab editor-tab-active" : "editor-tab"}
@@ -131,6 +138,7 @@ export default function EditorListView(props: EditorListViewProps) {
             type="button"
             role="tab"
             id="editor-files-tab"
+            tabIndex={props.activeTab === "files" ? 0 : -1}
             aria-controls="editor-resource-panel"
             aria-selected={props.activeTab === "files"}
             className={props.activeTab === "files" ? "editor-tab editor-tab-active" : "editor-tab"}
@@ -163,6 +171,7 @@ export default function EditorListView(props: EditorListViewProps) {
       <section
         id="editor-resource-panel"
         role="tabpanel"
+        tabIndex={0}
         aria-labelledby={`editor-${props.activeTab}-tab`}
         aria-busy={loading}
         className="editor-resource-panel"
