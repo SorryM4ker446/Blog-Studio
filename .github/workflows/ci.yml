@@ -160,8 +160,8 @@ jobs:
         working-directory: frontend
       - run: npm run test:e2e
         working-directory: frontend
-      - name: Upload Playwright failure artifacts
-        if: failure()
+      - name: Upload Playwright and accessibility reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report

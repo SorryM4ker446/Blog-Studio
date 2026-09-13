@@ -13,6 +13,15 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => navigationState.searchParams,
 }));
 
+vi.mock("@/lib/search-query", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/search-query")>();
+  return { ...actual, writeSearchQuery: (...args: Parameters<typeof actual.writeSearchQuery>) => {
+    actual.writeSearchQuery(...args);
+    const next = new URLSearchParams(window.location.search);
+    if (next.toString() !== navigationState.searchParams.toString()) navigationState.searchParams = next;
+  } };
+});
+
 vi.mock("@/lib/api", () => ({
   getApiErrorMessage: () => "Search failed",
   getDownloadUrl: () => "/download",

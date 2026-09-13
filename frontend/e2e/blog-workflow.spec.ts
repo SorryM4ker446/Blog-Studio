@@ -97,10 +97,9 @@ test("sidebar page links use a shared content transition", async ({ page }) => {
   await expect(page.getByRole("link", { name: /Settings/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Login" })).toBeVisible();
   const topBarActions = page.locator(".top-bar-actions > button");
-  await expect(topBarActions).toHaveCount(3);
+  await expect(topBarActions).toHaveCount(2);
   await expect(topBarActions.nth(0)).toHaveAccessibleName("Refresh page");
   await expect(topBarActions.nth(1)).toHaveAccessibleName("Switch to Light Mode");
-  await expect(topBarActions.nth(2)).toHaveAccessibleName("More options");
   await topBarActions.nth(1).click();
   await expect(page.locator("html")).toHaveClass(/theme-light/);
   await page.reload();
@@ -432,7 +431,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   const saveDetailsButton = editDialog.getByRole("button", { name: "Save changes" });
   await expect(editDialog).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(displayNameInput).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  await expect(saveDetailsButton).toHaveCSS("background-color", "rgb(26, 115, 232)");
+  await expect(saveDetailsButton).toHaveCSS("background-color", "rgb(23, 101, 204)");
   await expect(saveDetailsButton).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(displayNameInput).toBeFocused();
   await displayNameInput.fill(updatedDisplayName);

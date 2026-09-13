@@ -2,13 +2,24 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 
-// Keep the outgoing results until the current scope's response is ready.
-export function useScopeTransition<T extends { scope: string; error: string }>(value: T, scope: string, pending: boolean) {
-  const [displayed, setDisplayed] = useState(value);
+type Criteria = { scope: string; query?: string; categoryId?: string };
+const criteriaKey = (value: Criteria) => JSON.stringify([value.scope, value.query ?? "", value.categoryId ?? ""]);
+
+// Retain outgoing content until the requested search criteria have a response.
+export function useScopeTransition<T extends Criteria & { error: string; searched?: boolean }>(value: T, scope: string, pending: boolean, criteria?: Omit<Criteria, "scope">) {
+  const targetKey = criteriaKey({ ...criteria, scope });
+  const valueKey = criteriaKey(value);
+  const [snapshot, setSnapshot] = useState({ value, key: valueKey, initialEntry: false });
+  const displayed = snapshot.value;
+  const hasOutgoingResults = displayed.searched !== false;
   const ref = useRef<HTMLElement>(null);
   const entering = useRef(false);
-  const changing = displayed.scope !== scope;
-  if (!changing && value.scope === scope && displayed !== value) setDisplayed(value);
+  const changing = snapshot.key !== targetKey;
+  if (!changing && valueKey === targetKey && displayed !== value) setSnapshot({ value, key: valueKey, initialEntry: false });
+
+  if (!hasOutgoingResults && changing && !pending && (valueKey === targetKey || value.error)) {
+    setSnapshot({ value, key: targetKey, initialEntry: true });
+  }
 
   useLayoutEffect(() => {
     const node = ref.current;
@@ -29,18 +40,18 @@ export function useScopeTransition<T extends { scope: string; error: string }>(v
       animation.onfinish = () => { if (!cancelled) done?.(); };
     }
     if (!changing) {
-      if (entering.current) {
+      if (entering.current || snapshot.initialEntry) {
         entering.current = false;
         node.style.opacity = "0";
         node.style.transform = "translateY(8px)";
       }
       fade(1, "none", 280, "cubic-bezier(.22, 1, .36, 1)");
-    } else if (pending || (value.scope !== scope && !value.error)) {
+    } else if (pending || (valueKey !== targetKey && !value.error)) {
       fade(1, "none", 180, "ease-out");
     } else {
       fade(0, "translateY(-6px)", 160, "cubic-bezier(.4, 0, 1, 1)", () => {
         entering.current = true;
-        setDisplayed({ ...value, scope });
+        setSnapshot({ value: { ...value, scope }, key: targetKey, initialEntry: false });
       });
     }
     return () => {
@@ -51,7 +62,7 @@ export function useScopeTransition<T extends { scope: string; error: string }>(v
         animation.cancel();
       }
     };
-  }, [value, scope, pending, changing]);
+  }, [value, scope, pending, changing, targetKey, valueKey, snapshot.initialEntry]);
 
   return { displayed, ref, changing };
 }

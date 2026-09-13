@@ -13,7 +13,7 @@ import CategoryField from "@/components/editor/CategoryField";
 import type { PostAction } from "@/lib/post-editor";
 import "react-markdown-editor-lite/lib/index.css";
 
-const MdEditor = dynamic(() => import("react-markdown-editor-lite"), { ssr: false });
+const MdEditor = dynamic(() => import("./MarkdownEditor"), { ssr: false });
 
 let mdParser: { render: (text: string) => string } | null = null;
 if (typeof window !== "undefined") {
@@ -183,18 +183,19 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </fieldset>
 
         <div>
-          <div id="post-content-label" style={labelStyle}>CONTENT (MARKDOWN) · REQUIRED</div>
+          <label htmlFor="post-markdown_md" id="post-content-label" style={labelStyle}>CONTENT (MARKDOWN) · REQUIRED</label>
           {mdParser && (
             <div
               className="custom-editor-wrapper"
               role="group"
-              aria-labelledby="post-content-label"
+              aria-label="Markdown editor"
               aria-describedby={failed ? "post-save-message" : undefined}
             >
               <MdEditor
+                id="post-markdown"
                 value={props.content}
                 readOnly={props.saving}
-                style={{ height: "calc(100vh - 450px)", minHeight: "450px", borderRadius: "12px", border: "1px solid var(--border-color)" }}
+                style={{ height: "calc(100dvh - 450px)", minHeight: "450px", borderRadius: "12px", border: "1px solid var(--border-color)" }}
                 renderHTML={(text: string) => mdParser!.render(normalizeMarkdownFileUrls(text))}
                 onChange={({ text }: { text: string }) => { if (!props.saving) props.onContentChange(text); }}
                 onImageUpload={props.onImageUpload}

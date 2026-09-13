@@ -36,6 +36,23 @@ describe("ClientLayout route transitions", () => {
     window.history.replaceState({}, "", "/");
   });
 
+  it("focuses main content for a new path while preserving focus on query changes and history", () => {
+    const view = render(<ClientLayout><button>Keep focus</button></ClientLayout>);
+    const button = screen.getByRole("button", { name: "Keep focus" });
+    button.focus();
+    navigationState.pathname = "/posts";
+    view.rerender(<ClientLayout><button>Keep focus</button></ClientLayout>);
+    expect(screen.getByRole("main")).toHaveFocus();
+    screen.getByRole("button", { name: "Keep focus" }).focus();
+    navigationState.searchParams = new URLSearchParams("q=example");
+    view.rerender(<ClientLayout><button>Keep focus</button></ClientLayout>);
+    expect(screen.getByRole("button", { name: "Keep focus" })).toHaveFocus();
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigationState.pathname = "/drive";
+    view.rerender(<ClientLayout><button>Keep focus</button></ClientLayout>);
+    expect(screen.getByRole("main")).not.toHaveFocus();
+  });
+
   it("animates client route changes without animating the initial page", () => {
     const view = render(<ClientLayout><p>Home</p></ClientLayout>);
     let frame = screen.getByText("Home").parentElement!;
@@ -85,6 +102,16 @@ describe("ClientLayout route transitions", () => {
     const storedKey = Object.keys(window.sessionStorage).find((key) => key.startsWith("blogStudio:contentScroll:"));
     expect(storedKey).toBe("blogStudio:contentScroll:%2F");
     expect(window.sessionStorage.getItem(storedKey!)).toBe("640");
+  });
+
+  it("keeps recording scroll after the skip link focuses main content without navigation", async () => {
+    render(<ClientLayout><p>Contents</p></ClientLayout>);
+    fireEvent.click(screen.getByRole("link", { name: "Skip to main content" }));
+    expect(screen.getByRole("main")).toHaveFocus();
+    const content = document.querySelector<HTMLElement>(".content-scroll")!;
+    content.scrollTop = 140;
+    fireEvent.scroll(content);
+    await waitFor(() => expect(window.sessionStorage.getItem("blogStudio:contentScroll:%2F")).toBe("140"));
   });
 
   it("restores the inner content position recorded on a history entry", async () => {

@@ -11,10 +11,10 @@
 
 .dialog {
   width: min(620px, 100%);
-  max-height: min(820px, calc(100vh - 48px));
+  max-height: min(820px, calc(100dvh - 48px));
   overflow: auto;
   color: var(--text-primary);
-  color-scheme: dark;
+  color-scheme: inherit;
   background: var(--file-dialog-bg);
   border: 1px solid color-mix(in srgb, var(--border-color) 88%, var(--text-primary));
   border-radius: 16px;
@@ -424,3 +424,5 @@
     grid-column: auto;
   }
 }
+
+.dialog { overflow-wrap: anywhere; }

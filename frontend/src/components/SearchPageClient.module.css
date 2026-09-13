@@ -2,11 +2,22 @@
   animation: category-enter 220ms cubic-bezier(.22, 1, .36, 1);
 }
 
+.pending {
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+
+.pendingLabel { animation: pending-enter 160ms ease-out; }
+@keyframes pending-enter { from { opacity: 0; } to { opacity: 1; } }
+
 @keyframes category-enter {
   from { opacity: 0; transform: translateX(-10px); }
   to { opacity: 1; transform: translateX(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .categoryReveal { animation: none; }
+  .categoryReveal, .pendingLabel { animation: none; }
 }

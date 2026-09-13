@@ -51,11 +51,13 @@ export default function EditorSelect<T extends SelectValue>({
   const [saving, setSaving] = useState(false);
   const selectedOption = options.find((option) => option.value === value);
   const menuOpen = open && !disabled;
+  const managedOption = options.find(option => option.value === editingValue) ?? options[highlightedIndex];
+  const manageable = Boolean(managedOption && (onRenameOption || onDeleteOption) && isOptionManageable(managedOption));
 
   useEffect(() => {
     if (!open || disabled) return;
-    const menu = menuRef.current;
-    const option = menu?.children[highlightedIndex] as HTMLElement | undefined;
+    const menu = menuRef.current?.parentElement;
+    const option = menuRef.current?.children[highlightedIndex] as HTMLElement | undefined;
     if (!menu || !option) return;
     const top = option.offsetTop;
     const bottom = top + option.offsetHeight;
@@ -93,7 +95,7 @@ export default function EditorSelect<T extends SelectValue>({
     onChange(option.value);
     setHighlightedIndex(index);
     closeMenu();
-    triggerRef.current?.focus();
+    triggerRef.current?.focus({ preventScroll: true });
   }
 
   function startRename(option: EditorSelectOption<T>) {
@@ -121,6 +123,7 @@ export default function EditorSelect<T extends SelectValue>({
       }
       setEditingValue(null);
       setEditName("");
+      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
     } catch {
       setManagementError("Failed to rename category.");
     } finally {
@@ -162,11 +165,17 @@ export default function EditorSelect<T extends SelectValue>({
       closeMenu();
       return;
     }
-    if (event.key === "Tab") closeMenu();
+    if (event.key === "Tab" && (!manageable || event.shiftKey)) closeMenu();
   }
 
   return (
-    <div className="custom-select-container" ref={containerRef} style={{ width }}>
+    <div className="custom-select-container" ref={containerRef} style={{ width }}
+      onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeMenu(); }}
+      onKeyDown={event => {
+        if (event.key === "Escape" && editingValue === null) {
+          event.preventDefault(); closeMenu(); triggerRef.current?.focus({ preventScroll: true });
+        }
+      }}>
       <button
         ref={triggerRef}
         type="button"
@@ -185,104 +194,45 @@ export default function EditorSelect<T extends SelectValue>({
         <span className="custom-select-arrow" aria-hidden="true"><ChevronDownIcon size={16} /></span>
       </button>
 
-      <ul
-        ref={menuRef}
-        id={listboxId}
-        role="listbox"
-        aria-label={ariaLabel}
-        aria-hidden={!menuOpen}
-        inert={!menuOpen}
-        data-open={menuOpen}
-        className="custom-select-options"
-      >
-        {options.map((option, index) => {
-          const manageable = Boolean((onRenameOption || onDeleteOption) && isOptionManageable(option));
-          const editing = editingValue === option.value;
-          return (
-            <li
-              id={`${listboxId}-option-${index}`}
-              key={String(option.value)}
-              role="option"
-              aria-selected={option.value === value}
-              aria-busy={editing && saving}
-              className={`custom-select-option${option.value === value ? " active" : ""}${index === highlightedIndex ? " highlighted" : ""}`}
-              onPointerMove={() => setHighlightedIndex(index)}
-              onClick={() => choose(index)}
-            >
-              {editing ? (
-                <div className="custom-select-rename" onClick={(event) => event.stopPropagation()}>
-                  <label htmlFor={`${listboxId}-rename`} className="sr-only">New category name</label>
-                  <input
-                    id={`${listboxId}-rename`}
-                    autoFocus
-                    value={editName}
-                    readOnly={saving}
-                    maxLength={255}
-                    aria-invalid={Boolean(managementError)}
-                    onChange={(event) => setEditName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void submitRename();
-                      }
-                      if (event.key === "Escape" && !saving) {
-                        event.preventDefault();
-                        setEditingValue(null);
-                        setManagementError("");
-                        triggerRef.current?.focus();
-                      }
-                    }}
-                  />
-                  <button type="button" onClick={() => void submitRename()} disabled={saving} aria-label={`Save ${option.label} rename`}>✓</button>
-                  <button
-                    type="button"
-                    disabled={saving}
-                    aria-label="Cancel rename"
-                    onClick={() => {
-                      setEditingValue(null);
-                      setManagementError("");
-                      triggerRef.current?.focus();
-                    }}
-                  >
-                    ×
-                  </button>
-                  {managementError && <span role="alert" className="custom-select-option-error">{managementError}</span>}
-                </div>
-              ) : (
-                <>
-                  <span className="custom-select-check" aria-hidden="true">
-                    {option.value === value && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6" /></svg>}
-                  </span>
-                  <span className="custom-select-option-label">{option.label}</span>
-                  {manageable && (
-                    <span className="custom-select-option-actions" onClick={(event) => event.stopPropagation()}>
-                      {onRenameOption && (
-                        <button type="button" onClick={() => startRename(option)} aria-label={`Rename ${option.label}`} title="Rename category">
-                          <EditIcon size={14} />
-                        </button>
-                      )}
-                      {onDeleteOption && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            closeMenu();
-                            onDeleteOption(option.value);
-                          }}
-                          aria-label={`Delete ${option.label}`}
-                          title="Delete category"
-                          className="custom-select-option-delete"
-                        >
-                          <TrashIcon size={14} />
-                        </button>
-                      )}
-                    </span>
-                  )}
-                </>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <div className="custom-select-options" data-open={menuOpen} aria-hidden={!menuOpen} inert={!menuOpen}
+        onMouseDown={event => { if (!(event.target as HTMLElement).closest("button, input")) event.preventDefault(); }}>
+        <ul ref={menuRef} id={listboxId} role="listbox" aria-label={ariaLabel} className="custom-select-list">
+          {options.map((option, index) => <li
+            id={`${listboxId}-option-${index}`} key={String(option.value)} role="option"
+            aria-selected={option.value === value}
+            className={`custom-select-option${option.value === value ? " active" : ""}${index === highlightedIndex ? " highlighted" : ""}`}
+            onPointerMove={() => { if (editingValue === null) setHighlightedIndex(index); }} onClick={() => choose(index)}>
+            <span className="custom-select-check" aria-hidden="true">{option.value === value ? "✓" : ""}</span>
+            <span className="custom-select-option-label">{option.label}</span>
+          </li>)}
+        </ul>
+        {manageable && managedOption && <div className="custom-select-management" role="group" aria-label={`Manage ${managedOption.label}`}>
+          {editingValue !== null ? <div className="custom-select-rename">
+            <label htmlFor={`${listboxId}-rename`} className="sr-only">New category name</label>
+            <input id={`${listboxId}-rename`} autoFocus value={editName} readOnly={saving} maxLength={255}
+              aria-invalid={Boolean(managementError)} onChange={event => setEditName(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") { event.preventDefault(); void submitRename(); }
+                if (event.key === "Escape" && !saving) {
+                  event.preventDefault(); event.stopPropagation(); setEditingValue(null); setManagementError(""); triggerRef.current?.focus({ preventScroll: true });
+                }
+              }} />
+            <button type="button" disabled={saving} onClick={() => void submitRename()} aria-label={`Save ${managedOption.label} rename`}>✓</button>
+            <button type="button" disabled={saving} aria-label="Cancel rename" onClick={() => {
+              setEditingValue(null); setManagementError(""); triggerRef.current?.focus({ preventScroll: true });
+            }}>×</button>
+            {managementError && <span role="alert" className="custom-select-option-error">{managementError}</span>}
+          </div> : <>
+            <span className="custom-select-option-label">{managedOption.label}</span>
+            <span className="custom-select-option-actions">
+              {onRenameOption && <button type="button" onClick={() => startRename(managedOption)} aria-label={`Rename ${managedOption.label}`} title="Rename category"><EditIcon size={14} /></button>}
+              {onDeleteOption && <button type="button" onClick={() => {
+                closeMenu(); triggerRef.current?.focus({ preventScroll: true }); onDeleteOption(managedOption.value);
+              }} aria-label={`Delete ${managedOption.label}`} title="Delete category" className="custom-select-option-delete"><TrashIcon size={14} /></button>}
+            </span>
+          </>}
+        </div>}
+      </div>
     </div>
   );
 }

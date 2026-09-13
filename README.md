@@ -51,6 +51,8 @@ go run ./cmd/seed
 
 主题与侧栏偏好统一由 Cookie 持久化，服务端首屏与客户端使用相同初值；旧 localStorage 偏好不再读写。日期统一按北京时间显示，避免服务端与浏览器地区差异造成首屏不匹配。存储受限时仍可切换当前页面，刷新后的保留边界及日期规则见 [外观偏好说明](docs/preferences.md)。
 
+小屏导航使用独立抽屉，不改写桌面侧栏偏好；布局、键盘操作、减少动态效果与正文图片懒加载规则见 [移动端与无障碍说明](docs/accessibility.md)。
+
 ## 4. 生产部署
 
 推荐的生产基线是单台 Linux 主机上的 Docker Compose：Caddy 提供同源 HTTPS 入口，Next.js 与 Go API 使用非 root 多阶段镜像，PostgreSQL、上传内容和证书状态使用独立持久化卷。首次部署、Secret 准备、升级和回滚步骤请参阅 [`docs/deployment.md`](docs/deployment.md)。这些文件不会改变上述原生本地开发方式。

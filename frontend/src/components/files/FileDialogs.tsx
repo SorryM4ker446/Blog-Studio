@@ -1,5 +1,7 @@
 "use client";
 
+import { useModalIsolation } from "@/lib/use-modal-isolation";
+
 import { formatDateTime } from "@/lib/display-date";
 
 import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
@@ -32,6 +34,7 @@ interface DialogShellProps {
 function DialogShell({ open, title, eyebrow, subtitle, wide, busy, onClose, children, footer }: DialogShellProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  useModalIsolation(panelRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -45,7 +48,7 @@ function DialogShell({ open, title, eyebrow, subtitle, wide, busy, onClose, chil
     });
     return () => {
       window.cancelAnimationFrame(frame);
-      previousFocus?.focus();
+      previousFocus?.focus({ preventScroll: true });
     };
   }, [open]);
 

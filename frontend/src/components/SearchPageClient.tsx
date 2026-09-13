@@ -20,7 +20,8 @@ import {
   FileTextIcon, 
   FolderIcon
 } from "@/components/Icons";
-import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
+import { ErrorState } from "@/components/ui/AsyncState";
+import SearchPending from "./SearchPending";
 import EditorSelect from "@/components/editor/EditorSelect";
 import styles from "./SearchPageClient.module.css";
 
@@ -43,7 +44,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
     return { ...result, categories, searched: Boolean(target.query), error: "" };
   }, []);
   const { state, loading, run, retry } = useSearchPage(initialState, targetQuery, load);
-  const { displayed, ref: resultsRef, changing: changingScope } = useScopeTransition(state, targetQuery.scope, loading);
+  const { displayed, ref: resultsRef, changing: changingScope } = useScopeTransition(state, targetQuery.scope, loading, targetQuery);
   const { posts, files, searched, error, postsTotal, filesTotal, postPage, filePage, postTotalPages, fileTotalPages } = displayed;
   const { categories } = state;
   const visibleCategories = useMemo(
@@ -160,7 +161,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
           />
         </div>}
       </div>
-      <section ref={resultsRef} aria-label="Search results" aria-busy={loading || changingScope} inert={changingScope}>
+      <section ref={resultsRef} aria-label="Search results" aria-busy={loading || changingScope} inert={changingScope && (searched || Boolean(error))}>
       {error && (
         <ErrorState
           title="Search unavailable"
@@ -170,8 +171,8 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
         />
       )}
 
-      {!error && loading && !searched && targetQuery.query && (
-        <LoadingState label="Searching posts and files…" rows={2} />
+      {!error && (loading || changingScope) && !searched && targetQuery.query && (
+        <SearchPending />
       )}
 
       {!error && searched && (
@@ -196,7 +197,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
               </div>
             </div>
             <PaginatedResults page={postPage} totalPages={postTotalPages} pending={loading} edgeArrows
-              transitionGroup={displayed.scope}
+              transitionGroup={JSON.stringify([displayed.scope, displayed.query, displayed.categoryId])}
               resultKey={JSON.stringify([displayed.query, displayed.categoryId, postPage])} onPageChange={(next) => navigate({ ...targetQuery, postPage: next })}>
             {posts.length === 0 ? (
               <div
@@ -286,7 +287,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
               </div>
             </div>
             <PaginatedResults page={filePage} totalPages={fileTotalPages} pending={loading} edgeArrows
-              transitionGroup={displayed.scope}
+              transitionGroup={JSON.stringify([displayed.scope, displayed.query, displayed.categoryId])}
               resultKey={JSON.stringify([displayed.query, filePage])} onPageChange={(next) => navigate({ ...targetQuery, filePage: next })}>
             {files.length === 0 ? (
               <div
@@ -325,7 +326,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
         </div>
       )}
 
-      {!error && !searched && (!loading || !targetQuery.query) && (
+      {!error && !searched && (!(loading || changingScope) || !targetQuery.query) && (
         <div
           style={{
             display: "flex",

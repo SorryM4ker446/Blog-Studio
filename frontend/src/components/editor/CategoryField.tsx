@@ -30,6 +30,7 @@ export default function CategoryField({ categories, value, loading = false, onCh
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const createRef = useRef<HTMLButtonElement>(null);
   const savingRef = useRef(false);
 
   useEffect(() => {
@@ -62,6 +63,7 @@ export default function CategoryField({ categories, value, loading = false, onCh
     }
     setMode("idle");
     setName("");
+    requestAnimationFrame(() => createRef.current?.focus());
   }
 
   return (
@@ -82,7 +84,7 @@ export default function CategoryField({ categories, value, loading = false, onCh
             isOptionManageable={(option) => option.value !== 0}
           />
         </div>
-        <button type="button" onClick={startCreate} disabled={loading || saving || mode !== "idle"} aria-label="Create category" title="Create category" className="editor-icon-button">+</button>
+        <button ref={createRef} type="button" onClick={startCreate} disabled={loading || saving || mode !== "idle"} aria-label="Create category" title="Create category" className="editor-icon-button">+</button>
       </div>
 
       {mode !== "idle" && (
@@ -103,6 +105,7 @@ export default function CategoryField({ categories, value, loading = false, onCh
               if (event.key === "Escape" && !saving) {
                 setMode("idle");
                 setError("");
+                requestAnimationFrame(() => createRef.current?.focus());
               }
             }}
             readOnly={saving}
@@ -120,6 +123,7 @@ export default function CategoryField({ categories, value, loading = false, onCh
             onClick={() => {
               setMode("idle");
               setError("");
+              requestAnimationFrame(() => createRef.current?.focus());
             }}
             disabled={saving}
             className="editor-inline-action editor-inline-action-secondary"
