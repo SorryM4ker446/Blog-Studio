@@ -140,3 +140,25 @@ Against the immediately preceding summary-only implementation, rare long-body se
 The initial detail rerun exposed an avoidable read of `search_text` alongside Markdown. Public/admin detail and update readback queries now omit the derived field, with a projection regression assertion. Final long-body detail remains a complete 132,745-byte response, at 0.692 ms and 667.4 KiB median allocation, close to the earlier 0.647 ms / 685.2 KiB behavior. The explicit projection adds some small query-building allocation; no detail speedup is claimed.
 
 These are in-process warm-database regression measurements. Short/common body terms can still scan the derived corpus for exact totals, GIN increases write cost, and offset pages remain mutable between separate requests. No production capacity or timing gate is inferred from this synthetic corpus.
+
+## Dependency update regression comparison
+
+Measured on September 15, 2026 against the preceding committed implementation on the same Windows/Ryzen 7 7700/PostgreSQL 18.3 environment. Both revisions use Go 1.26.8, identical benchmark source and three 500 ms samples per operation, with no concurrent benchmark or database test. This isolates the module updates from the toolchain difference in older historical measurements. The application query and response contracts did not change.
+
+| Operation | Before median ms | After median ms (range) | Time change | Response bytes before / after | Heap KiB before / after | Allocations before / after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Short post list | 0.328 | 0.323 (0.322–0.331) | -1.5% | 5,094 / 5,094 | 61.2 / 61.2 | 730 / 730 |
+| Short post detail | 0.177 | 0.173 (0.173–0.173) | -2.1% | 634 / 634 | 28.7 / 28.7 | 293 / 293 |
+| Short categories | 0.258 | 0.255 (0.254–0.260) | -1.2% | 1,202 / 1,202 | 22.1 / 22.2 | 250 / 250 |
+| Short file list | 0.180 | 0.178 (0.177–0.178) | -1.0% | 1,993 / 2,013 | 28.0 / 28.0 | 406 / 406 |
+| Short settings | 0.088 | 0.087 (0.087–0.088) | -1.3% | 81 / 81 | 14.2 / 14.2 | 127 / 127 |
+| Short search | 0.627 | 0.619 (0.599–0.671) | -1.2% | 5,140 / 5,140 | 87.6 / 87.3 | 310 / 310 |
+| Long post list | 0.524 | 0.511 (0.506–0.516) | -2.5% | 4,443 / 4,452 | 56.9 / 56.9 | 670 / 670 |
+| Long post detail | 0.532 | 0.554 (0.543–0.590) | +4.2% | 132,756 / 132,757 | 658.2 / 661.7 | 319 / 319 |
+| Long categories | 0.626 | 0.633 (0.629–0.640) | +1.1% | 4,323 / 4,363 | 40.4 / 40.4 | 587 / 587 |
+| Long file list | 0.286 | 0.284 (0.278–0.285) | -0.8% | 2,123 / 2,123 | 29.4 / 29.4 | 456 / 456 |
+| Long settings | 0.083 | 0.083 (0.083–0.084) | +0.2% | 39 / 39 | 13.9 / 13.9 | 117 / 117 |
+| Long rare search | 9.213 | 9.393 (9.042–9.426) | +1.9% | 4,448 / 4,457 | 85.1 / 85.6 | 319 / 319 |
+| Long common search | 2.545 | 2.524 (2.474–2.658) | -0.8% | 4,490 / 4,499 | 83.6 / 84.4 | 324 / 325 |
+
+Medians vary from -2.5% to +4.2%, with no material allocation regression in this sample. Small byte differences are consistent with the fixture's automatically generated category/file timestamps and JSON fractional-second precision, including embedded categories in article summaries; the full Markdown detail remains present. These warm, in-process samples establish neither a speedup nor production capacity. Retain the existing investigation policy and review actual query plans alongside these measurements. CI continues to retain raw benchmark reports, including available output after failures, without a timing gate.

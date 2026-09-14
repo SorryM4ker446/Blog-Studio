@@ -7,17 +7,17 @@
 - **`backend`**: Go + Gin + GORM 构建的博客 API。
 
 ## 2. 前端服务运行
-该应用大量使用 React Server Component 进行服务端渲染，且已经为您开启过了 `npm run dev`：
-- 若服务已关闭，请打开新终端进入项目的 `frontend` 目录安装并运行：
+应用使用 React Server Component 进行服务端渲染。本地构建使用 Node.js 22 和锁定依赖：
+- 打开终端进入项目的 `frontend` 目录安装并运行：
   ```powershell
-  npm install
+  npm ci
   npm run dev
   ```
 - 打开浏览器访问：`http://localhost:3000`
 - 前端浏览器请求通过 `NEXT_PUBLIC_API_BASE_URL` 访问 API；Next.js 服务端首屏通过 `API_INTERNAL_BASE_URL` 获取公开资料和当前身份。本地开发时两者通常都是 `http://localhost:8080/api`。容器部署时，后者应指向容器网络内的后端地址，不能包含真实凭据。
 
 ## 3. 后端服务运行及数据库配置
-*目前前端设置了优雅降级（Fallback）展示 Mock 数据，因此不启动后端也不会导致前端崩溃报错。*但如果您准备好管理真实数据，请执行以下操作：
+后端需要 Go 1.26.8 和 PostgreSQL 18。前端会明确显示请求失败及重试入口；管理功能需要后端和数据库可用。请执行以下操作：
 1. 请确保您的电脑上开启了 PostgreSQL 服务（默认运行在 5432 端口），并通过 pgAdmin 或命令行提前建立一个空的数据库：`CREATE DATABASE blog_db;`
 2. 在 PowerShell 中进入项目的 `backend` 目录。
 3. 设置 PostgreSQL、JWT、服务监听地址和本地浏览器来源。JWT 密钥至少需要 32 字节，生产环境请使用随机生成的独立密钥：
@@ -66,3 +66,10 @@ go run ./cmd/seed
 - 如需更改系统强调色，可修改 CSS 中的 `var(--accent-*)` 系列色卡。
 
 Article editing uses version-checked saves, explicit publication actions, browser recovery copies and unsaved-change leave protection. See [editor behavior and API compatibility](docs/editor.md); apply pending migrations and deploy matching frontend/backend revisions before using the updated editor.
+
+
+## 持续质量与依赖维护
+
+前后端覆盖率使用固定全量统计范围，并对搜索、恢复、离开保护和发布逻辑执行更高要求；门槛、命令和失败报告见 [质量门槛](docs/quality-gates.md)。CI 可手动触发，保留数据库迁移、真实备份恢复、查询计划、匿名读取基准、桌面/移动端及容器检查。
+
+[依赖健康检查](docs/dependency-maintenance.md)支持手动运行和每周检查，只读取并报告依赖信息，不自动升级、提交或创建 PR。安全修复、构建工具链和维护镜像须一起验证；本地通过不代表远端容器任务已经通过。

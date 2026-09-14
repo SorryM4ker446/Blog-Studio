@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:unit": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage && node ../tools/quality/coverage.mjs frontend coverage",
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test"
   },

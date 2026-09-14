@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { recoveryStorage, RECOVERY_TTL, type RecoveryCopy } from "./editor-recovery-store";
 import { useEditorRecovery, type RecoveryInput } from "./use-editor-recovery";
+import { preserveExpiredEditor } from "./editor-navigation";
 
 const baseline = { title: "Saved", summary: "", content: "Saved body", category_id: 0 };
 const fields = { ...baseline, content: "Recovered body" };
@@ -80,4 +81,66 @@ it("does not let an old discard dismiss a different article's recovery choices",
   await waitFor(() => expect(result.current.copies[0]?.id).toBe("other"));
   await act(async () => { finish(); await discarded; });
   expect(result.current.copies[0]?.id).toBe("other");
+});
+
+it("does not start storage without an account and target", async () => {
+  const start = vi.spyOn(recoveryStorage, "start");
+  const view = renderHook(() => useEditorRecovery({ ...initial, userId: undefined, target: null }));
+  await act(() => view.result.current.flush());
+  expect(start).not.toHaveBeenCalled();
+  expect(view.result.current.checking).toBe(false);
+});
+
+it("adopts its own copy, flushes on hiding, and clears adopted copies after saving", async () => {
+  const view = renderHook(() => useEditorRecovery({ ...initial, dirty: true, fields }));
+  await waitFor(() => expect(view.result.current.checking).toBe(false));
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  await act(async () => { document.dispatchEvent(new Event("visibilitychange")); await view.result.current.flush(); });
+  const [copy] = await recoveryStorage.list(1, "post:7");
+  expect(copy.fields).toEqual(fields);
+  view.unmount();
+  const recovered = renderHook(() => useEditorRecovery(initial));
+  await waitFor(() => expect(recovered.result.current.copies).toHaveLength(1));
+  act(() => recovered.result.current.restore(copy));
+  await act(() => recovered.result.current.clear());
+  expect(await recoveryStorage.list(1, "post:7")).toEqual([]);
+});
+
+it("preserves unsaved text on expiry and rejects writes after another tab logs out", async () => {
+  let channel!: { onmessage: ((event: MessageEvent) => void) | null; close: ReturnType<typeof vi.fn> };
+  vi.stubGlobal("BroadcastChannel", class {
+    onmessage = null;
+    close = vi.fn();
+    constructor() { channel = this; }
+  });
+  const view = renderHook((input: RecoveryInput) => useEditorRecovery(input), { initialProps: initial });
+  await waitFor(() => expect(view.result.current.checking).toBe(false));
+  view.rerender({ ...initial, dirty: true, fields });
+  await act(() => preserveExpiredEditor());
+  expect((await recoveryStorage.list(1, "post:7"))[0].fields).toEqual(fields);
+  act(() => channel.onmessage!(new MessageEvent("message", { data: { userId: 2, action: "logout" } })));
+  expect(view.result.current.error).toBe("");
+  act(() => channel.onmessage!(new MessageEvent("message", { data: { userId: 1, action: "other" } })));
+  expect(view.result.current.error).toBe("");
+  act(() => channel.onmessage!(new MessageEvent("message", { data: { userId: 1, action: "logout" } })));
+  expect(view.result.current.error).toContain("signed out in another tab");
+  view.rerender({ ...initial, dirty: true, fields: { ...fields, content: "Late edit" } });
+  await act(() => view.result.current.flush());
+  expect((await recoveryStorage.list(1, "post:7"))[0].fields).toEqual(fields);
+  view.unmount();
+  expect(channel.close).toHaveBeenCalledOnce();
+});
+
+it("reports discarded malformed copies but ignores discovery failures after unmount", async () => {
+  const original = recoveryStorage.list;
+  vi.spyOn(recoveryStorage, "list").mockImplementationOnce((user, target, invalid) => { invalid?.(); return original(user, target); });
+  const view = renderHook(() => useEditorRecovery(initial));
+  await waitFor(() => expect(view.result.current.checking).toBe(false));
+  expect(view.result.current.error).toContain("expired or could not be read");
+  view.unmount();
+  let reject!: (error: Error) => void;
+  vi.spyOn(recoveryStorage, "list").mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+  const pending = renderHook(() => useEditorRecovery(initial));
+  pending.unmount();
+  await act(async () => reject(new Error("Late failure")));
 });

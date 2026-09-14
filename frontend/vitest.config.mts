@@ -17,9 +17,12 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/**/*.test.{ts,tsx}", "src/test/**", "src/**/*.d.ts"],
-      reporter: ["text", "html", "lcov", "json-summary"],
+      reporter: ["text", "html", "lcov", "json-summary", "json"],
       reportsDirectory: "./coverage",
       reportOnFailure: true,
+      thresholds: {
+        statements: 61, branches: 59, functions: 60, lines: 62,
+      },
     },
   },
 });

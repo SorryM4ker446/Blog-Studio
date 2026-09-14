@@ -162,6 +162,19 @@ describe("Editor article detail loading", () => {
     expect(screen.queryByRole("button", { name: recoveredPost.title })).not.toBeInTheDocument();
   });
 
+  it("rejects incomplete article fields before creating a draft or publishing", async () => {
+    render(<EditorPageClient initialState={readyState} />);
+    fireEvent.click(screen.getByRole("button", { name: "New article" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Title and content are required");
+    fireEvent.change(screen.getByLabelText("Article title"), { target: { value: "Title only" } });
+    fireEvent.click(screen.getByRole("button", { name: "Publish article" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Title and content are required");
+    expect(createPostMock).not.toHaveBeenCalled();
+    expect(publishPostMock).not.toHaveBeenCalled();
+  });
+
   it("keeps a newly created draft after publication fails and retries without creating another", async () => {
     const draft = { ...fullPost, status: "draft" };
     createPostMock.mockResolvedValue(draft);
