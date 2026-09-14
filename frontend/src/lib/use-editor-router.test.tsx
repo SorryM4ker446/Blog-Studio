@@ -5,6 +5,13 @@ import { useEditorRouter } from "./use-editor-router";
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 afterEach(() => releaseEditorNavigation());
+it("forwards clean navigation immediately without losing scroll options", () => {
+  const { result } = renderHook(useEditorRouter);
+  result.current.push("/posts", { scroll: false });
+  result.current.replace("/drive", { scroll: false });
+  expect(router.push).toHaveBeenCalledWith("/posts", { scroll: false });
+  expect(router.replace).toHaveBeenCalledWith("/drive", { scroll: false });
+});
 it("checks program pushes and replacements before forwarding their exact options", async () => {
   registerLeaveGuard({ dirty: () => true, busy: () => false, flush: async () => {}, expire: async () => {} });
   const { result } = renderHook(useEditorRouter);

@@ -72,3 +72,8 @@ Example scrape configuration and starter alert rules live in [`deploy/monitoring
 The anonymous public-read regression workload and its initial local result are recorded in [`performance-baseline.md`](performance-baseline.md). That in-process benchmark is useful for revision-to-revision comparison but does not replace a network load test on the eventual VPS.
 
 In the production Compose topology, Caddy exposes both health routes without exposing the backend container port. Compose uses PostgreSQL health, successful migration completion, backend readiness, and frontend health to order startup. Container lifecycle and rollback procedures are documented in [`deployment.md`](deployment.md).
+
+
+## Dependency health and release evidence
+
+Run or inspect the read-only [dependency health workflow](dependency-maintenance.md) when reviewing a release. Audit or registry failures require investigation; an informational newer version does not fail the job. Rebuild the backend and maintenance images after Go dependency/toolchain updates. Image/host package health is separate from npm and govulncheck. Keep health, private metrics and PostgreSQL client checks in the release procedure.

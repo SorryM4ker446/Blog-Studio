@@ -46,3 +46,8 @@
 - Confirm public file validators return `304` for unchanged content without exposing storage keys.
 - Confirm public search returns `429`, `Retry-After`, and `search_rate_limited` after its burst is exhausted.
 - Confirm Caddy does not route `/internal/metrics` and metric output contains route templates rather than query values.
+
+
+## Dependency module advisory boundary
+
+GO-2026-5932 marks the unmaintained x/crypto OpenPGP package unsafe, with no fixed version. The application imports bcrypt from that module and does not import OpenPGP. Retain the advisory in dependency reports; do not describe module-wide scanning as completely clean. Importing OpenPGP or adding new cryptographic functionality requires separate review. The weekly reachable-code scan continues to fail for reachable vulnerabilities and execution errors; no advisory suppression was added. See [dependency maintenance](dependency-maintenance.md).

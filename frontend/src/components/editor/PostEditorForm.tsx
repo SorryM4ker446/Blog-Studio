@@ -13,12 +13,9 @@ import CategoryField from "@/components/editor/CategoryField";
 import type { PostAction } from "@/lib/post-editor";
 import "react-markdown-editor-lite/lib/index.css";
 
-const MdEditor = dynamic(() => import("./MarkdownEditor"), { ssr: false });
+const MdEditor = dynamic(() => import("./MarkdownEditor"));
 
-let mdParser: { render: (text: string) => string } | null = null;
-if (typeof window !== "undefined") {
-  mdParser = createMarkdownParser();
-}
+const mdParser = createMarkdownParser();
 
 interface PostEditorFormProps {
   editingPost: PostDetail | null;
@@ -30,6 +27,7 @@ interface PostEditorFormProps {
   action: PostAction;
   conflict: boolean;
   recoveryPending?: boolean;
+  recoveryChecking?: boolean;
   latestPost: PostDetail | null;
   loadingLatest: boolean;
   latestError: string;
@@ -82,7 +80,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
   }
 
   return (
-    <form className="fade-in" onSubmit={handleSubmit} aria-busy={props.saving}>
+    <form onSubmit={handleSubmit} aria-busy={props.saving}>
       <div className="editor-form-header">
         <button type="button" disabled={props.saving} onClick={props.onBack} className="editor-back-button" aria-label="Back to content list">←</button>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -110,7 +108,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
       </div>
 
       <div className="editor-save-state" role="status">
-        <span>{props.saving ? "Saving changes…" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}</span>
+        <span>{props.saving ? "Saving changes…" : props.recoveryChecking ? "Checking browser recovery…" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}</span>
         {props.editingPost?.status === "published" && <Link className="editor-view-link" href={`/posts/${props.editingPost.id}?returnTo=${encodeURIComponent(returnTo)}`} aria-disabled={props.saving}
           aria-label="View article" title="View article"
           onNavigate={(event) => { if (props.saving) event.preventDefault(); else props.onViewArticle(); }}>
@@ -184,7 +182,6 @@ export default function PostEditorForm(props: PostEditorFormProps) {
 
         <div>
           <label htmlFor="post-markdown_md" id="post-content-label" style={labelStyle}>CONTENT (MARKDOWN) · REQUIRED</label>
-          {mdParser && (
             <div
               className="custom-editor-wrapper"
               role="group"
@@ -196,13 +193,12 @@ export default function PostEditorForm(props: PostEditorFormProps) {
                 value={props.content}
                 readOnly={props.saving}
                 style={{ height: "calc(100dvh - 450px)", minHeight: "450px", borderRadius: "12px", border: "1px solid var(--border-color)" }}
-                renderHTML={(text: string) => mdParser!.render(normalizeMarkdownFileUrls(text))}
+                renderHTML={(text: string) => mdParser.render(normalizeMarkdownFileUrls(text))}
                 onChange={({ text }: { text: string }) => { if (!props.saving) props.onContentChange(text); }}
                 onImageUpload={props.onImageUpload}
                 onPaste={handlePaste}
               />
             </div>
-          )}
         </div>
 
       </fieldset>

@@ -1,14 +1,38 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useResourcePage } from "./use-resource-page";
-import { clearListReturnCache } from "./list-return-cache";
-import type { ResourceQuery } from "./resource-query";
+import { clearListReturnCache, listCacheGeneration, writeListReturnCache } from "./list-return-cache";
+import { resourceQueryKey, type ResourceQuery } from "./resource-query";
+import * as navigationEntry from "./navigation-entry";
 
 const initialQuery: ResourceQuery = {query:"needle", categoryId:"2", scope:"posts", page:2};
 const initial = { page:2, totalPages:3, error:"", data:"server snapshot" };
 function pending<T>() { let resolve!: (value:T)=>void; let reject!: (error:Error)=>void; const promise = new Promise<T>((yes,no)=>{resolve=yes;reject=no;}); return {promise,resolve,reject}; }
 
 describe("resource page navigation", () => {
+  it("labels an inactive resource with its server criteria rather than another tab's search", () => {
+    const query = { ...initialQuery, query: "active tab search" };
+    vi.spyOn(navigationEntry, "isClientNavigation").mockReturnValue(true);
+    writeListReturnCache(JSON.stringify(["user:inactive", "/editor", "file_page"]) + resourceQueryKey(query),
+      { ...initial, data: "cached active search" }, listCacheGeneration());
+    const load = vi.fn();
+    const view = renderHook(() => useResourcePage(initial, initialQuery, query, load, "/editor", "file_page", false, "user:inactive"));
+    expect(view.result.current.resultQuery).toEqual(initialQuery);
+    expect(view.result.current.state.data).toBe(initial.data);
+    expect(load).not.toHaveBeenCalled();
+  });
+  it("keeps response criteria paired with the displayed rows while newer searches are pending", async () => {
+    const response = pending<typeof initial>();
+    const target = { ...initialQuery, query: "replacement", categoryId: "4", page: 1 };
+    const load = vi.fn(() => response.promise);
+    const view = renderHook(() => useResourcePage(initial, initialQuery, initialQuery, load, "/posts"));
+    act(() => { void view.result.current.run(target); });
+    expect(view.result.current.resultQuery).toEqual(initialQuery);
+    expect(view.result.current.state.data).toBe(initial.data);
+    await act(async () => response.resolve({ ...initial, data: "replacement rows", page: 1 }));
+    expect(view.result.current.resultQuery).toEqual(target);
+    expect(view.result.current.state.data).toBe("replacement rows");
+  });
   it("keeps a cold target's page and no old rows through failure and retry", async () => {
     clearListReturnCache();
     const target = { ...initialQuery, page: 100 };

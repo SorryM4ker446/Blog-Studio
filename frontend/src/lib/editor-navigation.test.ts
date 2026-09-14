@@ -115,3 +115,66 @@ it("dismisses pending decisions on session expiry and confirmed logout", async (
   protect(); requestEditorNavigation("/posts", proceed); releaseEditorNavigation();
   await answerNavigationPrompt(true); expect(proceed).not.toHaveBeenCalled();
 });
+
+it("does not replay a removed link or interrupt unrelated links and clean unloads", async () => {
+  const stop = installEditorNavigation();
+  protect();
+  const link = document.createElement("a"); link.href = "/posts"; document.body.append(link);
+  const bubble = vi.fn((event: Event) => event.preventDefault()); link.addEventListener("click", bubble);
+  try {
+    link.click(); link.remove(); await answerNavigationPrompt(true);
+    expect(bubble).not.toHaveBeenCalled();
+    document.body.append(link);
+    for (const href of ["https://outside.example/", "mailto:reader@example.com", `${location.pathname}${location.search}#section`]) {
+      link.href = href; link.click(); expect(getNavigationPrompt()).toBeNull();
+    }
+    document.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    releaseEditorNavigation();
+    const event = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  } finally { link.remove(); stop(); }
+});
+
+it("handles interrupted history reversal and no longer blocks after its guard is released", () => {
+  history.replaceState(null, "", "/editor?edit=7");
+  const stop = installEditorNavigation();
+  const go = vi.spyOn(history, "go").mockImplementation(() => {});
+  try {
+    history.pushState(null, "", "/editor?edit=8");
+    protect(false, true);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { blogStudioHistoryIndex: 0 } }));
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { blogStudioHistoryIndex: -1 } }));
+    expect(go).toHaveBeenLastCalledWith(2);
+    releaseEditorNavigation();
+    window.dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
+    expect(go).toHaveBeenLastCalledWith(-1);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { blogStudioHistoryIndex: 0 } }));
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { blogStudioHistoryIndex: 2 } }));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(getNavigationPrompt()).toBeNull();
+  } finally { stop(); }
+});
+
+it("keeps a newer guard when expiry finishes and ignores cancelled flush errors", async () => {
+  let finish!: () => void;
+  const old = protect(); old.expire.mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
+  const expiry = preserveExpiredEditor(); protect(false, true); finish(); await expiry;
+  expect(requestEditorNavigation("/posts")).toBe(false);
+  let reject!: (error: Error) => void;
+  const current = protect(); current.flush.mockReturnValue(new Promise<void>((_, fail) => { reject = fail; }));
+  requestEditorNavigation("/posts");
+  const answer = answerNavigationPrompt(true);
+  await answerNavigationPrompt(false); reject(new Error("Late flush error")); await answer;
+  expect(getNavigationPrompt()).toBeNull();
+});
+
+it("does not continue when saving starts while recovery preparation is pending", async () => {
+  let busy = false;
+  let finish!: () => void;
+  const remove = registerLeaveGuard({ dirty: () => true, busy: () => busy, flush: () => new Promise<void>(resolve => { finish = resolve; }), expire: async () => {} });
+  const proceed = vi.fn(); requestEditorNavigation("/posts", proceed);
+  const answer = answerNavigationPrompt(true); busy = true; finish(); await answer;
+  expect(proceed).not.toHaveBeenCalled();
+  protect(); remove();
+  expect(requestEditorNavigation("/posts")).toBe(false);
+});

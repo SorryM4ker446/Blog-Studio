@@ -17,7 +17,7 @@ export function useResourcePage<T extends PageState>(
   const [entry] = useState(() => {
     const mismatch = enabled && resourceQueryKey(initialQuery) !== resourceQueryKey(query);
     const revalidate = isClientNavigation();
-    const snapshot = cachePrefix && (mismatch || revalidate) ? readListReturnCache<T>(cachePrefix + resourceQueryKey(query)) : undefined;
+    const snapshot = cachePrefix && (mismatch || revalidate) ? readListReturnCache<T>(cachePrefix + resourceQueryKey(enabled ? query : initialQuery)) : undefined;
     return { state: snapshot ?? (mismatch ? { ...initialState, ...query,
       ...("data" in initialState && Array.isArray(initialState.data) ? { data: [] } : {}),
       ...("posts" in initialState ? { posts: [] } : {}), ...("files" in initialState ? { files: [] } : {}),
@@ -25,6 +25,7 @@ export function useResourcePage<T extends PageState>(
       totalPages: Math.max(query.page, initialState.totalPages), error: "" } : initialState), restoring: mismatch && !snapshot, revalidate };
   });
   const [state, setState] = useState(entry.state);
+  const [resultQuery, setResultQuery] = useState(enabled ? query : initialQuery);
   const [restoring, setRestoring] = useState(entry.restoring);
   const [loading, setLoading] = useState(false);
   const requestedKey = useRef(resourceQueryKey(initialQuery));
@@ -65,6 +66,7 @@ export function useResourcePage<T extends PageState>(
           continue;
         }
         setState(result);
+        setResultQuery(target);
         if (cachePrefix) writeListReturnCache(cachePrefix + resourceQueryKey(target), result, generation);
         break;
       }
@@ -102,5 +104,5 @@ export function useResourcePage<T extends PageState>(
     return () => window.cancelAnimationFrame(frame);
   }, [enabled, path, query, run, pageKey]);
 
-  return { state, loading: loading || restoring, restoring, run, retry: () => run(retryQuery.current) };
+  return { state, resultQuery, loading: loading || restoring, restoring, run, retry: () => run(retryQuery.current) };
 }

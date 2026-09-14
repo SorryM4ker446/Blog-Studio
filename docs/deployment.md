@@ -146,3 +146,10 @@ docker compose --env-file deploy/.env logs --tail 200 migrate backend frontend c
 - Do not change the PostgreSQL image to another major release as an ordinary application upgrade. Use a documented PostgreSQL major-upgrade or dump/restore procedure.
 
 The committed CI workflow validates that the fixed proxy address is separated from the dynamic container pool, builds this topology, starts it with disposable secrets and volumes, and probes the public Caddy routes. That job is an ordinary repository check; branch-protection requirements remain a repository-administration decision.
+
+
+## Build and dependency maintenance
+
+The backend build stage is pinned to `golang:1.26.8-alpine`, matching `backend/go.mod` and CI. It compiles the API, migration, seed and backup/restore commands; rebuild both backend and maintenance targets after dependency fixes. The frontend continues to use Node.js 22, locked npm dependencies and standalone output. No environment variable, secret mount, database extension requirement or application port changes are needed.
+
+[Dependency health](dependency-maintenance.md) reports npm and Go findings but does not audit OS image packages or run a deployment. CI keeps its full image-build and disposable Compose topology checks. Local native/cross-compilation evidence is distinct from those container results; run and review the latter after publishing the change.

@@ -10,7 +10,7 @@ Measured on 2026-09-06 before changing application behavior, from revision `2ece
 | Vitest lines | 1,083 / 1,999 | 54.17% | 52% |
 | Go statements | 1,657 / 2,466 | 67.2% | 65% |
 
-These are baseline measurements and proposed conservative floors, not enforced gates. Re-measure on CI's operating system/toolchain before enabling floors. Do not lower a floor or exclude a difficult file to hide a regression. Time-based benchmark thresholds are independent of coverage and remain disabled.
+These are historical baseline measurements and the original proposed floors. Current enforced floors and their measurement rationale are documented in [quality-gates.md](quality-gates.md); earlier sections retain their original delivery status. Do not lower a floor or exclude a difficult file to hide a regression. Time-based benchmark thresholds are independent of coverage and remain disabled.
 
 ## Article read regression measurement
 
@@ -44,7 +44,7 @@ The removal of duplicated client list/request state reduces the frontend denomin
 
 ## Fixed measurement scope
 
-`npm run test:coverage` uses Vitest/V8 4.1.11 and includes all `src/**/*.{ts,tsx}`, excluding only test files, test setup and declaration files. Reports in `frontend/coverage` include text, HTML, LCOV and JSON summary. Untested production files remain in the denominator. Keep the Vitest coverage provider version aligned with Vitest on upgrades.
+`npm run test:coverage` uses Vitest/V8 4.1.11 and includes all `src/**/*.{ts,tsx}`, excluding only test files, test setup and declaration files. Reports in `frontend/coverage` include text, HTML, LCOV, JSON summary and full Istanbul JSON. Untested production files remain in the denominator. Keep the Vitest coverage provider version aligned with Vitest on upgrades.
 
 Async server components, browser layout, hydration and native navigation still require Playwright. The Next.js testing guide shipped at `node_modules/next/dist/docs/01-app/02-guides/testing/vitest.md` recommends E2E for async components. Their source is not silently removed from this global baseline, and Playwright execution is not merged into V8 unit coverage.
 
@@ -52,7 +52,7 @@ Go uses `-coverpkg=./...` so routes exercising handlers contribute to the handle
 
 Go's native metric is **statement/block coverage**, not branch coverage. The recommended new-search and publication gate is at least 90% statement coverage in focused logic plus explicit tests for every decision outcome, including rejection, retries and conflicts. This does not provide a numeric Go branch percentage. If numeric Go branch coverage is required, evaluate a separate instrumenter and its race/Windows/Linux compatibility before setting that gate.
 
-For new frontend search, recovery-copy and publication logic, target at least 90% branch coverage in focused modules in addition to the global floors. Gate implementation and dependency-health scheduling are separate remaining work.
+For new frontend search, recovery-copy and publication logic, target at least 90% branch coverage in focused modules in addition to the global floors. The enforced scopes are listed in [quality-gates.md](quality-gates.md); scheduled checks are described in [dependency-maintenance.md](dependency-maintenance.md).
 
 ## Reproduce
 
@@ -136,3 +136,22 @@ The subsequent persistent-layout and silent-refresh fixes passed 249 unit tests 
 ## Navigation independent of snapshots
 
 The September 14, 2026 measurement passed 262 tests in 48 files with unchanged full-source scope: statements 63.66% (2180/3424), branches 61.36% (1838/2995), functions 62.94% (479/761), and lines 64.25% (1832/2851). Tests cover cold targets and retry, account/session invalidation, preserved history metadata, distinct entries for identical URLs, router commits after DOM replacement, traversal between layout and passive effects, and bounded scroll cancellation. Removed dimension-cache tests were replaced by the deterministic layout contract in Chromium. Browser frame samples and CSS geometry are not merged into Vitest coverage; no exclusions or numerical gates were added. Backend coverage was not remeasured because backend code and setup tools did not change.
+
+
+## Enforced quality measurement
+
+Measured on September 15, 2026 after targeted decision/lifecycle regressions: 273 frontend tests in 49 files pass. Statements are 64.74% (2217/3424), branches 62.47% (1871/2995), functions 63.99% (487/761), and lines 64.95% (1852/2851). All production-source denominators and exclusions remain unchanged.
+
+Each focused module passes its own 90% branch gate: recovery storage 91.95%, recovery hook 90.41%, departure guard 96.94%, guarded router 100%; search/query/loader and snapshot/return helpers range from 92.11% to 100%. The complete article save/publication function measures 91.89%; the containing editor component remains in global coverage and is not described as 90% covered.
+
+On Go 1.26.8, complete atomic race coverage is 70.75%. Both search query/read functions reach 100%, text extraction 97.1%, versioned mutation 96.1%, and the version migration 100%. Go still reports statements rather than numerical branch coverage. Database/decoding failures, restore, migrations and concurrency remain explicit tests. The enforced global floors are frontend 61/59/60/62% and Go 68%, with 90% focused requirements, as detailed in [quality-gates.md](quality-gates.md).
+
+The six Node gate-helper tests verify failure behavior independently of application coverage. Node 22.23.2 and the local Node 24.9.0 both pass those helpers and all 273 coverage tests with identical global and focused measurements. The standalone frontend production build also passes on Node 22.23.2. Reports are retained on failure; no threshold auto-update is enabled. These are local Windows measurements, and remote Linux CI/container results remain separate evidence.
+
+## Resource transitions and first-save continuity
+
+The subsequent frontend update passes 275 tests in 49 files: statements 64.92% (2232/3438), branches 62.77% (1887/3006), functions 63.92% (489/765), and lines 65.22% (1866/2861). All existing global and focused gates pass without changing their thresholds or exclusions. New units verify that displayed rows retain their response criteria during a pending search, and that an inactive resource uses its own criteria for both server and cache snapshots. Browser transition frames, empty-result exits/entrances and first-save form geometry remain separate Playwright evidence.
+
+The follow-up editor document and save-handoff correction passes 278 tests in 49 files: statements 64.88% (2240/3452), branches 62.96% (1909/3032), functions 63.76% (491/770), and lines 65.22% (1872/2870). New cases cover delayed router parameters after native history updates, matching server details, and rejection of details from a different target or authenticated owner. All existing global and focused thresholds remain unchanged and pass; the complete save/publication function remains at 91.89% branch coverage. SSR/hydration opacity and geometry, empty-result Loading flashes, and development-mode first saves are verified separately in the browser.
+
+After the toolbar locale hydration correction, the same 278 unit tests pass with statements 64.75% (2240/3459), branches 62.96% (1909/3032), functions 63.43% (491/774), and lines 65.11% (1872/2875). All thresholds and exclusions remain unchanged. Locale initialization and the mounted toolbar refresh are exercised by English/Chinese browser regressions, including development-mode console checks, rather than counted as unit coverage.

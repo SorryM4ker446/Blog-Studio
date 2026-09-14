@@ -6,7 +6,7 @@ type Criteria = { scope: string; query?: string; categoryId?: string };
 const criteriaKey = (value: Criteria) => JSON.stringify([value.scope, value.query ?? "", value.categoryId ?? ""]);
 
 // Retain outgoing content until the requested search criteria have a response.
-export function useScopeTransition<T extends Criteria & { error: string; searched?: boolean }>(value: T, scope: string, pending: boolean, criteria?: Omit<Criteria, "scope">) {
+export function useScopeTransition<T extends Criteria & { error: string; searched?: boolean }>(value: T, scope: string, pending: boolean, criteria?: Omit<Criteria, "scope">, animate = true) {
   const targetKey = criteriaKey({ ...criteria, scope });
   const valueKey = criteriaKey(value);
   const [snapshot, setSnapshot] = useState({ value, key: valueKey, initialEntry: false });
@@ -24,7 +24,7 @@ export function useScopeTransition<T extends Criteria & { error: string; searche
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduced = !animate || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     let animation: Animation | undefined;
     let cancelled = false;
     function fade(opacity: number, transform: string, duration: number, easing: string, done?: () => void) {
@@ -62,7 +62,7 @@ export function useScopeTransition<T extends Criteria & { error: string; searche
         animation.cancel();
       }
     };
-  }, [value, scope, pending, changing, targetKey, valueKey, snapshot.initialEntry]);
+  }, [value, scope, pending, changing, targetKey, valueKey, snapshot.initialEntry, animate]);
 
   return { displayed, ref, changing };
 }

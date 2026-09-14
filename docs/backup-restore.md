@@ -121,3 +121,6 @@ docker compose --env-file deploy/.env --profile tools run --rm maintenance /app/
 ```
 
 The host-visible backup directory and complete release procedure are documented in [`deployment.md`](deployment.md). Isolated restore safety rules in this document still apply; the active PostgreSQL and uploads volumes must never be selected as restore targets.
+
+
+The server, migration, seed and backup/restore binaries now share the Go 1.26.8 build stage and updated security dependencies. Rebuild the maintenance image together with the API image. PostgreSQL 18 client matching, extension privileges, archive format and strict migration-version verification are unchanged; an image update does not authorize bypassing restore checks.

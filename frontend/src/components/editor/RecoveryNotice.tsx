@@ -6,8 +6,8 @@ import type { RecoveryCopy } from "@/lib/editor-recovery-store";
 import { useState } from "react";
 import styles from "./EditorFeedback.module.css";
 
-export default function RecoveryNotice({ copies, checking, error, onRestore, onDiscard }: {
-  copies: RecoveryCopy[]; checking: boolean; error: string;
+export default function RecoveryNotice({ copies, error, onRestore, onDiscard }: {
+  copies: RecoveryCopy[]; error: string;
   onRestore: (copy: RecoveryCopy) => void; onDiscard: () => Promise<void>;
 }) {
   const [discarding, setDiscarding] = useState(false);
@@ -17,7 +17,6 @@ export default function RecoveryNotice({ copies, checking, error, onRestore, onD
     try { await onDiscard(); } finally { setDiscarding(false); }
   }
   return <>
-    {checking && <p className={styles.status} role="status">Checking browser recovery…</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
     {copies.length > 0 && <section className={styles.panel} aria-label="Browser recovery" aria-busy={discarding}>
       <div className={styles.panelHeader}>

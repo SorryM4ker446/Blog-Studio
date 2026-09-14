@@ -61,3 +61,8 @@ The dependency lockfile uses Next.js and eslint-config-next 16.3.4 with updated 
 ## Local article recovery privacy
 
 Unsaved editor fields are stored unencrypted in origin-local IndexedDB for up to seven days, within a 20-copy/4-MiB application limit. The application offers copies only to the matching authenticated user, but browser-profile access and same-origin script execution can read them. Copies never contain authentication credentials and are not uploaded automatically. Confirmed logout clears that user's records and invalidates old writers; session expiry preserves work for explicit recovery. Browser denial can prevent cleanup as well as saving, in which case the user is warned to clear site data. See [editor.md](editor.md) for retention, multiple-tab ownership, conflict protection and browser lifecycle limits.
+
+
+## Backend dependency review
+
+The September 14–15, 2026 review updated the required toolchain to Go 1.26.8, pgx to 5.9.2, quic-go to 0.59.1 and x/crypto to 0.56.0 (with required x/text 0.41.0). These address the reported standard-library, database-driver, HTTP/3 and SSH advisories. Rebuild all backend and maintenance binaries; changing a source manifest does not patch an already running process. Scan results and the unused OpenPGP advisory boundary are documented in [dependency-maintenance.md](dependency-maintenance.md) and the [risk register](security-risk-register.md).

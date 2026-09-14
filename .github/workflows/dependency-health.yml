@@ -1,0 +1,83 @@
+name: Dependency health
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '31 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        id: install
+      - name: Audit all locked dependencies
+        run: npm audit --json > "$RUNNER_TEMP/frontend-audit.json"
+      - name: Record installed dependency versions
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm ls --all --json > "$RUNNER_TEMP/frontend-versions.json"
+      - name: Check available versions without upgrading
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          set +e
+          npm outdated --json > "$RUNNER_TEMP/frontend-outdated.json"
+          status=$?
+          set -e
+          node ../tools/quality/check-outdated.mjs "$RUNNER_TEMP/frontend-outdated.json" "$status"
+      - name: Retain frontend dependency reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dependency-health
+          path: ${{ runner.temp }}/frontend-*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - name: Verify module checksums
+        run: go mod download && go mod verify
+      - name: Record available module versions without upgrading
+        if: ${{ !cancelled() }}
+        run: |
+          go version > "$RUNNER_TEMP/backend-toolchain.txt"
+          go list -m -u -json all > "$RUNNER_TEMP/backend-versions.json"
+      - name: Check reachable vulnerabilities
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -show verbose ./... | tee "$RUNNER_TEMP/backend-vulnerabilities.txt"
+      - name: Retain backend dependency reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dependency-health
+          path: |
+            ${{ runner.temp }}/backend-*.json
+            ${{ runner.temp }}/backend-*.txt
+          if-no-files-found: warn
+          retention-days: 30
