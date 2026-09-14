@@ -24,4 +24,4 @@ Automated scans do not establish complete WCAG conformance. Real-device safe are
 
 After category rename, focus returns to the category trigger as the updated controls commit. The menu stays open for continued keyboard management, including when category refresh temporarily disables the field.
 
-Initial scroll restoration runs before paint independently of route focus. After navigation from the mobile drawer, focus moves to main content only after the drawer releases modal isolation. Refresh and history restoration do not request focus on main content.
+Initial scroll restoration runs before paint independently of route focus. Each history entry owns its offset, including repeated visits to the same URL; browser storage availability does not determine restoration. Automatic retries are bounded and stop on wheel, touch, pointer or scroll-key input, including input before hydration. After navigation from the mobile drawer, focus moves to main content only after the drawer releases modal isolation. Refresh and history restoration do not request focus on main content.

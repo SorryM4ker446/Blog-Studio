@@ -14,7 +14,7 @@ const { getAdminFilesMock, getAdminPostsMock, getAdminPostMock, createPostMock, 
   updatePostMock: vi.fn(),
   publishPostMock: vi.fn(),
   unpublishPostMock: vi.fn(),
-  navigationState: { searchParams: new URLSearchParams("tab=posts") },
+  navigationState: { searchParams: new URLSearchParams("tab=posts"), userId: 1 },
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
 }));
@@ -26,7 +26,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({
-    user: { id: 1, username: "admin", role: "admin" },
+    user: { id: navigationState.userId, username: "admin", role: "admin" },
     isLoading: false,
     authStatus: "authenticated",
     authError: "",
@@ -136,6 +136,7 @@ function pendingDetail() {
 
 describe("Editor article detail loading", () => {
   beforeEach(() => {
+    navigationState.userId = 1;
     navigationState.searchParams = new URLSearchParams("tab=posts");
     window.history.replaceState({}, "", "/editor?tab=posts");
     getAdminPostMock.mockReset();
@@ -144,6 +145,21 @@ describe("Editor article detail loading", () => {
     publishPostMock.mockReset();
     unpublishPostMock.mockReset();
     getAdminPostsMock.mockResolvedValue({ data: [recoveredPost], page: 1, limit: 10, total: 1 });
+  });
+
+  it("clears the previous account's server snapshot before loading the next account", async () => {
+    const view = render(<EditorPageClient initialState={readyState} />);
+    expect(screen.getByRole("button", { name: recoveredPost.title })).toBeVisible();
+    let resolve!: (value: unknown) => void;
+    getAdminPostsMock.mockReturnValue(new Promise(done => { resolve = done; }));
+    getAdminFilesMock.mockResolvedValue({ data: [], page: 1, limit: 10, total: 0 });
+    navigationState.userId = 2;
+    view.rerender(<EditorPageClient initialState={readyState} />);
+    expect(screen.queryByRole("button", { name: recoveredPost.title })).not.toBeInTheDocument();
+    expect(screen.getByText("Recovering posts")).toBeVisible();
+    await act(async () => resolve({ data: [{ ...recoveredPost, id: 42, title: "Next account article" }], page: 1, limit: 10, total: 1 }));
+    expect(await screen.findByRole("button", { name: "Next account article" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: recoveredPost.title })).not.toBeInTheDocument();
   });
 
   it("keeps a newly created draft after publication fails and retries without creating another", async () => {

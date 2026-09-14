@@ -13,7 +13,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("prepares the history source and width-specific geometry without changing the server markup", () => {
+it("prepares the history source and removes obsolete geometry without changing server markup", () => {
   window.history.replaceState({ blogSidebarSelection: "/search", routerState: "retained" }, "", "/posts/12");
   sessionStorage.setItem("blogStudio:listLayouts", JSON.stringify({ version: 1, entries: [
     ["editor", { width: 800, height: 600 }], ["invalid", { width: 800, height: -1 }],
@@ -21,8 +21,9 @@ it("prepares the history source and width-specific geometry without changing the
   window.eval(initialViewScript);
   expect(document.documentElement.getAttribute("data-initial-sidebar")).toBe("/search");
   const style = document.getElementById("blog-initial-view")!.textContent;
-  expect(style).toContain("@container list-results (min-width:799px) and (max-width:801px)");
-  expect(style).toContain("min-height:600px");
+  expect(style).not.toContain("@container");
+  expect(style).not.toContain("min-height");
+  expect(sessionStorage.getItem("blogStudio:listLayouts")).toBeNull();
   expect(style).not.toContain("invalid");
   expect(window.history.state.routerState).toBe("retained");
 });

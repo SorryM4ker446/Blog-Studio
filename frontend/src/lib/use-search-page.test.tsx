@@ -15,6 +15,16 @@ function pending() {
 
 describe("grouped search navigation", () => {
   beforeEach(() => window.history.replaceState(null, "", "/search?q=needle"));
+  it("presents both target sections when returning from an initially empty search entry", async () => {
+    const target = { ...query, postPage: 7, filePage: 9 };
+    writeSearchQuery(target);
+    const request = pending();
+    const view = renderHook(() => useSearchPage({ ...initial, query: "", searched: false }, target, async () => ({ ...await request.promise, searched: true })));
+    expect(view.result.current.restoring).toBe(true);
+    expect(view.result.current.state).toMatchObject({ query: "needle", searched: true, postPage: 7, filePage: 9, posts: [], files: [] });
+    await act(async () => request.resolve({ ...initial, ...target, postTotalPages: 10, fileTotalPages: 10 }));
+    expect(view.result.current.restoring).toBe(false);
+  });
   it("uses the server snapshot, then loads both pages from restored history", async () => {
     const load = vi.fn().mockImplementation(async target => ({ ...initial, ...target }));
     const view = renderHook(({ target }) => useSearchPage(initial, target, load), { initialProps: { target: query } });

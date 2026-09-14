@@ -9,6 +9,35 @@ const initial = { page:2, totalPages:3, error:"", data:"server snapshot" };
 function pending<T>() { let resolve!: (value:T)=>void; let reject!: (error:Error)=>void; const promise = new Promise<T>((yes,no)=>{resolve=yes;reject=no;}); return {promise,resolve,reject}; }
 
 describe("resource page navigation", () => {
+  it("keeps a cold target's page and no old rows through failure and retry", async () => {
+    clearListReturnCache();
+    const target = { ...initialQuery, page: 100 };
+    const cold = { ...initial, data: ["wrong page"], totalPages: 100 };
+    const load = vi.fn().mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ ...cold, data: ["target page"], page: 100 });
+    const view = renderHook(() => useResourcePage(cold, initialQuery, target, load, "/editor", "post_page", true, "user:1"));
+    expect(view.result.current.state).toMatchObject({ page: 100, data: [] });
+    await waitFor(() => expect(view.result.current.state.error).toBe("offline"));
+    expect(view.result.current.state).toMatchObject({ page: 100, data: [] });
+    await act(() => view.result.current.retry());
+    expect(view.result.current.state).toMatchObject({ page: 100, data: ["target page"], error: "" });
+  });
+  it("does not commit a protected response after session cleanup", async () => {
+    const response = pending<typeof initial>();
+    const view = renderHook(() => useResourcePage(initial, initialQuery, initialQuery, () => response.promise, "/editor", "post_page", true, "user:1"));
+    act(() => { void view.result.current.run(initialQuery); });
+    clearListReturnCache();
+    await act(async () => response.resolve({ ...initial, data: "expired identity" }));
+    expect(view.result.current.state.data).toBe("server snapshot");
+  });
+  it("does not commit a response belonging to a previous account", async () => {
+    const response = pending<typeof initial>();
+    const view = renderHook(({ owner }) => useResourcePage(initial, initialQuery, initialQuery, () => response.promise, "/editor", "post_page", true, owner), { initialProps: { owner: "user:1" } });
+    act(() => { void view.result.current.run(initialQuery); });
+    view.rerender({ owner: "user:2" });
+    await act(async () => response.resolve({ ...initial, data: "previous account" }));
+    expect(view.result.current.state.data).not.toBe("previous account");
+  });
   it("restores the last visited page before revalidation completes, isolated by owner", async () => {
     clearListReturnCache();
     const target = { ...initialQuery, page: 3 };

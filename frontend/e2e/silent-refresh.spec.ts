@@ -106,7 +106,7 @@ test("editor refresh preserves a short page's reserved height and scroll before 
       await expect(page.locator(".content-scroll")).toHaveJSProperty("scrollTop", 120);
       await expect(page.locator(".route-transition-frame")).not.toHaveClass(/route-transition-active/);
     } finally { release(); }
-    await expect.poll(() => viewport.evaluate(node => Number.parseFloat((node as HTMLElement).style.minHeight) || 0)).toBeGreaterThan(0);
+    await expect.poll(() => viewport.evaluate(node => Number.parseFloat(getComputedStyle(node).minHeight) || 0)).toBeGreaterThan(0);
     await expect(page.getByRole("button", { name: "Previous page" })).toBeEnabled();
     await page.unrouteAll({ behavior: "wait" });
     expect((await viewport.boundingBox())!.height).toBeCloseTo(fullHeight, 0);
@@ -116,10 +116,13 @@ test("editor refresh preserves a short page's reserved height and scroll before 
       await page.reload({ waitUntil: "commit" });
       await expect(page.locator(".editor-post-card")).toHaveCount(1);
       await page.setViewportSize({ width: 760, height: 900 });
-      await expect.poll(() => viewport.evaluate(node => Math.abs(node.getBoundingClientRect().height - node.firstElementChild!.getBoundingClientRect().height))).toBeLessThan(1);
+      await expect.poll(() => viewport.evaluate(node => {
+        const card = node.querySelector(".editor-post-card")!;
+        return Math.abs(node.getBoundingClientRect().height - (card.getBoundingClientRect().height * 10 + 9 * 16));
+      })).toBeLessThan(1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     } finally { releaseNarrow(); }
-    await expect.poll(() => viewport.evaluate(node => Number.parseFloat((node as HTMLElement).style.minHeight) || 0)).toBeGreaterThan(0);
+    await expect.poll(() => viewport.evaluate(node => Number.parseFloat(getComputedStyle(node).minHeight) || 0)).toBeGreaterThan(0);
     await page.unrouteAll({ behavior: "wait" });
     expect(errors).toEqual([]);
   } finally {

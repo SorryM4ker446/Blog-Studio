@@ -15,7 +15,7 @@ Opening a selected category can still expand its navigation group for that route
 
 Storage exceptions cannot interrupt appearance controls. If cookie writes are rejected or silently ignored, changes remain usable in the current page, but a reload uses whatever valid cookies the browser actually sends, or the defaults. No localStorage fallback is attempted. Other open tabs keep their current in-memory appearance until reloaded; no live cross-tab preference synchronization is promised.
 
-Old `blog_theme` and `sidebar_collapsed` localStorage entries are left untouched and ignored. Authentication still attempts to remove obsolete `blog_token` and `blog_user` entries while containing storage errors. Unrelated storage is not cleared. Scroll restoration continues using sessionStorage, and [article recovery](editor.md#browser-recovery-copies) continues using IndexedDB with its own retention and logout rules. Appearance changes never clear recovery copies.
+Old `blog_theme` and `sidebar_collapsed` localStorage entries are left untouched and ignored. Authentication still attempts to remove obsolete `blog_token` and `blog_user` entries while containing storage errors. Unrelated storage is not cleared. Scroll restoration uses per-entry browser history metadata, and [article recovery](editor.md#browser-recovery-copies) continues using IndexedDB with its own retention and logout rules. Appearance changes never clear recovery copies.
 
 Deploy the rebuilt frontend and reload existing pages to activate this behavior. No backend change, migration, additional dependency, environment variable or deployment service is required. See [testing](testing.md#appearance-preferences) for the regression scope.
 

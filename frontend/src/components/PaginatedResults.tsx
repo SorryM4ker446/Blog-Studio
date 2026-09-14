@@ -3,7 +3,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Pagination from "./Pagination";
 import styles from "./PaginatedResults.module.css";
-import { listLayoutGeneration, readListLayout, writeListLayout } from "@/lib/list-layout-cache";
 
 interface Props {
   children: ReactNode;
@@ -15,11 +14,10 @@ interface Props {
   stablePageHeight?: boolean;
   transitionGroup?: string;
   animateChanges?: boolean;
-  heightCacheKey?: string;
   onPageChange: (page: number) => void;
 }
 
-export default function PaginatedResults({ children, page, totalPages, resultKey, pending, edgeArrows = false, stablePageHeight = false, transitionGroup = "", animateChanges = true, heightCacheKey, onPageChange }: Props) {
+export default function PaginatedResults({ children, page, totalPages, resultKey, pending, edgeArrows = false, stablePageHeight = false, transitionGroup = "", animateChanges = true, onPageChange }: Props) {
   const viewport = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState({ children, page, totalPages, key: resultKey, group: transitionGroup });
@@ -28,7 +26,6 @@ export default function PaginatedResults({ children, page, totalPages, resultKey
     setShown({ children, page, totalPages, key: resultKey, group: transitionGroup });
   }
   const entry = useRef<{ direction: number; height: number } | null>(null);
-  const reserved = useRef({ width: 0, height: 0 });
   const previousGroup = useRef(transitionGroup);
   const incoming = useRef(shown);
   const visual = useRef<{ opacity: string; transform: string } | null>(null);
@@ -43,20 +40,7 @@ export default function PaginatedResults({ children, page, totalPages, resultKey
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const animated = animateChanges && typeof body.animate === "function" && !reduced;
     const animations: Animation[] = [];
-    const generation = listLayoutGeneration();
-    if (heightCacheKey) reserved.current = readListLayout(heightCacheKey) ?? { width: 0, height: 0 };
     let cancelled = false;
-    const reserveHeight = () => {
-      if (!stablePageHeight) return;
-      const box = body.getBoundingClientRect();
-      const height = Math.abs(box.width - reserved.current.width) > 1 ? box.height : Math.max(box.height, reserved.current.height);
-      if (heightCacheKey && (reserved.current.width !== box.width || reserved.current.height !== height)) {
-        writeListLayout(heightCacheKey, { width: box.width, height }, generation);
-      }
-      reserved.current = { width: box.width, height };
-      frame.style.minHeight = `${height}px`;
-    };
-    reserveHeight();
     if (changing) {
       const height = frame.getBoundingClientRect().height;
       const commit = () => {
@@ -86,19 +70,16 @@ export default function PaginatedResults({ children, page, totalPages, resultKey
         }
       }
     }
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reserveHeight);
-    observer?.observe(body);
     return () => {
       cancelled = true;
-      observer?.disconnect();
       visual.current = { opacity: getComputedStyle(body).opacity, transform: getComputedStyle(body).transform };
       animations.forEach(animation => animation.cancel());
     };
-  }, [resultKey, direction, changing, stablePageHeight, transitionGroup, animateChanges, heightCacheKey]);
+  }, [resultKey, direction, changing, stablePageHeight, transitionGroup, animateChanges]);
 
   return (
     <div className={styles.frame}>
-      <div ref={viewport} className={styles.viewport} data-list-layout={heightCacheKey} inert={changing}>
+      <div ref={viewport} className={styles.viewport} data-list-layout={stablePageHeight ? "editor" : undefined} inert={changing}>
         <div ref={content} data-result-page={shown.page}>{shown.children}</div>
       </div>
       <Pagination currentPage={shown.page} totalPages={shown.totalPages} pending={pending || changing} edgeArrows={edgeArrows} onPageChange={onPageChange} />

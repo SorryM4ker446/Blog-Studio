@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiErrorMessage } from "@/lib/api-client";
 import { resourceQueryKey, writeResourceQuery, type ResourceQuery } from "./resource-query";
 import { listCacheGeneration, readListReturnCache, writeListReturnCache } from "./list-return-cache";
+import { isClientNavigation, navigationRevision } from "./navigation-entry";
 
 interface PageState { page: number; totalPages: number; error: string }
 
@@ -14,9 +15,14 @@ export function useResourcePage<T extends PageState>(
 ) {
   const cachePrefix = cacheScope ? JSON.stringify([cacheScope, path, pageKey]) : "";
   const [entry] = useState(() => {
-    const mismatch = Boolean(cachePrefix) && enabled && resourceQueryKey(initialQuery) !== resourceQueryKey(query);
-    const snapshot = mismatch ? readListReturnCache<T>(cachePrefix + resourceQueryKey(query)) : undefined;
-    return { state: snapshot ?? initialState, restoring: mismatch && !snapshot };
+    const mismatch = enabled && resourceQueryKey(initialQuery) !== resourceQueryKey(query);
+    const revalidate = isClientNavigation();
+    const snapshot = cachePrefix && (mismatch || revalidate) ? readListReturnCache<T>(cachePrefix + resourceQueryKey(query)) : undefined;
+    return { state: snapshot ?? (mismatch ? { ...initialState, ...query,
+      ...("data" in initialState && Array.isArray(initialState.data) ? { data: [] } : {}),
+      ...("posts" in initialState ? { posts: [] } : {}), ...("files" in initialState ? { files: [] } : {}),
+      ...("currentCategoryName" in initialState && initialQuery.categoryId !== query.categoryId ? { currentCategoryName: null } : {}),
+      totalPages: Math.max(query.page, initialState.totalPages), error: "" } : initialState), restoring: mismatch && !snapshot, revalidate };
   });
   const [state, setState] = useState(entry.state);
   const [restoring, setRestoring] = useState(entry.restoring);
@@ -26,11 +32,20 @@ export function useResourcePage<T extends PageState>(
   const retryQuery = useRef(initialQuery);
   const mounted = useRef(true);
   const active = useRef(enabled);
+  const owner = useRef(cachePrefix);
+  owner.current = cachePrefix;
   const initialCorrection = useRef(!initialState.error && initialState.page > initialState.totalPages);
+  const revalidateEntry = useRef(entry.revalidate);
   const initialCache = useRef({ cachePrefix, enabled, initialState, initialQuery, generation: listCacheGeneration() });
+  const observedQuery = useRef(resourceQueryKey(query));
+  if (observedQuery.current !== resourceQueryKey(query)) {
+    observedQuery.current = resourceQueryKey(query);
+    if (requestedKey.current !== observedQuery.current) requestId.current++;
+  }
 
   const run = useCallback(async (requested: ResourceQuery) => {
     const generation = listCacheGeneration();
+    const navigation = navigationRevision();
     let target = requested;
     const id = ++requestId.current;
     requestedKey.current = resourceQueryKey(target);
@@ -40,7 +55,7 @@ export function useResourcePage<T extends PageState>(
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         const result = await load(target);
-        if (!mounted.current || id !== requestId.current) return;
+        if (!mounted.current || id !== requestId.current || generation !== listCacheGeneration() || owner.current !== cachePrefix || navigation !== navigationRevision()) return;
         if (result.error) throw new Error(result.error);
         if (attempt === 0 && result.page > result.totalPages) {
           target = { ...target, page: result.totalPages };
@@ -54,7 +69,7 @@ export function useResourcePage<T extends PageState>(
         break;
       }
     } catch (error) {
-      if (mounted.current && id === requestId.current) setState((value) => ({ ...value, error: getApiErrorMessage(error, "Could not load results.") }));
+      if (mounted.current && id === requestId.current && generation === listCacheGeneration() && owner.current === cachePrefix && navigation === navigationRevision()) setState((value) => ({ ...value, error: getApiErrorMessage(error, "Could not load results.") }));
     } finally {
       if (mounted.current && id === requestId.current) { setLoading(false); setRestoring(false); }
     }
@@ -63,11 +78,11 @@ export function useResourcePage<T extends PageState>(
   useEffect(() => {
     mounted.current = true;
     const cached = initialCache.current;
-    if (cached.cachePrefix && cached.enabled && !cached.initialState.error) {
+    if (cached.cachePrefix && cached.enabled && !cached.initialState.error && !entry.revalidate) {
       writeListReturnCache(cached.cachePrefix + resourceQueryKey(cached.initialQuery), cached.initialState, cached.generation);
     }
     return () => { mounted.current = false; };
-  }, []);
+  }, [entry.revalidate]);
 
   useEffect(() => {
     active.current = enabled;
@@ -79,8 +94,9 @@ export function useResourcePage<T extends PageState>(
         writeResourceQuery(path, query, { replace: true, pageKey, includeScope: path === "/search" });
       }
     });
-    if (requestedKey.current !== resourceQueryKey(query) || initialCorrection.current) {
+    if (requestedKey.current !== resourceQueryKey(query) || initialCorrection.current || revalidateEntry.current) {
       initialCorrection.current = false;
+      revalidateEntry.current = false;
       void run(query);
     }
     return () => window.cancelAnimationFrame(frame);

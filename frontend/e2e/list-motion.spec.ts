@@ -158,7 +158,11 @@ for (const scenario of cases) {
     await page.setViewportSize({ width: 760, height: 1000 });
     const narrowContent = await content.boundingBox();
     if (editor) {
-      await expect.poll(() => content.evaluate(node => Math.abs(node.parentElement!.getBoundingClientRect().height - node.getBoundingClientRect().height))).toBeLessThan(1);
+      await expect.poll(() => content.evaluate(node => {
+        const grid = node.querySelector(".editor-resource-grid")!;
+        const row = grid.firstElementChild!.getBoundingClientRect().height;
+        return Math.abs(node.parentElement!.getBoundingClientRect().height - (row * 10 + 9 * 16));
+      })).toBeLessThan(1);
     }
     expect((await previous.boundingBox())!.y).toBeGreaterThan(narrowContent!.y + narrowContent!.height);
     expect((await next.boundingBox())!.y).toBeGreaterThan(narrowContent!.y + narrowContent!.height);

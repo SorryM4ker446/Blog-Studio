@@ -11,6 +11,7 @@ import { readResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib
 import { useResourcePage } from "@/lib/use-resource-page";
 import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
+import ListPending from "@/components/ListPending";
 import { FolderIcon, ClipboardIcon, InboxIcon, FileTextIcon } from "@/components/Icons";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
@@ -70,7 +71,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
             ) : (
               <>
                 <ClipboardIcon size={28} style={{ color: "var(--text-primary)" }} />
-                All Posts
+                {query.categoryId ? "Category articles" : "All Posts"}
               </>
             )}
           </h1>
@@ -92,7 +93,12 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
       <section aria-label="Posts" aria-busy={loading}>
       {error ? (
         <ErrorState message={error} onRetry={retryLastRequest} retrying={loading} />
-      ) : restoring || (loading && posts.length === 0) ? (
+      ) : restoring ? (
+        <PaginatedResults page={query.page} totalPages={Math.max(query.page, totalPages)} pending animateChanges={false}
+          resultKey={JSON.stringify([query.query, query.categoryId, query.page])} onPageChange={handlePageChange}>
+          <ListPending label="Loading posts…" />
+        </PaginatedResults>
+      ) : (loading && posts.length === 0) ? (
         <LoadingState label={searchQuery ? "Searching posts…" : "Loading posts…"} />
       ) : posts.length === 0 ? (
         <EmptyState

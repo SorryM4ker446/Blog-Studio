@@ -8,6 +8,7 @@ import { readResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib
 import { useResourcePage } from "@/lib/use-resource-page";
 import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
+import ListPending from "@/components/ListPending";
 import { CloudIcon, FolderIcon } from "@/components/Icons";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
@@ -22,6 +23,7 @@ export interface DrivePageInitialState {
 }
 
 export default function DrivePageClient({ initialState }: { initialState: DrivePageInitialState }) {
+  const [animatePages, setAnimatePages] = useState(false);
   const searchParams = useSearchParams();
   const query = useMemo(() => readResourceQuery(searchParams, "files"), [searchParams]);
   const searchQuery = query.query;
@@ -31,17 +33,19 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
     return { query: target.query, files: "files" in result ? result.files : result.data,
       page: result.page, totalPages: Math.max(1, Math.ceil(total / result.limit)), error: "" };
   }, []);
-  const { state, loading, run, retry: retryLastRequest } = useResourcePage(
-    initialState, { query: initialState.query, categoryId: "", scope: "files", page: initialState.page }, query, load, "/drive",
+  const { state, loading, restoring, run, retry: retryLastRequest } = useResourcePage(
+    initialState, { query: initialState.query, categoryId: "", scope: "files", page: initialState.page }, query, load, "/drive", "page", true, "public",
   );
   const { files, error, page, totalPages } = state;
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   function handleSearch(value: string) {
+    setAnimatePages(true);
     const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "files"), query: value.trim(), page: 1 };
     writeResourceQuery("/drive", target);
     void run(target);
   }
   function handlePageChange(page: number) {
+    setAnimatePages(true);
     const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "files"), page };
     writeResourceQuery("/drive", target);
     void run(target);
@@ -69,6 +73,11 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
       <section aria-label="Files" aria-busy={loading}>
       {error ? (
         <ErrorState message={error} onRetry={retryLastRequest} retrying={loading} />
+      ) : restoring ? (
+        <PaginatedResults page={query.page} totalPages={Math.max(query.page, totalPages)} pending animateChanges={false}
+          resultKey={JSON.stringify([query.query, query.page])} onPageChange={handlePageChange}>
+          <ListPending label="Loading files…" />
+        </PaginatedResults>
       ) : loading && files.length === 0 ? (
         <LoadingState label={searchQuery ? "Searching files…" : "Loading files…"} />
       ) : files.length === 0 ? (
@@ -80,7 +89,7 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
           icon={<FolderIcon size={48} />}
         />
       ) : (
-        <PaginatedResults page={page} totalPages={totalPages} pending={loading}
+        <PaginatedResults page={page} totalPages={totalPages} pending={loading} animateChanges={animatePages}
           resultKey={JSON.stringify([state.query, page])} onPageChange={handlePageChange}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
           {files.map((file) => (
