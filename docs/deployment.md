@@ -43,6 +43,15 @@ For example, `SITE_ADDRESS=blog.example.com` pairs with `SITE_ORIGIN=https://blo
 
 Create the three secret files as described in [`deploy/secrets/README.md`](../deploy/secrets/README.md). Compose mounts a secret only into services that declare it. The backend accepts either the existing direct variables or their `_FILE` alternatives; when both forms of the same value are set, startup fails instead of choosing one silently.
 
+The backend and maintenance images run as UID/GID `10001`. File-backed Compose secrets therefore need host permissions that allow group `10001` to read them; a root-only `600` file causes the migration, API, seed, or maintenance container to fail with `permission denied`. After generating the files, apply the permissions shown below and keep the containing directory private:
+
+```bash
+chown root:10001 deploy/secrets/postgres_password deploy/secrets/jwt_secret deploy/secrets/admin_password
+chmod 640 deploy/secrets/postgres_password deploy/secrets/jwt_secret deploy/secrets/admin_password
+```
+
+Do not use world-readable mode `644` as a workaround. Verify ownership and modes without printing values with `stat -c '%U:%G %a %n' deploy/secrets/*`.
+
 Prepare the host-visible backup directory for the non-root maintenance container:
 
 ```bash
