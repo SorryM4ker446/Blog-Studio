@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import type { FileRecord, Category } from "@/lib/api";
 import { getCategories, searchResources, getPostTimeline } from "@/lib/api";
 import PaginatedResults from "@/components/PaginatedResults";
+import ListPending from "@/components/ListPending";
 import { useSearchPage } from "@/lib/use-search-page";
 import { useScopeTransition } from "@/lib/use-scope-transition";
 import { loadSearchResults, type SearchResults } from "@/lib/search-results";
@@ -32,6 +33,7 @@ export interface SearchPageInitialState extends SearchResults {
 }
 
 export default function SearchPageClient({ initialState }: { initialState: SearchPageInitialState }) {
+  const [animatePages, setAnimatePages] = useState(false);
   const searchParams = useSearchParams();
   const targetQuery = useMemo(() => readSearchQuery(searchParams), [searchParams]);
   const [input, setInput] = useState({ forQuery: initialState.query, value: initialState.query });
@@ -43,7 +45,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
     const [categories, result] = await Promise.all([getCategories(), loadSearchResults(target, searchResources)]);
     return { ...result, categories, searched: Boolean(target.query), error: "" };
   }, []);
-  const { state, loading, run, retry } = useSearchPage(initialState, targetQuery, load);
+  const { state, loading, restoring, run, retry } = useSearchPage(initialState, targetQuery, load);
   const { displayed, ref: resultsRef, changing: changingScope } = useScopeTransition(state, targetQuery.scope, loading, targetQuery);
   const { posts, files, searched, error, postsTotal, filesTotal, postPage, filePage, postTotalPages, fileTotalPages } = displayed;
   const { categories } = state;
@@ -53,6 +55,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
   );
 
   function navigate(target: SearchQuery) {
+    setAnimatePages(true);
     writeSearchQuery(target);
     void run(target);
   }
@@ -196,10 +199,10 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                 <FileTextIcon size={16} /> Posts ({postsTotal} results)
               </div>
             </div>
-            <PaginatedResults page={postPage} totalPages={postTotalPages} pending={loading} edgeArrows
+            <PaginatedResults page={postPage} totalPages={postTotalPages} pending={loading} edgeArrows animateChanges={animatePages}
               transitionGroup={JSON.stringify([displayed.scope, displayed.query, displayed.categoryId])}
               resultKey={JSON.stringify([displayed.query, displayed.categoryId, postPage])} onPageChange={(next) => navigate({ ...targetQuery, postPage: next })}>
-            {posts.length === 0 ? (
+            {restoring ? <ListPending label="Loading posts…" /> : posts.length === 0 ? (
               <div
                 style={{
                   padding: "1.5rem",
@@ -286,10 +289,10 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                 <FolderIcon size={16} /> Files ({filesTotal} results)
               </div>
             </div>
-            <PaginatedResults page={filePage} totalPages={fileTotalPages} pending={loading} edgeArrows
+            <PaginatedResults page={filePage} totalPages={fileTotalPages} pending={loading} edgeArrows animateChanges={animatePages}
               transitionGroup={JSON.stringify([displayed.scope, displayed.query, displayed.categoryId])}
               resultKey={JSON.stringify([displayed.query, filePage])} onPageChange={(next) => navigate({ ...targetQuery, filePage: next })}>
-            {files.length === 0 ? (
+            {restoring ? <ListPending label="Loading files…" /> : files.length === 0 ? (
               <div
                 style={{
                   padding: "1.5rem",

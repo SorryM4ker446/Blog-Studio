@@ -22,31 +22,28 @@ function restoreInitialView() {
       }
     }
   } catch { /* Use the server-rendered selection when history is unavailable. */ }
-  try {
-    const cache = JSON.parse(window.sessionStorage.getItem("blogStudio:listLayouts") || "null");
-    if (cache?.version === 1 && Array.isArray(cache.entries)) {
-      for (const entry of cache.entries.slice(-20)) {
-        if (!Array.isArray(entry) || typeof entry[0] !== "string" || entry[0].length > 2048) continue;
-        const size = entry[1];
-        if (!size || !Number.isFinite(size.width) || size.width <= 0 || size.width > 20_000
-          || !Number.isFinite(size.height) || size.height <= 0 || size.height > 100_000) continue;
-        rules += `@container list-results (min-width:${size.width - 1}px) and (max-width:${size.width + 1}px){[data-list-layout="${CSS.escape(entry[0])}"]{min-height:${size.height}px;}}`;
-      }
-    }
-  } catch { /* Layout still works without storage. */ }
+  try { window.sessionStorage.removeItem("blogStudio:listLayouts"); } catch { /* Obsolete storage may be blocked. */ }
   style.textContent = rules;
   document.head.appendChild(style);
 
   const navigation = performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined;
   if (navigation?.type !== "reload" && navigation?.type !== "back_forward") return;
-  let position = 0;
-  try {
-    const query = new URLSearchParams(window.location.search).toString();
-    const location = window.location.pathname + (query ? `?${query}` : "");
-    position = Number(window.sessionStorage.getItem(`blogStudio:contentScroll:${encodeURIComponent(location)}`));
-  } catch { return; }
-  if (!Number.isFinite(position) || position <= 0) return;
+  const entry = window.history.state?.blogNavigation;
+  const position = entry?.version === 1 && entry.url === window.location.pathname + window.location.search ? entry.scroll : 0;
+  if (!Number.isFinite(position) || position <= 0 || position > 10_000_000) return;
   let complete = false;
+  const stop = (event?: Event) => {
+    if (event) root.setAttribute("data-initial-scroll-cancelled", "true");
+    complete = true;
+    observer.disconnect();
+    window.removeEventListener("wheel", stop);
+    window.removeEventListener("touchstart", stop);
+    window.removeEventListener("pointerdown", stop);
+    window.removeEventListener("keydown", onKey);
+    window.removeEventListener("blog:initial-view-ready", release);
+  };
+  const onKey = (event: KeyboardEvent) => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) stop(event); };
+  const release = () => stop();
   const restore = () => {
     if (complete) return;
     const scroll = document.querySelector<HTMLElement>(".content-scroll");
@@ -56,6 +53,11 @@ function restoreInitialView() {
   };
   const observer = new MutationObserver(restore);
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener("wheel", stop, { passive: true });
+  window.addEventListener("touchstart", stop, { passive: true });
+  window.addEventListener("pointerdown", stop, { passive: true });
+  window.addEventListener("keydown", onKey);
+  window.addEventListener("blog:initial-view-ready", release, { once: true });
   restore();
   window.addEventListener("load", () => { restore(); observer.disconnect(); }, { once: true });
 }

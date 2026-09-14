@@ -7,16 +7,12 @@ import TopBar from "./TopBar";
 import MobileNavigation from "./MobileNavigation";
 import { TriangleIcon, StudioLogo } from "./Icons";
 import { createSidebarLayoutMotion } from "@/lib/sidebar-layout-motion";
-
-const contentScrollStoragePrefix = "blogStudio:contentScroll:";
+import { readNavigationEntry, saveEntryScroll } from "@/lib/navigation-entry";
+import { restoreScroll } from "@/lib/restore-scroll";
 
 function getLocationKey(pathname: string, searchParams: URLSearchParams | Readonly<URLSearchParams>) {
   const query = searchParams.toString();
   return query ? `${pathname}?${query}` : pathname;
-}
-
-function getContentScrollStorageKey(location: string) {
-  return `${contentScrollStoragePrefix}${encodeURIComponent(location)}`;
 }
 
 function RouteTransitionContent({
@@ -62,11 +58,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const focusAfterNavigationRef = useRef(false);
   const navigationStartedRef = useRef(false);
   const restorationInProgressRef = useRef(false);
-  const scrollSaveFrameRef = useRef(0);
+  const cancelRestorationRef = useRef<(() => void) | undefined>(undefined);
   const categoryId = pathname === "/posts" ? searchParams.get("category") : null;
   const routeKey = categoryId ? `${pathname}?category=${categoryId}` : pathname;
   const locationKey = getLocationKey(pathname, searchParams);
-  const scrollStorageKey = getContentScrollStorageKey(locationKey);
+  const committedLocationRef = useRef(locationKey);
 
   useEffect(() => () => {
     sidebarMotionRef.current?.dispose();
@@ -84,60 +80,47 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   useEffect(() => {
     const markHistoryTraversal = () => {
       historyTraversalRef.current = true;
+      if (getLocationKey(window.location.pathname, new URLSearchParams(window.location.search)) === committedLocationRef.current && contentScrollRef.current) {
+        historyTraversalRef.current = false;
+        cancelRestorationRef.current?.();
+        const position = readNavigationEntry()?.scroll;
+        if (position !== undefined) {
+          restorationInProgressRef.current = true;
+          cancelRestorationRef.current = restoreScroll(contentScrollRef.current, position, () => { restorationInProgressRef.current = false; });
+        }
+      }
     };
     window.addEventListener("popstate", markHistoryTraversal);
     return () => window.removeEventListener("popstate", markHistoryTraversal);
   }, []);
 
   useLayoutEffect(() => {
+    committedLocationRef.current = locationKey;
     navigationStartedRef.current = false;
     const navigation = initialLocationRef.current ? performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined : undefined;
     const reloaded = navigation?.type === "reload" || navigation?.type === "back_forward";
+    const cancelledBeforeHydration = initialLocationRef.current && document.documentElement.hasAttribute("data-initial-scroll-cancelled");
+    document.documentElement.removeAttribute("data-initial-scroll-cancelled");
+    window.dispatchEvent(new Event("blog:initial-view-ready"));
     initialLocationRef.current = false;
     const pathChanged = previousPathRef.current !== pathname;
     previousPathRef.current = pathname;
     focusAfterNavigationRef.current = false;
-    if (!historyTraversalRef.current && !reloaded) {
+    if (cancelledBeforeHydration || (!historyTraversalRef.current && !reloaded)) {
       focusAfterNavigationRef.current = pathChanged;
       restorationInProgressRef.current = false;
       return;
     }
     historyTraversalRef.current = false;
 
-    let savedPosition = Number.NaN;
-    try {
-      savedPosition = Number.parseFloat(window.sessionStorage.getItem(scrollStorageKey) || "");
-    } catch {
-      return;
-    }
-    if (!Number.isFinite(savedPosition)) {
-      return;
-    }
-
+    const savedPosition = readNavigationEntry()?.scroll;
+    if (savedPosition === undefined || !contentScrollRef.current) return;
     restorationInProgressRef.current = true;
-    let restoreFrame = 0;
-    let attempts = 0;
-    const restorePosition = () => {
-      const scrollContainer = contentScrollRef.current;
-      if (!scrollContainer) {
-        restorationInProgressRef.current = false;
-        return;
-      }
+    cancelRestorationRef.current = restoreScroll(contentScrollRef.current, savedPosition, () => { restorationInProgressRef.current = false; });
+    return () => cancelRestorationRef.current?.();
+  }, [locationKey, pathname]);
 
-      scrollContainer.scrollTop = Math.max(0, savedPosition);
-      attempts += 1;
-      if (Math.abs(scrollContainer.scrollTop - savedPosition) <= 1 || attempts >= 120) {
-        restorationInProgressRef.current = false;
-        return;
-      }
-      restoreFrame = window.requestAnimationFrame(restorePosition);
-    };
-    restorePosition();
-    return () => {
-      if (restoreFrame) window.cancelAnimationFrame(restoreFrame);
-      restorationInProgressRef.current = false;
-    };
-  }, [scrollStorageKey, pathname]);
+  useEffect(() => () => cancelRestorationRef.current?.(), []);
 
   useEffect(() => {
     // The mobile drawer releases modal isolation in its effect before focus moves.
@@ -145,14 +128,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       mainRef.current?.focus({ preventScroll: true });
     }
     focusAfterNavigationRef.current = false;
-  }, [scrollStorageKey, pathname]);
+  }, [locationKey, pathname]);
 
   useEffect(() => {
     const saveBeforeLeaving = () => {
       if (restorationInProgressRef.current || navigationStartedRef.current || !contentScrollRef.current) return;
-      if (scrollSaveFrameRef.current) window.cancelAnimationFrame(scrollSaveFrameRef.current);
-      scrollSaveFrameRef.current = 0;
-      storeContentScroll(scrollStorageKey, contentScrollRef.current.scrollTop);
+      storeContentScroll(locationKey, contentScrollRef.current.scrollTop);
     };
     window.addEventListener("beforeunload", saveBeforeLeaving);
     window.addEventListener("pagehide", saveBeforeLeaving);
@@ -160,28 +141,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       window.removeEventListener("beforeunload", saveBeforeLeaving);
       window.removeEventListener("pagehide", saveBeforeLeaving);
     };
-  }, [scrollStorageKey]);
+  }, [locationKey]);
 
-  useEffect(() => () => {
-    if (scrollSaveFrameRef.current) window.cancelAnimationFrame(scrollSaveFrameRef.current);
-  }, []);
-
-  function storeContentScroll(storageKey: string, position: number) {
-    try {
-      window.sessionStorage.setItem(storageKey, position.toString());
-    } catch {
-      // Navigation and scrolling should still work when storage is unavailable.
-    }
+  function storeContentScroll(expectedLocation: string, position: number) {
+    if (getLocationKey(window.location.pathname, new URLSearchParams(window.location.search)) === expectedLocation) saveEntryScroll(position);
   }
 
   function handleContentScroll(event: React.UIEvent<HTMLDivElement>) {
     if (navigationStartedRef.current || restorationInProgressRef.current) return;
-    if (scrollSaveFrameRef.current) window.cancelAnimationFrame(scrollSaveFrameRef.current);
     const position = event.currentTarget.scrollTop;
-    scrollSaveFrameRef.current = window.requestAnimationFrame(() => {
-      storeContentScroll(scrollStorageKey, position);
-      scrollSaveFrameRef.current = 0;
-    });
+    storeContentScroll(locationKey, position);
   }
 
   function rememberContentScroll(event: React.MouseEvent<HTMLDivElement>) {
@@ -209,9 +178,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       return;
     }
 
-    if (scrollSaveFrameRef.current) window.cancelAnimationFrame(scrollSaveFrameRef.current);
-    scrollSaveFrameRef.current = 0;
-    storeContentScroll(scrollStorageKey, scrollContainer.scrollTop);
+    storeContentScroll(locationKey, scrollContainer.scrollTop);
     navigationStartedRef.current = true;
   }
 

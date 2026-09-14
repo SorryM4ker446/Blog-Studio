@@ -4,17 +4,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiErrorMessage } from "./api-client";
 import { readSearchQuery, searchQueryKey, writeSearchQuery, type SearchQuery } from "./search-query";
 import type { SearchResults } from "./search-results";
+import { isClientNavigation } from "./navigation-entry";
 
 interface SearchState extends SearchResults { error: string }
 
 export function useSearchPage<T extends SearchState>(initial: T, query: SearchQuery, load: (query: SearchQuery) => Promise<T>) {
-  const [state, setState] = useState(initial);
+  const [restoring, setRestoring] = useState(() => searchQueryKey(initial) !== searchQueryKey(query));
+  const [state, setState] = useState(() => searchQueryKey(initial) === searchQueryKey(query) ? initial : { ...initial, ...query, posts: [], files: [], error: "",
+    ...("searched" in initial ? { searched: Boolean(query.query) } : {}),
+    postTotalPages: Math.max(query.postPage, initial.postTotalPages), fileTotalPages: Math.max(query.filePage, initial.fileTotalPages) });
   const [loading, setLoading] = useState(false);
   const requestedKey = useRef(searchQueryKey(initial));
   const retryQuery = useRef<SearchQuery>(initial);
   const requestId = useRef(0);
   const mounted = useRef(true);
   const correction = useRef(!initial.error && (initial.postPage > initial.postTotalPages || initial.filePage > initial.fileTotalPages));
+  const revalidateEntry = useRef(isClientNavigation());
 
   const run = useCallback(async (requested: SearchQuery) => {
     const id = ++requestId.current;
@@ -46,7 +51,7 @@ export function useSearchPage<T extends SearchState>(initial: T, query: SearchQu
         setState(value => ({ ...value, error: getApiErrorMessage(error, "Could not load results.") }));
       }
     } finally {
-      if (mounted.current && id === requestId.current) setLoading(false);
+      if (mounted.current && id === requestId.current) { setLoading(false); setRestoring(false); }
     }
   }, [load]);
 
@@ -60,12 +65,13 @@ export function useSearchPage<T extends SearchState>(initial: T, query: SearchQu
     const frame = window.requestAnimationFrame(() => {
       if (window.location.href === location) writeSearchQuery(query, true);
     });
-    if (requestedKey.current !== searchQueryKey(query) || correction.current) {
+    if (requestedKey.current !== searchQueryKey(query) || correction.current || revalidateEntry.current) {
       correction.current = false;
+      revalidateEntry.current = false;
       void run(query);
     }
     return () => window.cancelAnimationFrame(frame);
   }, [query, run]);
 
-  return { state, loading, run, retry: () => run(retryQuery.current) };
+  return { state, loading: loading || restoring, restoring, run, retry: () => run(retryQuery.current) };
 }

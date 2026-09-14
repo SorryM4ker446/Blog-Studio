@@ -69,6 +69,17 @@ export interface EditorPageInitialState {
 }
 
 export default function EditorPageClient({ initialState }: { initialState: EditorPageInitialState }) {
+  const { user } = useAuth();
+  const [initialOwner] = useState(user?.id);
+  const snapshot = initialOwner === user?.id ? initialState : {
+    ...initialState,
+    posts: { ...initialState.posts, data: [], total: 0 }, files: { ...initialState.files, data: [], total: 0 },
+    categories: [], postsError: "Reloading posts for this account.", filesError: "Reloading files for this account.", categoriesError: "Reloading categories for this account.",
+  };
+  return <EditorSession key={user?.id ?? "anonymous"} initialState={snapshot} />;
+}
+
+function EditorSession({ initialState }: { initialState: EditorPageInitialState }) {
   const { user, isLoading, authStatus, authError, refreshAuth } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -505,7 +516,6 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
     <>
       {editTarget === null ? (
         <EditorListView
-          ownerId={user?.id}
           activeTab={urlTab}
           searchQuery={searchQuery}
           posts={posts}
@@ -513,6 +523,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
           postCount={postCount}
           fileCount={fileCount}
           postsLoading={postsLoading}
+          restoring={urlTab === "posts" ? postResource.restoring : fileResource.restoring}
           filesLoading={filesLoading}
           postsError={postsError}
           filesError={filesError}

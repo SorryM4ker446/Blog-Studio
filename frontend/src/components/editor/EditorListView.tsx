@@ -8,13 +8,13 @@ import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
 import FileCard, { EditActionButton } from "@/components/files/FileCard";
 import { EditIcon, FileTextIcon, FolderIcon, InboxIcon, UploadIcon } from "@/components/Icons";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
+import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 import EditorSelect from "@/components/editor/EditorSelect";
+import EditorPageLayout from "./EditorPageLayout";
 
 export type EditorTab = "posts" | "files";
 
 interface EditorListViewProps {
-  ownerId?: number;
   activeTab: EditorTab;
   searchQuery: string;
   categories: Category[];
@@ -26,6 +26,7 @@ interface EditorListViewProps {
   fileCount: number | null;
   postsLoading: boolean;
   filesLoading: boolean;
+  restoring?: boolean;
   postsError: string;
   filesError: string;
   postPage: number;
@@ -107,6 +108,8 @@ export default function EditorListView(props: EditorListViewProps) {
   const hasItems = props.activeTab === "posts" ? props.posts.length > 0 : props.files.length > 0;
   const retry = props.activeTab === "posts" ? props.onRetryPosts : props.onRetryFiles;
   const page = props.activeTab === "posts" ? props.postPage : props.filePage;
+  const pages = props.activeTab === "posts" ? props.postTotalPages : props.fileTotalPages;
+  const count = props.activeTab === "posts" ? props.posts.length : props.files.length;
 
   return (
     <div>
@@ -181,58 +184,50 @@ export default function EditorListView(props: EditorListViewProps) {
       >
         {loading && hasItems && <span className="sr-only" role="status">Refreshing {props.activeTab}…</span>}
 
-        {loading && !hasItems ? (
-          <LoadingState label={`Loading ${props.activeTab}…`} rows={3} />
-        ) : error ? (
-          <ErrorState
-            title={`Editor ${props.activeTab} could not be loaded`}
-            message={error}
-            onRetry={retry}
-            retrying={loading}
-          />
-        ) : !hasItems ? (
+        {!error && !loading && !hasItems ? (
           <EmptyState
             title={props.searchQuery ? `No matching ${props.activeTab}` : `No ${props.activeTab} yet`}
             message={props.searchQuery ? "Try a different search term." : props.activeTab === "posts" ? "Create a post to get started." : "Upload a file to get started."}
             icon={<InboxIcon size={54} />}
           />
         ) : (
-          <PaginatedResults
-            stablePageHeight
-            heightCacheKey={JSON.stringify(["editor-height", props.ownerId, props.activeTab, props.searchQuery, props.categoryId])}
-            animateChanges={animatePages}
-            key={props.activeTab}
-            page={page}
-            totalPages={props.activeTab === "posts" ? props.postTotalPages : props.fileTotalPages}
-            resultKey={String(page)}
-            pending={loading}
-            onPageChange={(page) => {
-              setAnimatePages(true);
-              (props.activeTab === "posts" ? props.onLoadPosts : props.onLoadFiles)(page);
-            }}
-          >
-            <div className="editor-resource-grid">
-              {props.activeTab === "posts"
-                ? props.posts.map((post) => (
-                    <PostCard
-                      key={post.id}
-                      post={post}
-                      onView={() => props.onViewPost(post)}
-                      onEdit={() => props.onEditPost(post)}
-                      onDelete={() => props.onDeletePost(post.id)}
-                    />
-                  ))
-                : props.files.map((file) => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      onPreview={props.onPreviewFile}
-                      onEdit={props.onEditFile}
-                      onDelete={(item) => props.onDeleteFile(item.id)}
-                    />
-                  ))}
-            </div>
-          </PaginatedResults>
+          <EditorPageLayout resource={props.activeTab} count={(loading || error) && !hasItems ? 10 : count} pages={pages}>
+            <PaginatedResults
+              stablePageHeight
+              animateChanges={animatePages && !props.restoring}
+              key={props.activeTab}
+              page={page}
+              totalPages={pages}
+              resultKey={String(page)}
+              pending={loading}
+              onPageChange={(page) => {
+                setAnimatePages(true);
+                (props.activeTab === "posts" ? props.onLoadPosts : props.onLoadFiles)(page);
+              }}
+            >
+              {error ? <ErrorState title={`Editor ${props.activeTab} could not be loaded`} message={error} onRetry={retry} retrying={loading} /> : loading && !hasItems ? <p role="status" style={{ padding: "1.5rem", color: "var(--text-muted)" }}>Loading {props.activeTab}…</p> : <div className="editor-resource-grid">
+                {props.activeTab === "posts"
+                  ? props.posts.map((post) => (
+                      <PostCard
+                        key={post.id}
+                        post={post}
+                        onView={() => props.onViewPost(post)}
+                        onEdit={() => props.onEditPost(post)}
+                        onDelete={() => props.onDeletePost(post.id)}
+                      />
+                    ))
+                  : props.files.map((file) => (
+                      <FileCard
+                        key={file.id}
+                        file={file}
+                        onPreview={props.onPreviewFile}
+                        onEdit={props.onEditFile}
+                        onDelete={(item) => props.onDeleteFile(item.id)}
+                      />
+                    ))}
+              </div>}
+            </PaginatedResults>
+          </EditorPageLayout>
         )}
       </section>
     </div>

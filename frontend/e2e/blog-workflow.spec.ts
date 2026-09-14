@@ -287,9 +287,8 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
 
   await postLink.click();
   await expect(page.getByRole("heading", { name: postTitle })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => Object.entries(window.sessionStorage)
-    .filter(([key]) => key.startsWith("blogStudio:contentScroll:"))
-    .map(([, value]) => value))).toContain(postsScrollPosition.toString());
+  await expect(page).toHaveURL(/\/posts\/\d+$/);
+  await expect.poll(() => page.evaluate(() => ({ url: history.state.blogNavigation?.url, returnTo: history.state.blogNavigation?.returnTo }))).toEqual({ url: new URL(page.url()).pathname, returnTo: "/posts" });
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(/\/posts$/);
   await expect(page.getByText(postTitle, { exact: true })).toBeVisible();

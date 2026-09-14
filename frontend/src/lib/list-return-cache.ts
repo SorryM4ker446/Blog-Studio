@@ -1,12 +1,9 @@
-import { clearListLayouts } from "./list-layout-cache";
-
 const snapshots = new Map<string, { value: unknown; expires: number }>();
 let generation = 0;
 
 export function listCacheGeneration() { return generation; }
 
 export function clearListReturnCache() {
-  clearListLayouts();
   generation += 1;
   snapshots.clear();
 }
