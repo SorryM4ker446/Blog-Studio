@@ -10,206 +10,227 @@ These rules apply to all Codex work in this repository.
 - Preserve unrelated user changes and never overwrite or discard them.
 - Do not record real passwords, database connection strings, signing secrets, or other credentials in repository files, logs, or handoff notes.
 
-## Project-wide engineering and acceptance principles
+## Project-wide Engineering and Acceptance Principles
 
 These principles apply to features, bug fixes, refactoring, performance work, dependencies, configuration, CI, deployment, migrations, and operational tooling.
 
-Apply them **in proportion to the scope, risk, blast radius, reversibility, and shared impact of the change**. Do not investigate, redesign, or refactor unrelated systems without evidence that they are affected. A locally successful result is not sufficient evidence of a correct system change.
+Apply them **in proportion to the scope, risk, blast radius, reversibility, and shared impact of the change**. Small, isolated changes should remain lightweight. Shared, persistent, security-sensitive, concurrent, operational, or difficult-to-reverse changes require deeper investigation and validation.
+
+Do not investigate, redesign, or refactor unrelated systems without evidence that they are affected. A locally successful result is not sufficient evidence of a correct system change.
 
 ### 1. Understand the contract before changing the system
 
 Before implementation, establish enough of the following to make the change safely:
 
-* the intended outcome and acceptance criteria;
-* the current behavior that must remain valid;
-* the authoritative sources of data, state, and ownership;
-* the relevant interfaces, callers, consumers, and lifecycle;
-* the scope and likely blast radius of the change.
+- the intended outcome and acceptance criteria;
+- the current behavior that must remain valid;
+- the authoritative sources of data, state, and ownership;
+- the relevant interfaces, callers, consumers, and lifecycle;
+- the likely blast radius of the change.
 
 Trace the relevant flow across components or services when the behavior crosses those boundaries. Do not reason only from the file, symptom, screenshot, failing test, or endpoint presented.
 
-Clearly distinguish:
+Distinguish clearly between:
 
-* observed facts;
-* confirmed causes;
-* hypotheses;
-* unverified assumptions.
+- observed facts;
+- confirmed causes;
+- hypotheses;
+- unverified assumptions.
 
-For a bug, identify the mechanism producing the failure before selecting the remedy. For a feature or refactor, understand how the change fits the existing architecture and lifecycle.
+For a bug, identify the mechanism producing the failure before selecting the remedy.
+
+For a feature or refactor, understand how the change fits the existing architecture, ownership model, and lifecycle before introducing a new mechanism.
 
 Do not optimize for making a screenshot, endpoint, demo, test, or immediate task appear successful while leaving the underlying contract unresolved.
 
-Preserve established behavior unless changing it is part of the requested outcome. Make material behavior changes and design tradeoffs explicit.
+Preserve established behavior unless changing it is part of the requested outcome. Make material behavior changes and important design tradeoffs explicit.
 
-### 2. Prefer the correct source of truth and the simplest coherent design
+### 2. Prefer one coherent source of truth and the simplest design that satisfies the contract
 
-Use existing mechanisms when their contracts fit the requirement. Avoid creating competing sources of truth, duplicated state, hidden synchronization, or execution-order dependencies.
+Reuse established mechanisms when their contracts fit the requirement.
 
-Every new abstraction, dependency, state store, cache, background task, timer, retry, flag, fallback, listener, or queue must have a clear:
+Avoid introducing:
 
-* purpose;
-* owner;
-* lifetime;
-* failure behavior;
-* cleanup behavior.
+- competing sources of truth;
+- unnecessary duplicated state;
+- hidden synchronization;
+- fragile execution-order dependencies;
+- abstractions that exist only to compensate for another workaround.
 
-If successive patches require additional synchronization, fallback logic, or compensating layers to keep the system coherent, reconsider the underlying design instead of adding another patch.
+Every new abstraction, dependency, state store, cache, background task, timer, retry, flag, fallback, listener, or queue should have a clear purpose, owner, lifetime, and failure behavior.
 
-Core correctness must not depend on an optional optimization, cache, timing assumption, local-machine default, or accidental environmental condition.
+If successive patches require additional synchronization, fallback logic, or compensating layers to remain correct, reconsider the underlying design rather than adding another patch.
+
+Core correctness must not depend on:
+
+- an optional optimization;
+- cache persistence;
+- arbitrary timing assumptions;
+- local-machine defaults;
+- accidental environment behavior.
+
+Prefer the smallest coherent change that resolves the underlying requirement without creating unnecessary architecture.
 
 ### 3. Design the relevant lifecycle, not only the happy path
 
 For the affected flow, consider the states that materially apply:
 
-* initial;
-* loading or in-progress;
-* normal success;
-* empty or absent data;
-* partial completion;
-* failure;
-* retry or recovery;
-* cancellation;
-* cleanup.
+- initial;
+- loading or in progress;
+- normal success;
+- empty or absent data;
+- partial completion;
+- failure;
+- retry or recovery;
+- cancellation;
+- cleanup.
 
 Where relevant, also account for:
 
-* duplicate operations;
-* concurrent updates;
-* delayed or out-of-order work;
-* stale requests or obsolete jobs;
-* retries;
-* process restarts;
-* dependency outages;
-* version changes;
-* long-lived resource use.
+- duplicate operations;
+- concurrent updates;
+- delayed or out-of-order work;
+- stale requests or obsolete jobs;
+- process restarts;
+- dependency outages;
+- version changes;
+- long-lived execution.
 
-For writes, define transaction, consistency, ownership, and idempotency boundaries where they matter. Prevent stale or obsolete work from modifying a newer target, identity, or state.
+For writes, define transaction, consistency, ownership, and idempotency boundaries where they matter.
 
-Retries must not duplicate writes. Cache expiry must not corrupt authoritative state. Cancellation and cleanup must release resources reliably.
+Prevent stale or obsolete work from modifying newer state, identities, requests, or targets.
 
-Do not hide unresolved failures with arbitrary delays, suppressed exceptions, misleading success responses, visual masking, expanded caches, disabled safeguards, weakened tests, or excessive retries.
+Retries must not duplicate writes. Cache expiry must not corrupt authoritative state. Cancellation and replacement must not leave obsolete work able to commit later.
 
-A mitigation is not a resolution. If a workaround is necessary, identify it as such and define its limitations and failure behavior.
+Keep resource use bounded where materially relevant. Avoid unbounded work or retention, and ensure owned resources are cleaned up across success, failure, cancellation, replacement, and teardown.
 
-### 4. Keep resource use and operational behavior bounded
+Do not hide unresolved failures with:
 
-When the change can affect performance or resource use, evaluate it using realistic scale and operation frequency rather than small fixtures alone.
+- arbitrary delays;
+- suppressed exceptions;
+- misleading success responses;
+- visual masking;
+- unnecessarily expanded caches;
+- disabled safeguards;
+- weakened tests;
+- excessive retries.
 
-Consider the resources that materially apply, such as:
+A mitigation is not a resolution. If a workaround is necessary, identify it as such and make its limitations clear.
 
-* queries and external calls;
-* memory;
-* CPU;
-* connections;
-* listeners;
-* background jobs;
-* queue growth;
-* storage growth;
-* client-side rendering or network work.
+### 4. Validate contracts and failure modes, not merely implementation details
 
-Avoid unbounded work or resource retention. Ensure cleanup occurs on success, failure, cancellation, replacement, and teardown where applicable.
+Choose verification from the requirements, affected contracts, and realistic failure modes rather than from the implementation alone.
 
-Do not infer scalability or production readiness solely from successful compilation, a small test case, or a local run.
+Test the boundaries that materially apply, such as:
 
-### 5. Validate contracts and failure modes, not merely implementation details
+- empty or malformed input;
+- authorization or permission changes;
+- repeated execution;
+- realistic data sizes;
+- dependency failure;
+- expiry;
+- retries;
+- interruption;
+- concurrency;
+- stale or out-of-order work.
 
-Choose verification from the requirements, affected contracts, and realistic failure modes.
+Prefer regression tests that would fail for the original defect and pass because the underlying behavior is now correct.
 
-Tests should cover the boundaries that materially apply, such as:
+Do not:
 
-* empty or malformed input;
-* authorization or permission changes;
-* repeated execution;
-* realistic data sizes;
-* dependency failure;
-* expiry;
-* retries;
-* interruption;
-* concurrency;
-* stale or out-of-order work.
-
-Prefer regression tests that would fail for the original defect and pass for the correct reason.
-
-Do not remove assertions, weaken expectations, inflate timeouts, add arbitrary retries, or change expected behavior merely to obtain a passing test.
+- remove useful assertions;
+- weaken expectations;
+- inflate timeouts;
+- add arbitrary retries;
+- alter expected behavior solely to obtain a passing result.
 
 When an existing expectation is genuinely obsolete, replace it only when the intended contract justifies the change.
 
 Verify the affected workflow at the level appropriate to the change. Depending on the system, this may include:
 
-* unit or integration behavior;
-* API contracts;
-* browser transitions and intermediate UI states;
-* database consistency;
-* restart or migration behavior;
-* deployment or configuration checks.
+- unit or integration behavior;
+- API contracts;
+- browser transitions and intermediate UI states;
+- database consistency;
+- restart or migration behavior;
+- deployment or configuration checks.
 
-A correct final screenshot, successful HTTP response, passing unit test, or successful build alone does not establish end-to-end correctness when broader behavior is affected.
+Verify meaningful intermediate states when they affect correctness, not only the final result.
 
-### 6. Check shared impact conditionally
+A correct screenshot, successful HTTP response, passing unit test, successful build, or successful local run alone does not establish end-to-end correctness when broader behavior is affected.
 
-Inspect related project artifacts **when the change affects them**, rather than as a mandatory checklist.
+### 5. Check shared impact conditionally
 
-For example:
+Inspect related project artifacts when the change affects them. Do not treat this as a mandatory checklist for unrelated changes.
 
-* dependency changes → manifests and lockfiles;
-* configuration changes → examples, defaults, secrets handling, deployment config;
-* persistent-data changes → schemas, migrations, upgrades, rollback constraints;
-* CI/build changes → workflows and build artifacts;
-* public behavior changes → documentation and compatibility;
-* operational changes → deployment, monitoring, recovery, or runbooks.
+Examples:
 
-Check other consumers of shared modules when shared behavior changes.
+- dependency changes → manifests and lockfiles;
+- configuration changes → defaults, examples, secrets handling, deployment configuration;
+- persistent-data changes → schemas, migrations, upgrades, recovery, rollback constraints;
+- CI or build changes → workflows and generated artifacts;
+- public behavior changes → compatibility and documentation;
+- operational changes → deployment, monitoring, recovery procedures, or runbooks.
 
-For changes affecting existing data or running deployments, assess upgrade, recovery, compatibility, and rollback risks before declaring readiness.
+When shared modules or contracts change, check materially affected consumers.
 
-### 7. Stop when the evidence is sufficient
+For changes that can affect existing data or running deployments, consider compatibility, upgrade behavior, recovery, and rollback before declaring readiness.
+
+Do not broaden the task merely because adjacent artifacts exist.
+
+### 6. Stop when the evidence is sufficient
 
 Do not expand the task indefinitely.
 
 Stop when:
 
-* the requested behavior and agreed acceptance criteria are satisfied;
-* relevant affected contracts have been verified at a depth proportional to the change;
-* no known failure remains within the authorized scope;
-* required supporting artifacts are synchronized;
-* remaining uncertainty is either immaterial or clearly reported.
+- the requested behavior and acceptance criteria are satisfied;
+- affected contracts have been verified at a depth proportional to the change;
+- no known failure remains within the authorized scope;
+- required supporting artifacts are synchronized;
+- remaining uncertainty is either immaterial or clearly reported.
 
-Do not perform unrelated refactoring or speculative improvements solely because nearby code could be improved.
+Do not perform unrelated refactoring, cleanup, redesign, or speculative improvements solely because nearby code could be improved.
 
 If a broader issue is discovered outside the requested scope, report it separately unless it must be addressed for the requested change to be correct.
 
-### 8. Report completion according to evidence
+Do not keep searching for theoretical edge cases once the relevant contract is adequately established and tested.
+
+### 7. Report completion according to evidence
 
 Completion claims must match the evidence actually obtained.
 
-Report:
+Report the materially relevant parts of:
 
-* what materially changed;
-* what was verified;
-* what compatibility or operational impact exists;
-* what remains untested or uncertain;
-* any known risks or external blockers.
+- what changed;
+- what was verified;
+- compatibility or operational impact;
+- remaining uncertainty;
+- known risks;
+- external blockers.
 
 Distinguish clearly between:
 
-* code inspection;
-* local execution;
-* automated tests;
-* simulated conditions;
-* real CI results;
-* real deployment or production validation.
+- code inspection;
+- local execution;
+- automated tests;
+- simulated conditions;
+- real CI results;
+- deployment or production validation.
 
-Never present one as another.
+Never present one form of evidence as another.
 
-Do not declare the work complete while a known failure of the requested behavior remains. If an external constraint prevents full completion, identify the constraint and the remaining work rather than presenting a partial result as a full fix.
+Do not declare the work complete while a known failure of the requested behavior remains.
+
+If an external constraint prevents full completion, identify the constraint and the remaining work rather than presenting a partial result as a full fix.
 
 Passing a narrow test suite does not override a known system-level problem.
 
-### Operating rule
+### Operating Rule
 
 Use engineering judgment rather than maximum ceremony.
 
-Small, isolated, low-risk changes should receive lightweight investigation and verification. Shared, persistent, security-sensitive, concurrent, operational, or difficult-to-reverse changes require correspondingly deeper analysis and validation.
+The goal is not exhaustive investigation or maximum process. The goal is to make the requested change **correct, coherent, maintainable, proportionate to its risk, and supported by sufficient evidence**.
 
-The goal is not exhaustive process. The goal is to make the requested change correct, coherent, maintainable, and supported by evidence.
+When correctness and scope discipline conflict with speculative improvement, prefer correctness and scope discipline.
 
