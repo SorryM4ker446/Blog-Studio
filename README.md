@@ -1,75 +1,146 @@
-# Blog Studio - 开发使用说明指南
+# Blog Studio
 
-欢迎来到您的极客风博客全栈系统！以下是如何运行开发与维护项目的指南。
+Blog Studio is a full-stack blog and content management application. The repository contains a Next.js frontend, a Go API, PostgreSQL migrations, file storage, and deployment tooling.
 
-## 1. 结构概览
-- **`frontend`**: Next.js 应用，提供公开博客和管理界面。
-- **`backend`**: Go + Gin + GORM 构建的博客 API。
+## Features
 
-## 2. 前端服务运行
-应用使用 React Server Component 进行服务端渲染。本地构建使用 Node.js 22 和锁定依赖：
-- 打开终端进入项目的 `frontend` 目录安装并运行：
-  ```powershell
-  npm ci
-  npm run dev
-  ```
-- 打开浏览器访问：`http://localhost:3000`
-- 前端浏览器请求通过 `NEXT_PUBLIC_API_BASE_URL` 访问 API；Next.js 服务端首屏通过 `API_INTERNAL_BASE_URL` 获取公开资料和当前身份。本地开发时两者通常都是 `http://localhost:8080/api`。容器部署时，后者应指向容器网络内的后端地址，不能包含真实凭据。
+- Public article and file browsing with category filters, search, pagination, and responsive navigation.
+- An authenticated editor for posts and cloud-drive files.
+- Version-checked saves, explicit publication actions, recovery copies, and unsaved-change protection.
+- Server-rendered initial pages with stable refresh, navigation, and layout behavior.
+- PostgreSQL-backed search with exact result counts and bounded pagination.
+- Health endpoints, structured operational checks, Prometheus metrics, backup and restore tools, and CI validation.
 
-## 3. 后端服务运行及数据库配置
-后端需要 Go 1.26.8 和 PostgreSQL 18。前端会明确显示请求失败及重试入口；管理功能需要后端和数据库可用。请执行以下操作：
-1. 请确保您的电脑上开启了 PostgreSQL 服务（默认运行在 5432 端口），并通过 pgAdmin 或命令行提前建立一个空的数据库：`CREATE DATABASE blog_db;`
-2. 在 PowerShell 中进入项目的 `backend` 目录。
-3. 设置 PostgreSQL、JWT、服务监听地址和本地浏览器来源。JWT 密钥至少需要 32 字节，生产环境请使用随机生成的独立密钥：
-   ```powershell
-   $env:DB_DSN = "host=localhost user=postgres password=您的密码 dbname=blog_db port=5432 sslmode=disable TimeZone=Asia/Shanghai"
-   $env:JWT_SECRET = "请替换为至少32字节的随机密钥"
-   $env:SERVER_ADDRESS = ":8080"
-   $env:APP_ENV = "development"
-   $env:ALLOWED_ORIGINS = "http://localhost:3000"
-   $env:COOKIE_SECURE = "false"
-   $env:TRUSTED_PROXIES = ""
-   $env:UPLOAD_DIR = "uploads"
-   $env:MAX_UPLOAD_BYTES = "10485760"
-   ```
-4. 首次运行或后端版本包含数据库变更时，先执行独立迁移，再启动 Go 进程：
-   ```bash
-   go run ./cmd/migrate up
-   go run ./cmd/server
-   ```
-迁移命令使用 PostgreSQL 锁和版本历史安全建立或升级表结构；API 启动时只检查版本，不会自动修改数据库。
+## Repository layout
 
-首次创建管理员时还需要显式提供管理员账号和不少于 12 个字符的强密码：
+| Path | Purpose |
+| --- | --- |
+| `frontend/` | Next.js application, React components, unit tests, and Playwright tests |
+| `backend/` | Go API, migrations, seed command, and backup/restore tools |
+| `deploy/` | Docker Compose configuration, Caddy configuration, secrets guidance, and database initialization |
+| `docs/` | Development, testing, security, editor, deployment, and operations documentation |
+| `tools/` | Quality gates, coverage checks, and supporting scripts |
+| `compose.yaml` | Production deployment topology |
+
+## Requirements
+
+Native development uses:
+
+- Node.js 22 with the locked dependencies in `frontend/package-lock.json`.
+- Go 1.26.8.
+- PostgreSQL 18.
+- The `pg_trgm` extension installed in the `public` schema for the indexed-search migration.
+
+Docker Compose deployment has additional Linux host and Docker requirements. See [`docs/deployment.md`](docs/deployment.md) before deploying a site.
+
+## Native development
+
+### Start PostgreSQL
+
+Create an empty development database before running the migration command:
+
+```sql
+CREATE DATABASE blog_db;
+```
+
+The migration role must be able to use the `public` schema and install or access `pg_trgm`. The deployment documentation explains the extension prerequisite and its permissions.
+
+### Start the backend
+
+Open a PowerShell window in `backend/` and set local-only values. Use a randomly generated JWT secret of at least 32 bytes; never commit real credentials.
+
+```powershell
+$env:DB_DSN = "host=localhost user=postgres password=your_password dbname=blog_db port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+$env:JWT_SECRET = "replace_with_at_least_32_random_characters"
+$env:SERVER_ADDRESS = ":8080"
+$env:APP_ENV = "development"
+$env:ALLOWED_ORIGINS = "http://localhost:3000"
+$env:COOKIE_SECURE = "false"
+$env:TRUSTED_PROXIES = ""
+$env:UPLOAD_DIR = "uploads"
+$env:MAX_UPLOAD_BYTES = "10485760"
+
+go run ./cmd/migrate up
+go run ./cmd/server
+```
+
+Run the migration command explicitly whenever a new database migration is required. The API checks the migration version at startup and does not modify the schema automatically.
+
+To create the first administrator in an empty database, set a strong password of at least 12 characters and run the seed command once:
+
 ```powershell
 $env:ADMIN_USER = "admin"
-$env:ADMIN_PASS = "请替换为不少于12个字符的强密码"
+$env:ADMIN_PASS = "replace_with_a_strong_password_at_least_12_characters"
 go run ./cmd/seed
 ```
-种子命令不会覆盖已经存在的同名用户。密码为 12–128 个字符且不能超过 72 个 UTF-8 字节，不能使用常见弱密码，也不能包含用户名。
 
-浏览器登录使用站点级 HttpOnly Cookie，会话不会写入 localStorage。Next.js 服务端只用该 Cookie 获取首屏身份快照，浏览器 JavaScript 仍无法读取会话；通过统一请求层发起的公开数据读取不会携带管理员凭据。退出登录或修改密码会立即使旧会话失效。运行时健康检查、公开缓存与限流、内部 Prometheus 指标、请求日志和关闭行为请参阅 [`docs/runtime-operations.md`](docs/runtime-operations.md)，数据库迁移及成套备份恢复请参阅 [`docs/backup-restore.md`](docs/backup-restore.md)，生产安全配置请参阅 [`docs/security.md`](docs/security.md)，文件上传与存储规则请参阅 [`docs/file-storage.md`](docs/file-storage.md)，自动化测试说明请参阅 [`docs/testing.md`](docs/testing.md)。
+The seed command does not replace an existing account. Passwords are limited to 12–128 characters and 72 UTF-8 bytes, cannot be common weak passwords, and cannot contain the username.
 
-主题与侧栏偏好统一由 Cookie 持久化，服务端首屏与客户端使用相同初值；旧 localStorage 偏好不再读写。日期统一按北京时间显示，避免服务端与浏览器地区差异造成首屏不匹配。存储受限时仍可切换当前页面，刷新后的保留边界及日期规则见 [外观偏好说明](docs/preferences.md)。
+### Start the frontend
 
-小屏导航使用独立抽屉，不改写桌面侧栏偏好；布局、键盘操作、减少动态效果与正文图片懒加载规则见 [移动端与无障碍说明](docs/accessibility.md)。
+Open a second terminal in `frontend/`:
 
-## 4. 生产部署
+```powershell
+npm ci
+npm run dev
+```
 
-推荐的生产基线是单台 Linux 主机上的 Docker Compose：Caddy 提供同源 HTTPS 入口，Next.js 与 Go API 使用非 root 多阶段镜像，PostgreSQL、上传内容和证书状态使用独立持久化卷。首次部署、Secret 准备、升级和回滚步骤请参阅 [`docs/deployment.md`](docs/deployment.md)。这些文件不会改变上述原生本地开发方式。
+Open <http://localhost:3000>. Browser requests use `NEXT_PUBLIC_API_BASE_URL`; server-rendered requests use `API_INTERNAL_BASE_URL`. For native development, both normally point to `http://localhost:8080/api`:
 
-查询实测与索引选择见 [docs/query-analysis.md](docs/query-analysis.md)，已实现的文章摘要、管理员详情、搜索分页和 URL 契约见 [docs/search-contract.md](docs/search-contract.md)，真实覆盖率与统计口径见 [docs/coverage-baseline.md](docs/coverage-baseline.md)。列表和搜索已移除正文，编辑时单独读取完整详情；升级时须配套部署前后端。搜索由 PostgreSQL 完成规范化正文匹配、准确计数和严格分页，默认每页合计 10 条。升级需先由运维在 public schema 准备 pg_trgm，再执行新版本迁移；操作步骤见 [部署文档](docs/deployment.md)。
+```powershell
+$env:NEXT_PUBLIC_API_BASE_URL = "http://localhost:8080/api"
+$env:API_INTERNAL_BASE_URL = "http://localhost:8080/api"
+```
 
-## 5. 样式拓展
+In a container deployment, `API_INTERNAL_BASE_URL` must use the private backend service address and must never contain credentials. The Compose configuration provides the container value automatically.
 
-全站样式位于 `frontend/src/app/globals.css` 中：
-- `var(--bg-sidebar)` 和 `var(--nav-active)` 控制着侧边栏明暗基调。
-- 如需更改系统强调色，可修改 CSS 中的 `var(--accent-*)` 系列色卡。
+## Verification
 
-Article editing uses version-checked saves, explicit publication actions, browser recovery copies and unsaved-change leave protection. See [editor behavior and API compatibility](docs/editor.md); apply pending migrations and deploy matching frontend/backend revisions before using the updated editor.
+Run frontend checks from `frontend/`:
 
+```powershell
+npm run lint
+npm run test:unit
+npm run test:coverage
+npm run build
+npm audit
+npm run test:e2e
+```
 
-## 持续质量与依赖维护
+Run backend checks from `backend/` when backend code or backend test tooling changes:
 
-前后端覆盖率使用固定全量统计范围，并对搜索、恢复、离开保护和发布逻辑执行更高要求；门槛、命令和失败报告见 [质量门槛](docs/quality-gates.md)。CI 可手动触发，保留数据库迁移、真实备份恢复、查询计划、匿名读取基准、桌面/移动端及容器检查。
+```powershell
+go test ./...
+go test -race ./...
+go vet ./...
+go build ./...
+```
 
-[依赖健康检查](docs/dependency-maintenance.md)支持手动运行和每周检查，只读取并报告依赖信息，不自动升级、提交或创建 PR。安全修复、构建工具链和维护镜像须一起验证；本地通过不代表远端容器任务已经通过。
+The backend integration suites require PostgreSQL and use a disposable test database. Do not run Docker Compose as a substitute for the native checks above during local development. Container topology and deployment checks run in GitHub Actions.
+
+See [`docs/testing.md`](docs/testing.md) for test boundaries, database setup, browser coverage, failure artifacts, and the current quality gates. Coverage reports are generated locally and are not a substitute for the CI result.
+
+## Configuration and security
+
+`backend/.env.example` lists the supported backend variables and safe placeholders. Container deployments use the non-secret template in `deploy/.env.example` and secret files described in [`deploy/secrets/README.md`](deploy/secrets/README.md). Do not place passwords, JWT values, database DSNs, or restored data in committed configuration.
+
+Sessions use site-level HttpOnly cookies and are not stored in `localStorage`. Sign-out and password changes invalidate old sessions. Theme and sidebar preferences use cookies so the server-rendered page and the browser start with the same values. Runtime health checks, public caching, rate limits, metrics, request logging, and shutdown behavior are documented in [`docs/runtime-operations.md`](docs/runtime-operations.md).
+
+Read the following documents for behavior that is easy to miss during development:
+
+- [`docs/editor.md`](docs/editor.md) — editor behavior, save and publish compatibility, recovery, and leave protection.
+- [`docs/accessibility.md`](docs/accessibility.md) — keyboard behavior, responsive navigation, reduced motion, and image loading.
+- [`docs/search-contract.md`](docs/search-contract.md) — list, detail, search, pagination, and URL contracts.
+- [`docs/file-storage.md`](docs/file-storage.md) — upload, storage, preview, and download rules.
+- [`docs/security.md`](docs/security.md) — production security configuration.
+- [`docs/backup-restore.md`](docs/backup-restore.md) — matched database and upload backups and isolated restore verification.
+
+## Production deployment
+
+The supported deployment baseline is one Linux host running Docker Compose, with Caddy as the public HTTPS entry point, private Next.js and Go services, PostgreSQL, and persistent upload and certificate volumes. The deployment workflow runs migrations before the API, uses secret files for sensitive values, and exposes only Caddy to the public network.
+
+Follow [`docs/deployment.md`](docs/deployment.md) for host prerequisites, secret preparation, the `pg_trgm` prerequisite, first deployment, upgrades, rollback, and troubleshooting. The committed CI workflow validates the container topology; a successful native run does not prove that the remote container job or a production deployment has passed.
+
+## Styling
+
+Global styles are in `frontend/src/app/globals.css`. The `--bg-sidebar`, `--nav-active`, and `--accent-*` variables control the main sidebar and accent colors. Preserve the existing keyboard, reduced-motion, responsive, and server-rendering behavior when changing styles.
