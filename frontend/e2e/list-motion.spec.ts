@@ -69,6 +69,8 @@ for (const scenario of cases) {
     const next = region.getByRole("button", { name: "Next page" });
     const previous = region.getByRole("button", { name: "Previous page" });
     await expect(rows).toHaveCount(10);
+    await expect.poll(() => region.evaluate(node => node.getAnimations({ subtree: true })
+      .filter(animation => animation.playState === "running" || animation.pending).length)).toBe(0);
     await expect(next).toBeEnabled();
     const content = region.locator("[data-result-page]");
     // Initial search can change the height of an existing server-rendered list.

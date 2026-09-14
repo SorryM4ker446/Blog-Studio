@@ -229,6 +229,10 @@ a {
   opacity: 0.4;
 }
 
+.editor-form-surface:disabled .editor-icon-button:disabled {
+  opacity: 1;
+}
+
 .editor-inline-action {
   min-height: 40px;
   border: 1px solid var(--border-color);
@@ -373,6 +377,7 @@ a {
 
 .editor-list-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
@@ -380,8 +385,11 @@ a {
 }
 
 .editor-tabs {
-  display: flex;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  position: relative;
+  isolation: isolate;
+  flex-shrink: 0;
   width: fit-content;
   padding: 6px;
   border: 1px solid var(--border-color);
@@ -389,8 +397,22 @@ a {
   background: var(--bg-surface);
 }
 
+.editor-tabs::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 6px auto 6px 6px;
+  width: calc((100% - 12px) / 2);
+  border-radius: 8px;
+  background: rgba(168, 199, 250, 0.15);
+  transition: transform 280ms cubic-bezier(.22, 1, .36, 1);
+}
+.editor-tabs[data-active-tab="files"]::before { transform: translateX(100%); }
+
 .editor-tab {
   display: inline-flex;
+  justify-content: center;
+  white-space: nowrap;
   align-items: center;
   gap: 8px;
   padding: 10px 24px;
@@ -404,7 +426,6 @@ a {
 }
 
 .editor-tab-active {
-  background: rgba(168, 199, 250, 0.15);
   color: var(--accent-blue);
 }
 

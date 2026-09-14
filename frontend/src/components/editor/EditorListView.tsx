@@ -1,7 +1,9 @@
 "use client";
 
 import { formatDate } from "@/lib/display-date";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useScopeTransition } from "@/lib/use-scope-transition";
+import type { ResourceQuery } from "@/lib/resource-query";
 
 import type { Category, FileRecord, PostSummary } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
@@ -17,6 +19,8 @@ export type EditorTab = "posts" | "files";
 interface EditorListViewProps {
   activeTab: EditorTab;
   searchQuery: string;
+  postResultQuery?: ResourceQuery;
+  fileResultQuery?: ResourceQuery;
   categories: Category[];
   categoryId: string;
   onCategoryChange: (categoryId: string) => void;
@@ -101,8 +105,19 @@ function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onVie
   );
 }
 
-export default function EditorListView(props: EditorListViewProps) {
+export default function EditorListView(controls: EditorListViewProps) {
   const [animatePages, setAnimatePages] = useState(false);
+  const [animateCriteria, setAnimateCriteria] = useState(false);
+  const requestedLoading = controls.activeTab === "posts" ? controls.postsLoading : controls.filesLoading;
+  const resultQuery = controls.activeTab === "posts" ? controls.postResultQuery : controls.fileResultQuery;
+  const value = useMemo(() => ({ ...controls, scope: controls.activeTab,
+    query: resultQuery?.query ?? controls.searchQuery,
+    categoryId: resultQuery?.categoryId ?? controls.categoryId,
+    error: controls.activeTab === "posts" ? controls.postsError : controls.filesError,
+  }), [controls, resultQuery]);
+  const { displayed: props, ref, changing } = useScopeTransition(value, controls.activeTab, requestedLoading,
+    { query: controls.searchQuery, categoryId: controls.activeTab === "posts" ? controls.categoryId : "" }, animateCriteria && !controls.restoring);
+  function changeTab(tab: EditorTab) { setAnimateCriteria(true); controls.onTabChange(tab); }
   const loading = props.activeTab === "posts" ? props.postsLoading : props.filesLoading;
   const error = props.activeTab === "posts" ? props.postsError : props.filesError;
   const hasItems = props.activeTab === "posts" ? props.posts.length > 0 : props.files.length > 0;
@@ -121,55 +136,55 @@ export default function EditorListView(props: EditorListViewProps) {
       </header>
 
       <div className="editor-list-toolbar">
-        <div role="tablist" aria-label="Editor resources" className="editor-tabs" onKeyDown={event => {
+        <div role="tablist" aria-label="Editor resources" className="editor-tabs" data-active-tab={controls.activeTab} onKeyDown={event => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
           event.preventDefault();
-          const tab = event.key === "Home" ? "posts" : event.key === "End" ? "files" : props.activeTab === "posts" ? "files" : "posts";
-          props.onTabChange(tab);
+          const tab = event.key === "Home" ? "posts" : event.key === "End" ? "files" : controls.activeTab === "posts" ? "files" : "posts";
+          changeTab(tab);
           document.getElementById(`editor-${tab}-tab`)?.focus({ preventScroll: true });
         }}>
           <button
             type="button"
             role="tab"
             id="editor-posts-tab"
-            tabIndex={props.activeTab === "posts" ? 0 : -1}
+            tabIndex={controls.activeTab === "posts" ? 0 : -1}
             aria-controls="editor-resource-panel"
-            aria-selected={props.activeTab === "posts"}
-            className={props.activeTab === "posts" ? "editor-tab editor-tab-active" : "editor-tab"}
-            onClick={() => props.onTabChange("posts")}
+            aria-selected={controls.activeTab === "posts"}
+            className={controls.activeTab === "posts" ? "editor-tab editor-tab-active" : "editor-tab"}
+            onClick={() => changeTab("posts")}
           >
-            <FileTextIcon size={18} /> Posts{props.postCount === null ? "" : ` (${props.postCount})`}
+            <FileTextIcon size={18} /> Posts{controls.postCount === null ? "" : ` (${controls.postCount})`}
           </button>
           <button
             type="button"
             role="tab"
             id="editor-files-tab"
-            tabIndex={props.activeTab === "files" ? 0 : -1}
+            tabIndex={controls.activeTab === "files" ? 0 : -1}
             aria-controls="editor-resource-panel"
-            aria-selected={props.activeTab === "files"}
-            className={props.activeTab === "files" ? "editor-tab editor-tab-active" : "editor-tab"}
-            onClick={() => props.onTabChange("files")}
+            aria-selected={controls.activeTab === "files"}
+            className={controls.activeTab === "files" ? "editor-tab editor-tab-active" : "editor-tab"}
+            onClick={() => changeTab("files")}
           >
-            <FolderIcon size={18} /> Files{props.fileCount === null ? "" : ` (${props.fileCount})`}
+            <FolderIcon size={18} /> Files{controls.fileCount === null ? "" : ` (${controls.fileCount})`}
           </button>
         </div>
 
         <div className="editor-list-actions">
-          {props.activeTab === "posts" && <EditorSelect
+          {controls.activeTab === "posts" && <EditorSelect
             ariaLabel="Filter articles by category"
             unavailableLabel="Unavailable category"
-            value={props.categoryId}
+            value={controls.categoryId}
             width="13rem"
             options={[
               { value: "", label: "All categories" },
               { value: "0", label: "Uncategorized" },
-              ...props.categories.map((category) => ({ value: String(category.id), label: category.name })),
+              ...controls.categories.map((category) => ({ value: String(category.id), label: category.name })),
             ]}
-            onChange={props.onCategoryChange}
+            onChange={category => { setAnimateCriteria(true); controls.onCategoryChange(category); }}
           />}
-          <SearchInput placeholder={`Search ${props.activeTab}...`} onSearch={props.onSearch} style={{ width: "220px" }} value={props.searchQuery} />
-          <button type="button" onClick={props.activeTab === "posts" ? props.onNewPost : props.onUploadFile} className="editor-primary-action">
-            {props.activeTab === "posts" ? "+ New Post" : <><UploadIcon size={16} /> Upload File</>}
+          <SearchInput placeholder={`Search ${controls.activeTab}...`} onSearch={query => { setAnimateCriteria(true); controls.onSearch(query); }} style={{ width: "220px" }} value={controls.searchQuery} />
+          <button type="button" onClick={controls.activeTab === "posts" ? controls.onNewPost : controls.onUploadFile} className="editor-primary-action">
+            {controls.activeTab === "posts" ? "+ New Post" : <><UploadIcon size={16} /> Upload File</>}
           </button>
         </div>
       </div>
@@ -179,15 +194,17 @@ export default function EditorListView(props: EditorListViewProps) {
         role="tabpanel"
         tabIndex={0}
         aria-labelledby={`editor-${props.activeTab}-tab`}
-        aria-busy={loading}
+        aria-busy={requestedLoading || changing}
         className="editor-resource-panel"
+        ref={ref}
+        inert={changing}
       >
         {loading && hasItems && <span className="sr-only" role="status">Refreshing {props.activeTab}…</span>}
 
-        {!error && !loading && !hasItems ? (
+        {!error && !props.restoring && !hasItems ? (
           <EmptyState
-            title={props.searchQuery ? `No matching ${props.activeTab}` : `No ${props.activeTab} yet`}
-            message={props.searchQuery ? "Try a different search term." : props.activeTab === "posts" ? "Create a post to get started." : "Upload a file to get started."}
+            title={props.query ? `No matching ${props.activeTab}` : `No ${props.activeTab} yet`}
+            message={props.query ? "Try a different search term." : props.activeTab === "posts" ? "Create a post to get started." : "Upload a file to get started."}
             icon={<InboxIcon size={54} />}
           />
         ) : (
@@ -196,6 +213,7 @@ export default function EditorListView(props: EditorListViewProps) {
               stablePageHeight
               animateChanges={animatePages && !props.restoring}
               key={props.activeTab}
+              transitionGroup={JSON.stringify([props.activeTab, props.query, props.categoryId])}
               page={page}
               totalPages={pages}
               resultKey={String(page)}

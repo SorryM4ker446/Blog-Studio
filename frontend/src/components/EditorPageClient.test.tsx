@@ -14,14 +14,14 @@ const { getAdminFilesMock, getAdminPostsMock, getAdminPostMock, createPostMock, 
   updatePostMock: vi.fn(),
   publishPostMock: vi.fn(),
   unpublishPostMock: vi.fn(),
-  navigationState: { searchParams: new URLSearchParams("tab=posts"), userId: 1 },
+  navigationState: { searchParams: new URLSearchParams("tab=posts"), userId: 1, delayedParams: null as URLSearchParams | null },
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock, replace: vi.fn(), refresh: refreshMock }),
-  useSearchParams: () => new URLSearchParams(window.location.search),
+  useSearchParams: () => navigationState.delayedParams ?? new URLSearchParams(window.location.search),
 }));
 
 vi.mock("@/context/AuthContext", () => ({
@@ -136,6 +136,7 @@ function pendingDetail() {
 
 describe("Editor article detail loading", () => {
   beforeEach(() => {
+    navigationState.delayedParams = null;
     navigationState.userId = 1;
     navigationState.searchParams = new URLSearchParams("tab=posts");
     window.history.replaceState({}, "", "/editor?tab=posts");
@@ -399,6 +400,49 @@ describe("Editor article detail loading", () => {
     expect(screen.queryByTestId("editor-list")).not.toBeInTheDocument();
     expect(await screen.findByLabelText("Loaded article body")).toHaveValue(fullPost.content);
     expect(getAdminPostMock).toHaveBeenCalledWith(7, { signal: expect.any(AbortSignal) });
+  });
+
+  it("keeps the saved draft mounted while the router catches up with native history", async () => {
+    window.history.replaceState(null, "", "/editor?edit=new&draft=handoff");
+    navigationState.delayedParams = new URLSearchParams(window.location.search);
+    createPostMock.mockResolvedValue({ ...fullPost, status: "draft" });
+    getAdminPostsMock.mockResolvedValue({ data: readyState.posts.data, page: 1, limit: 10, total: 2 });
+    const view = render(<EditorPageClient initialState={readyState} />);
+    const title = screen.getByLabelText("Article title");
+    const body = screen.getByLabelText("Loaded article body");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
+    fireEvent.change(title, { target: { value: fullPost.title } });
+    fireEvent.change(body, { target: { value: fullPost.content } });
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("edit")).toBe("7"));
+    expect(title).toHaveValue(fullPost.title);
+    expect(body).toHaveValue(fullPost.content);
+    navigationState.delayedParams = null;
+    view.rerender(<EditorPageClient initialState={readyState} />);
+    expect(screen.getByLabelText("Article title")).toBe(title);
+    expect(screen.getByLabelText("Loaded article body")).toBe(body);
+    expect(getAdminPostMock).not.toHaveBeenCalled();
+  });
+
+  it("uses a matching server article immediately and clears it when identity changes", async () => {
+    window.history.replaceState(null, "", "/editor?edit=7");
+    const initialState = { ...readyState, post: fullPost };
+    const view = render(<EditorPageClient initialState={initialState} />);
+    expect(screen.getByLabelText("Loaded article body")).toHaveValue(fullPost.content);
+    expect(getAdminPostMock).not.toHaveBeenCalled();
+    getAdminPostMock.mockReturnValue(new Promise(() => {}));
+    navigationState.userId = 2;
+    view.rerender(<EditorPageClient initialState={initialState} />);
+    expect(screen.queryByLabelText("Loaded article body")).not.toBeInTheDocument();
+    await waitFor(() => expect(getAdminPostMock).toHaveBeenCalledWith(7, { signal: expect.any(AbortSignal) }));
+  });
+
+  it("does not use a server article that belongs to another URL target", async () => {
+    window.history.replaceState(null, "", "/editor?edit=8");
+    getAdminPostMock.mockResolvedValue({ ...fullPost, id: 8, content: "Requested body" });
+    render(<EditorPageClient initialState={{ ...readyState, post: fullPost }} />);
+    expect(screen.queryByLabelText("Loaded article body")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("Loaded article body")).toHaveValue("Requested body");
   });
 
   it("opens the new article form from its URL without a saved article read", () => {

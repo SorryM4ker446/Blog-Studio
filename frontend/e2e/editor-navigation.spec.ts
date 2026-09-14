@@ -37,7 +37,9 @@ test("editor URLs restore saved articles and new drafts through refresh and hist
     await page.goForward();
     await expect(body).toHaveValue(draft.content);
     const reload = await page.reload();
-    expect(await reload!.text()).toContain("Loading article");
+    const html = await reload!.text();
+    expect(html).toContain(draft.content);
+    expect(html).not.toContain("Loading article");
     await expect(body).toHaveValue(draft.content);
     expect(new URL(page.url()).searchParams.get("q")).toBe(name);
     expect(new URL(page.url()).searchParams.get("category")).toBe(String(category.id));

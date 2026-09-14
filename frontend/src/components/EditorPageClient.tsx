@@ -38,6 +38,7 @@ import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
 import PostEditorForm from "@/components/editor/PostEditorForm";
 import PostDetailLoader from "@/components/editor/PostDetailLoader";
+import EditorViewTransition from "@/components/editor/EditorViewTransition";
 import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
@@ -58,6 +59,7 @@ export interface FileListSnapshot {
 }
 
 export interface EditorPageInitialState {
+  post?: PostDetail | null;
   posts: PostListSnapshot;
   files: FileListSnapshot;
   postQuery: ResourceQuery;
@@ -73,6 +75,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const [initialOwner] = useState(user?.id);
   const snapshot = initialOwner === user?.id ? initialState : {
     ...initialState,
+    post: null,
     posts: { ...initialState.posts, data: [], total: 0 }, files: { ...initialState.files, data: [], total: 0 },
     categories: [], postsError: "Reloading posts for this account.", filesError: "Reloading files for this account.", categoriesError: "Reloading categories for this account.",
   };
@@ -128,12 +131,13 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const [categories, setCategories] = useState<Category[]>(initialState.categories);
   const [categoriesLoading, setCategoriesLoading] = useState(Boolean(initialState.categoriesError));
   const [categoriesError, setCategoriesError] = useState(initialState.categoriesError);
-  const [editingPost, setEditingPost] = useState<PostDetail | null>(null);
-  const [postToLoad, setPostToLoad] = useState<number | null>(typeof editTarget === "number" ? editTarget : null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editSummary, setEditSummary] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [editCategoryId, setEditCategoryId] = useState(0);
+  const initialPost = initialState.post?.id === editTarget ? initialState.post : null;
+  const [editingPost, setEditingPost] = useState<PostDetail | null>(initialPost);
+  const [postToLoad, setPostToLoad] = useState<number | null>(typeof editTarget === "number" && !initialPost ? editTarget : null);
+  const [editTitle, setEditTitle] = useState(initialPost?.title ?? "");
+  const [editSummary, setEditSummary] = useState(initialPost?.summary ?? "");
+  const [editContent, setEditContent] = useState(() => normalizeMarkdownFileUrls(initialPost?.content ?? ""));
+  const [editCategoryId, setEditCategoryId] = useState(initialPost?.category_id ?? 0);
   const [conflict, setConflict] = useState(false);
   const [latestPost, setLatestPost] = useState<PostDetail | null>(null);
   const [loadingLatest, setLoadingLatest] = useState(false);
@@ -187,7 +191,12 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     setSaving(false);
   }
 
-  if (formTarget !== editTarget || (editTarget === "new" && formDraft && formDraft !== draftId)) resetForm(editTarget);
+  if (formTarget !== editTarget || (editTarget === "new" && formDraft && formDraft !== draftId)) {
+    // Native history and useSearchParams can commit at different priorities.
+    // Adopt the saved draft when its URL arrives, preserving the existing form.
+    if (formTarget === "new" && editingPost?.id === editTarget) setFormTarget(editTarget);
+    else resetForm(editTarget);
+  }
   else if (editTarget === "new" && formDraft !== draftId) setFormDraft(draftId);
 
   useEffect(() => {
@@ -343,7 +352,6 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       && readEditorTarget(new URLSearchParams(window.location.search)) === operationTarget;
     const retainArticle = (post: PostDetail) => {
       operationTarget = post.id;
-      setFormTarget(post.id);
       writeEditorTarget(post.id, true);
     };
     setSaving(true); setSaveAction(action); setSessionExpired(false); setSaveMessage("");
@@ -514,10 +522,13 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
   return (
     <>
+      <EditorViewTransition detail={editTarget !== null}>
       {editTarget === null ? (
         <EditorListView
           activeTab={urlTab}
           searchQuery={searchQuery}
+          postResultQuery={postResource.resultQuery}
+          fileResultQuery={fileResource.resultQuery}
           posts={posts}
           files={files}
           postCount={postCount}
@@ -558,7 +569,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
         />
       ) : (
         <div className="editor-detail-frame">
-        <RecoveryNotice copies={recovery.copies} checking={recovery.checking} error={recovery.error}
+        <RecoveryNotice copies={recovery.copies} error={recovery.error}
           onRestore={recovery.restore} onDiscard={recovery.discard} />
         <PostEditorForm
           editingPost={editingPost}
@@ -570,6 +581,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           action={saveAction}
           conflict={conflict}
           recoveryPending={recovery.checking || recovery.copies.length > 0 || (editTarget === "new" && !draftId)}
+          recoveryChecking={recovery.checking}
           latestPost={latestPost}
           loadingLatest={loadingLatest}
           latestError={latestError}
@@ -601,6 +613,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
         />
         </div>
       )}
+      </EditorViewTransition>
 
       {uploadDialogOpen && <FileUploadDialog open onClose={() => setUploadDialogOpen(false)} onUpload={handleManagedFileUpload} />}
       <FilePreviewDialog

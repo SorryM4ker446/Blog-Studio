@@ -136,6 +136,8 @@ for (const theme of ["dark", "light"]) {
       const beforeSidebar = await sidebarPresentation(sidebar);
       await attachSidebar(sidebar, testInfo, "before saving");
       const beforeSave = await presentation(save);
+      const createCategory = page.getByRole("button", { name: "Create category", exact: true });
+      const beforeCreateCategory = await presentation(createCategory);
       const beforeStatus = await presentation(status);
       const gate = new Promise<void>(resolve => { release = resolve; });
       const endpoint = `**/api/admin/posts/${articleA.id}`;
@@ -152,6 +154,8 @@ for (const theme of ["dark", "light"]) {
       await expect(page.locator("#post-summary")).toBeDisabled();
       await expect(body).toBeDisabled();
       await expect(page.getByRole("combobox", { name: "Post category" })).toBeDisabled();
+      await expect(createCategory).toBeDisabled();
+      expect(await presentation(createCategory)).toEqual(beforeCreateCategory);
       expect(await presentation(save)).toEqual(beforeSave);
       expect(await presentation(status)).toEqual(beforeStatus);
       await attachSidebar(sidebar, testInfo, "during failed save");
@@ -159,6 +163,8 @@ for (const theme of ["dark", "light"]) {
       release();
       await expect(page.locator("#post-save-message")).toHaveAttribute("role", "alert");
       await expect(save).toBeEnabled();
+      await expect(createCategory).toBeEnabled();
+      expect(await presentation(createCategory)).toEqual(beforeCreateCategory);
       await expect(body).toHaveValue("Preserved submitted body");
       await attachSidebar(sidebar, testInfo, "after failed save");
       expect(await sidebarPresentation(sidebar)).toEqual(beforeSidebar);
@@ -198,7 +204,7 @@ for (const theme of ["dark", "light"]) {
       await page.getByRole("button", { name: "Back to content list" }).click();
       await page.locator(".editor-post-card").filter({ has: page.getByText(articleA.title, { exact: true }) }).getByRole("button", { name: "Edit", exact: true }).click();
       await expect(body).toHaveValue("Preserved submitted body");
-      await expect.poll(() => save.evaluate(button => button.closest("form")!.getAnimations({ subtree: true })
+      await expect.poll(() => save.evaluate(button => button.closest("[data-editor-view]")!.getAnimations({ subtree: true })
         .filter(animation => animation.playState === "running" || animation.pending).length)).toBe(0);
       const savedURL = page.url();
       const publishedSavePresentation = await presentation(save);

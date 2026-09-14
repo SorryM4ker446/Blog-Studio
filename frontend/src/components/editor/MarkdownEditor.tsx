@@ -1,8 +1,32 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { cloneElement, useEffect, useRef } from "react";
 import MdEditor from "react-markdown-editor-lite";
 import type { ComponentProps } from "react";
+
+// Match the server default during hydration. The upstream mount lifecycle
+// restores the browser language after the initial tree has committed.
+const { useLocale: setEditorLocale } = MdEditor;
+setEditorLocale("enUS");
+
+// The upstream editor defers preview rendering until mount. Seed its public
+// state with our synchronous renderer so SSR and hydration show the same body.
+class PrerenderedEditor extends MdEditor {
+  constructor(props: ComponentProps<typeof MdEditor>) {
+    super(props);
+    const html = props.renderHTML(this.state.text);
+    if (typeof html === "string") this.state = { ...this.state, html };
+  }
+
+  componentDidMount() {
+    super.componentDidMount();
+    // Locale detection changes after hydration, but the upstream plugin
+    // elements are cached. Refresh their props without replacing their nodes.
+    this.setState(({ plugins }) => ({ plugins: Object.fromEntries(
+      Object.entries(plugins).map(([position, elements]) => [position, elements.map(element => cloneElement(element))]),
+    ) }));
+  }
+}
 
 // The upstream toolbar uses spans; keep its commands while exposing keyboard controls.
 export default function MarkdownEditor(props: ComponentProps<typeof MdEditor>) {
@@ -85,5 +109,5 @@ export default function MarkdownEditor(props: ComponentProps<typeof MdEditor>) {
       parent?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: rootRef.current }));
       (parent?.querySelector<HTMLElement>('[aria-expanded]') ?? parent)?.focus();
     }
-  }}><MdEditor {...props} /></div>;
+  }}><PrerenderedEditor {...props} /></div>;
 }

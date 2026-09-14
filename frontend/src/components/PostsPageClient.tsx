@@ -13,7 +13,7 @@ import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
 import ListPending from "@/components/ListPending";
 import { FolderIcon, ClipboardIcon, InboxIcon, FileTextIcon } from "@/components/Icons";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
+import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 
 export interface PostsPageInitialState {
   query: string;
@@ -98,21 +98,20 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
           resultKey={JSON.stringify([query.query, query.categoryId, query.page])} onPageChange={handlePageChange}>
           <ListPending label="Loading posts…" />
         </PaginatedResults>
-      ) : (loading && posts.length === 0) ? (
-        <LoadingState label={searchQuery ? "Searching posts…" : "Loading posts…"} />
-      ) : posts.length === 0 ? (
+      ) : (
+        <PaginatedResults page={page} totalPages={totalPages} pending={loading} animateChanges={animateChanges}
+          resultKey={JSON.stringify([state.query, state.categoryId, page])} onPageChange={handlePageChange}>
+        {posts.length === 0 ? (
         <EmptyState
-          title={searchQuery ? "No matching posts" : "No posts yet"}
-          message={searchQuery
-            ? `No posts match “${searchQuery}”. Try another keyword.`
+          title={state.query ? "No matching posts" : "No posts yet"}
+          message={state.query
+            ? `No posts match “${state.query}”. Try another keyword.`
             : currentCategoryName
               ? `There are no published posts in ${currentCategoryName}.`
               : "No published posts are available yet."}
           icon={<InboxIcon size={48} />}
         />
-      ) : (
-        <PaginatedResults page={page} totalPages={totalPages} pending={loading} animateChanges={animateChanges}
-          resultKey={JSON.stringify([state.query, state.categoryId, page])} onPageChange={handlePageChange}>
+        ) : (
         <div
           style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}
         >
@@ -201,6 +200,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
             </Link>
           ))}
         </div>
+        )}
         </PaginatedResults>
       )}
       </section>

@@ -12,7 +12,7 @@ import ListPending from "@/components/ListPending";
 import { CloudIcon, FolderIcon } from "@/components/Icons";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
+import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 
 export interface DrivePageInitialState {
   query: string;
@@ -78,24 +78,24 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
           resultKey={JSON.stringify([query.query, query.page])} onPageChange={handlePageChange}>
           <ListPending label="Loading files…" />
         </PaginatedResults>
-      ) : loading && files.length === 0 ? (
-        <LoadingState label={searchQuery ? "Searching files…" : "Loading files…"} />
-      ) : files.length === 0 ? (
-        <EmptyState
-          title={searchQuery ? "No matching files" : "No files yet"}
-          message={searchQuery
-            ? `No files match “${searchQuery}”. Try another file name.`
-            : "No public files have been uploaded yet."}
-          icon={<FolderIcon size={48} />}
-        />
       ) : (
         <PaginatedResults page={page} totalPages={totalPages} pending={loading} animateChanges={animatePages}
           resultKey={JSON.stringify([state.query, page])} onPageChange={handlePageChange}>
+        {files.length === 0 ? (
+        <EmptyState
+          title={state.query ? "No matching files" : "No files yet"}
+          message={state.query
+            ? `No files match “${state.query}”. Try another file name.`
+            : "No public files have been uploaded yet."}
+          icon={<FolderIcon size={48} />}
+        />
+        ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
           {files.map((file) => (
             <FileCard key={file.id} file={file} onPreview={setPreviewFile} showDescription={false} />
           ))}
         </div>
+        )}
         </PaginatedResults>
       )}
       </section>
