@@ -88,7 +88,7 @@ export default function CategoryField({ categories, value, loading = false, onCh
       </div>
 
       {mode !== "idle" && (
-        <div className="fade-in" style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+        <div className="fade-in editor-category-create">
           <label htmlFor="category-name" className="sr-only">
             Category name
           </label>

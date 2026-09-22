@@ -35,6 +35,8 @@ import { requestEditorNavigation } from "@/lib/editor-navigation";
 import { useEditorRecovery } from "@/lib/use-editor-recovery";
 import RecoveryNotice from "@/components/editor/RecoveryNotice";
 import { useResourcePage } from "@/lib/use-resource-page";
+import type { HomepageLink } from "@/lib/links";
+import useLinksManager from "@/components/links/LinksManager";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
 import PostEditorForm from "@/components/editor/PostEditorForm";
@@ -64,6 +66,8 @@ export interface EditorPageInitialState {
   post?: PostDetail | null;
   posts: PostListSnapshot;
   files: FileListSnapshot;
+  links: HomepageLink[];
+  linksError: string;
   postQuery: ResourceQuery;
   fileQuery: ResourceQuery;
   categories: Category[];
@@ -77,7 +81,7 @@ export default function EditorPageClient({ initialState }: { initialState: Edito
   const [initialOwner] = useState(user?.id);
   const snapshot = initialOwner === user?.id ? initialState : {
     ...initialState,
-    post: null,
+    post: null, links: [], linksError: "Reloading links for this account.",
     posts: { ...initialState.posts, data: [], total: 0 }, files: { ...initialState.files, data: [], total: 0 },
     categories: [], postsError: "Reloading posts for this account.", filesError: "Reloading files for this account.", categoriesError: "Reloading categories for this account.",
   };
@@ -119,6 +123,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       page: result.page, totalPages: Math.max(1, Math.ceil(result.total / result.limit)), error: "" };
   }, []);
   const authorized = authStatus === "authenticated" && user?.role === "admin";
+  const linkResource = useLinksManager(authorized && urlTab === "links", initialState.links, initialState.linksError);
   const postResource = useResourcePage({ ...initialState.posts, error: initialState.postsError }, initialState.postQuery, postQuery,
     loadPostPage, "/editor", "post_page", authorized && urlTab === "posts", authorized ? `user:${user.id}` : undefined);
   const fileResource = useResourcePage({ ...initialState.files, error: initialState.filesError }, initialState.fileQuery, fileQuery,
@@ -274,7 +279,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
   function readCurrentLocation() {
     const params = new URLSearchParams(window.location.search);
-    return { params, query: (params.get("q") || "").trim(), tab: (params.get("tab") === "files" ? "files" : "posts") as EditorTab };
+    return { params, query: (params.get("q") || "").trim(), tab: readEditorTab(params) };
   }
   async function refreshPosts(pageToLoad = postPage) {
     const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "posts", "post_page"), page: pageToLoad };
@@ -286,7 +291,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     if (readCurrentLocation().tab === "files") writeResourceQuery("/editor", target, { replace: true, pageKey: "file_page" });
     await fileResource.run(target);
   }
-  function navigateList(tab: EditorTab, patch: Partial<ResourceQuery>) {
+  function navigateList(tab: Exclude<EditorTab, "links">, patch: Partial<ResourceQuery>) {
     const { params } = readCurrentLocation();
     params.delete("edit");
     const pageKey = tab === "posts" ? "post_page" : "file_page";
@@ -297,7 +302,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
     void (tab === "posts" ? postResource.run(target) : fileResource.run(target));
   }
-  function handleSearch(query: string) { navigateList(readCurrentLocation().tab, { query: query.trim(), page: 1 }); }
+  function handleSearch(query: string) { navigateList(readCurrentLocation().tab === "files" ? "files" : "posts", { query: query.trim(), page: 1 }); }
   function handleTabChange(tab: EditorTab) {
     const { params, tab: previousTab, query: previousQuery } = readCurrentLocation();
     const hadFilter = Boolean(previousQuery || params.get("category"));
@@ -308,13 +313,13 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     params.delete(tab === "posts" ? "post_page" : "file_page");
     const url = resourceURL("/editor", params);
     if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
-    if (tab !== previousTab && hadFilter) {
+    if (tab !== previousTab && previousTab !== "links" && hadFilter) {
       const previousPageKey = previousTab === "posts" ? "post_page" : "file_page";
       const defaults = readResourceQuery(params, previousTab, previousPageKey);
       void (previousTab === "posts" ? postResource.run(defaults) : fileResource.run(defaults));
     }
   }
-  function handlePageChange(tab: EditorTab, page: number) { navigateList(tab, { page }); }
+  function handlePageChange(tab: Exclude<EditorTab, "links">, page: number) { navigateList(tab, { page }); }
 
   const applyPostDetail = useCallback((post: PostDetail, editor?: typeof MarkdownEditor) => {
     if (editor) setPreparedEditor({ component: editor });
@@ -426,7 +431,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       if (!isCurrentSave()) return;
       if (savedDraft) { await recovery.clear(); if (!isCurrentSave()) return; applyPostDetail(savedDraft); retainArticle(savedDraft); }
       setSaving(false);
-      if (isApiError(error) && (error.code === "post_version_conflict" || error.code === "post_state_conflict")) setConflict(true);
+      if (isApiError(error) && (error.code === "post_version_conflict" || error.code === "post_state_conflict")) { setConflict(true); setLatestPost(null); setLatestError(""); }
       if (isApiError(error) && error.status === 401) { setSessionExpired(true); void recovery.flush(); }
       setSaveMessage(`❌ ${savedDraft ? "Draft created; publication failed. " : ""}${getApiErrorMessage(error, "Failed to save post.")}`);
     } finally {
@@ -566,6 +571,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           onRetryOpen={() => { setDetailError(""); setDetailAttempt(value => value + 1); }}
           onCancelOpen={closeEditor}
           activeTab={urlTab}
+          links={linkResource}
           searchQuery={searchQuery}
           postResultQuery={postResource.resultQuery}
           fileResultQuery={fileResource.resultQuery}
@@ -574,7 +580,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           postCount={postCount}
           fileCount={fileCount}
           postsLoading={postsLoading}
-          restoring={urlTab === "posts" ? postResource.restoring : fileResource.restoring}
+          restoring={urlTab === "links" ? false : urlTab === "posts" ? postResource.restoring : fileResource.restoring}
           filesLoading={filesLoading}
           postsError={postsError}
           filesError={filesError}
@@ -610,7 +616,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       ) : (
         <div className="editor-detail-frame">
         <RecoveryNotice copies={recovery.copies} error={recovery.error}
-          onRestore={recovery.restore} onDiscard={recovery.discard} />
+          onRestore={recovery.restore} onDiscard={recovery.discard} onContinue={recovery.continueWithoutRestoring} />
         <PostEditorForm
           MarkdownComponent={preparedEditor?.component}
           validationAttempted={validationAttempted}
@@ -629,6 +635,12 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           latestError={latestError}
           sessionExpired={sessionExpired}
           onLoadLatest={() => void loadLatestPost()}
+          onKeepEdits={() => {
+            if (!latestPost || loadingLatest || latestPost.id !== editingPost?.id) return;
+            setEditingPost(latestPost);
+            setConflict(false); setLatestPost(null); setLatestError("");
+            setSaveMessage("Your edits are kept. Review them, then save to replace the reviewed server version.");
+          }}
           onUseLatest={() => { if (latestPost) { void recovery.clear(); applyPostDetail(latestPost); setSaveMessage(""); } }}
           onPublish={() => handleSave("publish")}
           onUnpublish={() => handleSave("unpublish")}
@@ -656,6 +668,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
         </div>
       )}
       </EditorViewTransition>
+      {urlTab === "links" && linkResource.dialogs}
 
       {uploadDialogOpen && <FileUploadDialog open onClose={() => setUploadDialogOpen(false)} onUpload={handleManagedFileUpload} />}
       <FilePreviewDialog

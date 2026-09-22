@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { loginAdmin } from "./support/accessibility";
 import { createArticle } from "./support/articles";
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 
@@ -9,7 +10,19 @@ for (const theme of ["dark", "light"]) {
       { name: "sidebar_collapsed", value: "true", url: E2E_APP_URL },
       { name: "blog_theme", value: theme, url: E2E_APP_URL },
     ]);
+    const headers = await loginAdmin(page);
+    const linkIDs: number[] = [];
+    try {
+      for (let index = 0; index < 4; index++) {
+        const response = await page.request.post(`${E2E_API_URL}/admin/links`, { headers, data: {
+          title: `Sidebar motion ${index}`, description: "Responsive homepage shortcut", url: `https://example.org/sidebar-${index}`,
+          icon: "link", color: "blue", visible: true, request_id: crypto.randomUUID(),
+        } });
+        expect(response.ok()).toBeTruthy();
+        linkIDs.push((await response.json()).id);
+      }
     await page.goto("/");
+    await expect(page.getByRole("link", { name: /Sidebar motion 3/ })).toBeVisible();
     await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
     await page.evaluate(() => document.fonts.ready);
     const result = await page.evaluate(async () => {
@@ -17,7 +30,7 @@ for (const theme of ["dark", "light"]) {
       const toggle = document.querySelector<HTMLButtonElement>(".sidebar-toggle")!;
       const postsLink = sidebar.querySelector('a[href="/posts"]')!;
       const logo = sidebar.querySelector(".sidebar-logo-container")!;
-      const card = document.querySelectorAll<HTMLElement>(".card-grid > *")[3];
+      const card = document.querySelector<HTMLElement>('a[href="https://example.org/sidebar-3"]')!;
       const frames: { x: number; y: number; width: number; translate: string; time: number }[] = [];
       const sample = () => {
         const rect = card.getBoundingClientRect();
@@ -49,15 +62,18 @@ for (const theme of ["dark", "light"]) {
     expect(result.hiddenInert).toBe(true);
     expect(result.running).toBe(0);
     expect(result.translate).toBe("none");
-    expect(result.expanded.y - result.frames[0].y).toBeGreaterThan(80);
-    expect(result.frames.some(frame => frame.translate !== "none" && frame.translate !== "0px")).toBe(true);
+    // Homepage shortcuts remain a single row while their widths and positions adapt.
+    expect(Math.abs(result.expanded.y - result.frames[0].y)).toBeLessThanOrEqual(1);
+    const low = Math.min(result.frames[0].x, result.expanded.x);
+    const high = Math.max(result.frames[0].x, result.expanded.x);
+    expect(high - low).toBeGreaterThan(1);
+    expect(result.frames.some(frame => frame.x > low + .5 && frame.x < high - .5)).toBe(true);
     const steps = result.frames.slice(1).map((frame, index) => {
       const previous = result.frames[index];
       return Math.hypot(frame.x - previous.x, frame.y - previous.y) * 16.67 / Math.max(16.67, frame.time - previous.time);
     });
-    // A direct column jump is over 800px at this breakpoint. This checks
-    // intermediate positions. Normalize delayed samples to a nominal frame so
-    // parallel build/test load does not turn a sampling gap into a layout jump.
+    // Normalize delayed samples to a nominal frame to distinguish a layout jump
+    // from a sampling gap while the sidebar changes the available card width.
     expect(Math.max(...steps)).toBeLessThan(300);
     await testInfo.attach("Component motion samples", { body: JSON.stringify(result), contentType: "application/json" });
     await page.getByRole("button", { name: "Expand sidebar" }).click();
@@ -74,6 +90,9 @@ for (const theme of ["dark", "light"]) {
     await expect(page.getByRole("heading", { name: "All Posts" })).toBeVisible();
     expect(await page.locator(".content-scroll").evaluate(element => [...element.querySelectorAll<HTMLElement>("*")]
       .every(child => getComputedStyle(child).translate === "none"))).toBe(true);
+    } finally {
+      for (const id of linkIDs) await page.request.delete(`${E2E_API_URL}/admin/links/${id}`, { headers, data: { version: 1 } });
+    }
   });
 }
 

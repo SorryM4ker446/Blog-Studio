@@ -14,6 +14,7 @@ import { validatePostFields, type PostAction } from "@/lib/post-editor";
 import "react-markdown-editor-lite/lib/index.css";
 
 import type MarkdownEditor from "./MarkdownEditor";
+import feedback from "./EditorFeedback.module.css";
 
 const LazyMdEditor = dynamic(() => import("./MarkdownEditor"));
 
@@ -38,6 +39,7 @@ interface PostEditorFormProps {
   sessionExpired: boolean;
   onLoadLatest: () => void;
   onUseLatest: () => void;
+  onKeepEdits: () => void;
   onPublish: () => Promise<void>;
   onUnpublish: () => Promise<void>;
   onViewArticle: () => void;
@@ -114,7 +116,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
       </div>
 
       <div className="editor-save-state" role="status">
-        <span>{props.saving ? "Saving changes…" : props.recoveryChecking ? "Checking browser recovery…" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}</span>
+        <span>{props.saving ? "Saving changes…" : props.recoveryChecking ? "Checking browser recovery…" : props.recoveryPending ? "Choose a recovery option above" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}</span>
         {props.editingPost?.status === "published" && <Link className="editor-view-link" href={`/posts/${props.editingPost.id}?returnTo=${encodeURIComponent(returnTo)}`} aria-disabled={props.saving}
           aria-label="View article" title="View article"
           onNavigate={(event) => { if (props.saving) event.preventDefault(); else props.onViewArticle(); }}>
@@ -124,16 +126,35 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </Link>}
       </div>
       {props.sessionExpired && <p role="alert">Your edits are still here. <a href="/login?redirect=%2Feditor" target="_blank" rel="noopener noreferrer">Sign in in a new tab</a>, then return here and try again.</p>}
-      {props.conflict && <section className="editor-conflict" aria-label="Article version conflict">
-        <h2>This article changed elsewhere</h2>
-        <p>Your edits have been kept. Copy any text you want to keep before replacing this form with the latest saved version.</p>
-        <button type="button" onClick={props.onLoadLatest} disabled={props.loadingLatest}>{props.loadingLatest ? "Loading…" : "Load latest version"}</button>
-        {props.latestError && <p role="alert">{props.latestError}</p>}
-        {props.latestPost && <>
-          <p>Latest: {props.latestPost.title} · {formatDateTime(props.latestPost.updated_at)}</p>
-          <label>Latest saved content<textarea readOnly value={props.latestPost.content} /></label>
-          <button type="button" onClick={props.onUseLatest} disabled={props.loadingLatest}>Discard my edits and use latest</button>
-        </>}
+      {props.conflict && <section className={`${feedback.panel} ${feedback.conflictPanel}`} aria-label="Article version conflict" aria-busy={props.loadingLatest}>
+        <div className={feedback.panelHeader}>
+          <span className={feedback.icon} aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 10a9 9 0 1 1 2.7 8.4M3 4v6h6M12 7v5l3 2" />
+            </svg>
+          </span>
+          <div className={feedback.conflictHeading}><p className={feedback.eyebrow}>VERSION REVIEW</p><h2 className={feedback.title}>This article changed elsewhere</h2></div>
+        </div>
+        <p className={feedback.description}>Your edits are still editable below. Review the saved version, then choose which content to continue with. Keeping your edits does not merge changes from the server.</p>
+        <div className={feedback.conflictToolbar}>
+          <span className={feedback.timestamp}>Saving and publishing are paused until this conflict is resolved.</span>
+          <button type="button" className={`${feedback.button} ${feedback.secondary}`} onClick={props.onLoadLatest} disabled={props.loadingLatest}>{props.loadingLatest ? "Loading…" : (props.latestPost ? "Refresh saved version" : "Review saved version")}</button>
+        </div>
+        {props.latestError && <p className={feedback.error} role="alert">{props.latestError}</p>}
+        {props.latestPost && <div className={feedback.conflictPreview}>
+          <div className={feedback.conflictMetadata}>
+            <div className={feedback.copyDetails}><p className={feedback.eyebrow}>LATEST SAVED VERSION</p><p className={feedback.copyTitle}>{props.latestPost.title}</p></div>
+            <time className={feedback.timestamp} dateTime={props.latestPost.updated_at}>{formatDateTime(props.latestPost.updated_at)}</time>
+          </div>
+          <label className={feedback.conflictLabel}>Latest saved content<textarea className={feedback.conflictContent} readOnly value={props.latestPost.content} spellCheck={false} /></label>
+          <div className={feedback.conflictFooter}>
+            <p className={feedback.hint}>Keeping your edits lets your next save replace the reviewed server content. Using the saved version discards your current edits. Neither choice saves or publishes.</p>
+            <div className={feedback.recoveryActions}>
+            <button type="button" className={`${feedback.button} ${feedback.primary}`} onClick={props.onKeepEdits} disabled={props.loadingLatest}>Keep my edits and continue</button>
+            <button type="button" className={`${feedback.button} ${feedback.replaceAction}`} onClick={props.onUseLatest} disabled={props.loadingLatest}>Discard my edits and use latest</button>
+            </div>
+          </div>
+        </div>}
       </section>}
       <fieldset className="editor-form-surface" disabled={props.saving || props.recoveryPending} inert={props.saving || props.recoveryPending}>
         <div style={{ marginBottom: "2rem" }}>

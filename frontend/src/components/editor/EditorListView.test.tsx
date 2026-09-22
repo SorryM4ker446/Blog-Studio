@@ -43,6 +43,7 @@ describe("EditorListView", () => {
 
     render(
       <EditorListView
+        links={{ query: "", loading: false, error: "", count: 0, search: vi.fn(), toolbar: <></>, content: <></>, dialogs: <></> }}
         activeTab="posts"
         searchQuery=""
         categories={[]}
@@ -91,6 +92,7 @@ describe("EditorListView", () => {
   it("keeps the known count and existing content stable during a background refresh", () => {
     render(
       <EditorListView
+        links={{ query: "", loading: false, error: "", count: 0, search: vi.fn(), toolbar: <></>, content: <></>, dialogs: <></> }}
         activeTab="files"
         searchQuery=""
         categories={[]}

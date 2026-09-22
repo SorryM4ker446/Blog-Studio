@@ -423,6 +423,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(previewImage).toBeVisible();
   await expect.poll(async () => previewImage.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
   await previewDialog.getByRole("button", { name: "Close dialog" }).click();
+  await expect(previewDialog).toHaveCount(0);
 
   await fileCard.getByRole("button", { name: "Edit" }).click();
   const editDialog = page.getByRole("dialog", { name: "Edit file details" });
@@ -470,6 +471,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(previewDialog.locator("dd").filter({ hasText: `Updated ${fileDescription}` })).toBeVisible();
   await expect(previewDialog.getByRole("img", { name: updatedDisplayName })).toBeVisible();
   await previewDialog.getByRole("button", { name: "Close dialog" }).click();
+  await expect(previewDialog).toHaveCount(0);
 
   await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(updatedDisplayName);
   await page.goto("/");
@@ -489,6 +491,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   previewDialog = page.getByRole("dialog", { name: updatedDisplayName });
   await expect(previewDialog.locator("dd").filter({ hasText: `Updated ${fileDescription}` })).toBeVisible();
   await previewDialog.getByRole("button", { name: "Close dialog" }).click();
+  await expect(previewDialog).toHaveCount(0);
 
   const advancedSearchInput = page.locator("#search-input");
   await advancedSearchInput.fill(imageName);

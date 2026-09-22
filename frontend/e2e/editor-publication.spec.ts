@@ -42,7 +42,7 @@ test("article publication protects local edits and rejects stale browser tabs", 
     expect(await conflict.json()).toMatchObject({ code: "post_version_conflict" });
     await expect(otherBody).toHaveValue("Text from the older tab");
     await expect(other.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
-    await other.getByRole("button", { name: "Load latest version", exact: true }).click();
+    await other.getByRole("button", { name: "Review saved version", exact: true }).click();
     await expect(other.getByLabel("Latest saved content")).toHaveValue("Original saved body");
     await expect(otherBody).toHaveValue("Text from the older tab");
     await other.getByRole("button", { name: "Discard my edits and use latest" }).click();

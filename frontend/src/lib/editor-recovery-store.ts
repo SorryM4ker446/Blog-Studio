@@ -158,7 +158,8 @@ export class RecoveryWriter {
   cancel() { this.generation++; this.pending = undefined; if (this.timer) clearTimeout(this.timer); this.timer = undefined; }
   clear(ids: string[]) {
     this.cancel();
-    this.chain = this.chain.then(() => this.storage.remove(ids)).catch(this.onError);
-    return this.chain;
+    const result = this.chain.then(() => this.storage.remove(ids)).then(() => true, () => { this.onError(); return false; });
+    this.chain = result.then(() => {});
+    return result;
   }
 }

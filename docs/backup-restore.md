@@ -52,7 +52,7 @@ blog-studio-backup-YYYYMMDDTHHMMSSZ/
   manifest.json
 ```
 
-`database.dump` is a compressed PostgreSQL custom-format archive. `uploads.tar.gz` contains safe regular files from `UPLOAD_DIR`; symbolic links, nested directories, and unsafe names are rejected. `manifest.json` records the backup format, creation time, schema migration version, file counts, sizes, and SHA-256 checksums. It never records the source DSN or filesystem path.
+`database.dump` is a compressed PostgreSQL custom-format archive. It includes the whole application database, including homepage Links and their destinations, visibility, ordering and versions. Browser recovery copies live in the browser's IndexedDB and are not included in server backup bundles. `uploads.tar.gz` contains safe regular files from `UPLOAD_DIR`; symbolic links, nested directories, and unsafe names are rejected. `manifest.json` records the backup format, creation time, schema migration version, file counts, sizes, and SHA-256 checksums. It never records the source DSN or filesystem path.
 
 After creation, verify the bundle again from its final storage location:
 

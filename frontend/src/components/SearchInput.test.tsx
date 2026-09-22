@@ -44,3 +44,13 @@ describe("SearchInput", () => {
     expect(input.selectionEnd).toBe("restored search".length);
   });
 });
+
+it("submits the current editor search from its icon button and Enter", async () => {
+  const user = userEvent.setup(); const onSearch = vi.fn();
+  render(<SearchInput variant="editor" onSearch={onSearch} />);
+  await user.type(screen.getByRole("textbox"), "a destination");
+  await user.click(screen.getByRole("button", { name: "Submit search" }));
+  expect(onSearch).toHaveBeenLastCalledWith("a destination");
+  await user.click(screen.getByRole("textbox")); await user.keyboard("{Enter}");
+  expect(onSearch).toHaveBeenCalledTimes(2);
+});

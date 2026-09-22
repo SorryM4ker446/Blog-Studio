@@ -33,7 +33,7 @@ export function readResourceQuery(params: QueryInput, fixedScope?: SearchScope, 
   };
 }
 
-export function readEditorTab(params: QueryInput): "posts" | "files" { return single(params, "tab") === "files" ? "files" : "posts"; }
+export function readEditorTab(params: QueryInput): "posts" | "files" | "links" { const tab = single(params, "tab"); return tab === "files" || tab === "links" ? tab : "posts"; }
 
 export type EditorTarget = number | "new" | null;
 
@@ -43,7 +43,7 @@ export function readEditorDraft(params: QueryInput): string {
 }
 
 export function readEditorTarget(params: QueryInput): EditorTarget {
-  if (readEditorTab(params) === "files") return null;
+  if (readEditorTab(params) !== "posts") return null;
   const value = single(params, "edit");
   if (value === "new") return "new";
   const id = /^\d+$/.test(value) ? Number(value) : NaN;

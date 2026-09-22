@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchIcon } from "./Icons";
 import { useEffect, useRef } from "react";
 
 interface SearchInputProps {
@@ -8,9 +9,10 @@ interface SearchInputProps {
   style?: React.CSSProperties;
   value?: string;
   ariaLabel?: string;
+  variant?: "default" | "editor";
 }
 
-export default function SearchInput({ placeholder = "Search...", onSearch, style, value, ariaLabel }: SearchInputProps) {
+export default function SearchInput({ placeholder = "Search...", onSearch, style, value, ariaLabel, variant = "default" }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const focusKey = ariaLabel || placeholder;
 
@@ -28,7 +30,7 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
   }, [focusKey, value]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       onSearch(e.currentTarget.value);
     }
   }
@@ -40,10 +42,12 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
   }
 
   return (
-    <div style={{ position: "relative", ...style }}>
-      <span aria-hidden="true" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+    <div className={variant === "editor" ? "editor-search-control" : undefined} style={{ position: "relative", ...style }}>
+      {variant === "editor" ? <button type="button" className="editor-search-submit" aria-label="Submit search" onClick={() => void onSearch(inputRef.current?.value ?? "")}>
+        <span aria-hidden="true"><SearchIcon size={18} /></span>
+      </button> : <span aria-hidden="true" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: "0.9rem" }}>
         🔍
-      </span>
+      </span>}
       <input
         ref={inputRef}
         type="text"
@@ -53,7 +57,7 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        style={{
+        style={variant === "editor" ? undefined : {
           background: "var(--bg-surface)",
           border: "1px solid var(--border-color)",
           borderRadius: "20px",

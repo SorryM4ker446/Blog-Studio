@@ -98,6 +98,7 @@ vi.mock("@/components/editor/PostEditorForm", () => ({
       <button disabled={props.saving || props.conflict || props.recoveryPending} onClick={() => void props.onPublish()}>Publish article</button>
       <button disabled={props.saving || props.conflict || props.recoveryPending} onClick={() => void props.onUnpublish()}>Unpublish article</button>
       {props.conflict && <button onClick={props.onLoadLatest}>Load latest</button>}
+      {props.latestPost && <button onClick={props.onKeepEdits}>Keep my edits</button>}
       {props.latestPost && <button onClick={props.onUseLatest}>Discard and use latest</button>}
       {props.sessionExpired && <span>Sign in again</span>}
     </div>
@@ -126,6 +127,7 @@ const recoveredPost: PostSummary = {
 const emptySnapshot = { data: [], page: 1, totalPages: 1, total: 0 };
 
 const readyState: EditorPageInitialState = {
+  links: [], linksError: "",
   posts: { ...emptySnapshot, data: [recoveredPost, { ...recoveredPost, id: 8, title: "Another article" }], total: 2 },
   files: emptySnapshot, postQuery: { query: "", categoryId: "", scope: "posts", page: 1 }, fileQuery: { query: "", categoryId: "", scope: "files", page: 1 },
   categories: [], postsError: "", filesError: "", categoriesError: "",
@@ -238,6 +240,28 @@ describe("Editor article detail loading", () => {
     expect(screen.getByLabelText("Loaded article body")).toHaveValue("Remote edit");
     expect(screen.getByText("All changes saved")).toBeVisible();
     expect(updatePostMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps local text with the reviewed version and detects a further conflict", async () => {
+    getAdminPostMock.mockResolvedValueOnce(fullPost).mockResolvedValue({ ...fullPost, version: 2, content: "Remote edit" });
+    updatePostMock.mockRejectedValue(new ApiError("Changed", { kind: "http", status: 409, code: "post_version_conflict" }));
+    render(<EditorPageClient initialState={readyState} />);
+    fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
+    await screen.findByLabelText("Loaded article body");
+    fireEvent.change(screen.getByLabelText("Loaded article body"), { target: { value: "Local edit" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Load latest" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep my edits" }));
+    expect(screen.getByLabelText("Loaded article body")).toHaveValue("Local edit");
+    expect(updatePostMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    await screen.findByRole("button", { name: "Load latest" });
+    expect(updatePostMock).toHaveBeenLastCalledWith(fullPost.id, expect.objectContaining({ version: 2, content: "Local edit" }));
+    expect(screen.getByRole("button", { name: "Save article" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Keep my edits" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Loaded article body")).toHaveValue("Local edit");
   });
 
   it("preserves input on an expired save session and permits a manual retry", async () => {
@@ -545,6 +569,7 @@ describe("EditorPageClient initial request recovery", () => {
 
   it("reloads a failed server-rendered post list after client authentication succeeds", async () => {
     const initialState: EditorPageInitialState = {
+      links: [], linksError: "",
       posts: emptySnapshot,
       files: emptySnapshot,
       postQuery: { query: "", categoryId: "", scope: "posts", page: 1 },
@@ -566,6 +591,7 @@ describe("EditorPageClient initial request recovery", () => {
 
   it("keeps the editor client mounted and reuses loaded data while switching tabs", () => {
     const initialState: EditorPageInitialState = {
+      links: [], linksError: "",
       posts: emptySnapshot,
       files: emptySnapshot,
       postQuery: { query: "", categoryId: "", scope: "posts", page: 1 },

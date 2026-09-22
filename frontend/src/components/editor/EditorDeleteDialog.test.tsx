@@ -1,9 +1,61 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import EditorDeleteDialog from "./EditorDeleteDialog";
 
+const originalAnimate = Object.getOwnPropertyDescriptor(Element.prototype, "animate");
+afterEach(() => {
+  if (originalAnimate) Object.defineProperty(Element.prototype, "animate", originalAnimate);
+  else Reflect.deleteProperty(Element.prototype, "animate");
+  vi.unstubAllGlobals();
+});
+
+function mockMotion() {
+  const motions: { cancel: ReturnType<typeof vi.fn>; onfinish: (() => void) | null }[] = [];
+  Object.defineProperty(Element.prototype, "animate", { configurable: true, value: vi.fn(() => {
+    const motion = { cancel: vi.fn(), onfinish: null as (() => void) | null };
+    motions.push(motion); return motion;
+  }) });
+  return motions;
+}
+
 describe("EditorDeleteDialog", () => {
+  it.each(["post", "file", "category", "link"] as const)("keeps the %s dialog and background isolation until exit finishes", resourceType => {
+    const motions = mockMotion();
+    const trigger = document.createElement("button"); document.body.appendChild(trigger); trigger.focus();
+    const props = { open: true, resourceType, busy: false, blocked: false, error: "", onConfirm: vi.fn(), onCancel: vi.fn() };
+    const view = render(<EditorDeleteDialog {...props} />);
+    expect(motions).toHaveLength(2);
+    view.rerender(<EditorDeleteDialog {...props} open={false} resourceType="post" />);
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(`delete this ${resourceType}`);
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+    expect(trigger).toHaveAttribute("inert");
+    act(() => motions.at(-1)!.onfinish?.());
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(trigger).not.toHaveAttribute("inert"); expect(trigger).toHaveFocus(); trigger.remove();
+  });
+
+  it("cancels obsolete exit completion when reopened", () => {
+    const motions = mockMotion();
+    const props = { open: true, resourceType: "link" as const, busy: false, blocked: false, error: "", onConfirm: vi.fn(), onCancel: vi.fn() };
+    const view = render(<EditorDeleteDialog {...props} />);
+    view.rerender(<EditorDeleteDialog {...props} open={false} />);
+    const exit = motions.at(-1)!;
+    view.rerender(<EditorDeleteDialog {...props} />);
+    expect(exit.cancel).toHaveBeenCalled();
+    act(() => exit.onfinish?.());
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("closes immediately when reduced motion is preferred", async () => {
+    const motions = mockMotion();
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    const props = { open: true, resourceType: "file" as const, busy: false, blocked: false, error: "", onConfirm: vi.fn(), onCancel: vi.fn() };
+    const view = render(<EditorDeleteDialog {...props} />);
+    view.rerender(<EditorDeleteDialog {...props} open={false} />);
+    expect(motions).toHaveLength(0);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
   it("keeps a referenced-file error stable and blocks repeated deletion", () => {
     const onConfirm = vi.fn();
     const { rerender } = render(

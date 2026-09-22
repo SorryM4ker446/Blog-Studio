@@ -52,7 +52,7 @@ export default function EditorSelect<T extends SelectValue>({
   const [saving, setSaving] = useState(false);
   const selectedOption = options.find((option) => option.value === value);
   const menuOpen = open && !disabled;
-  const managedOption = options.find(option => option.value === editingValue) ?? options[highlightedIndex];
+  const managedOption = options.find(option => option.value === editingValue) ?? selectedOption;
   const manageable = Boolean(managedOption && (onRenameOption || onDeleteOption) && isOptionManageable(managedOption));
 
   useLayoutEffect(() => {
