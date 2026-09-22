@@ -1,10 +1,11 @@
 "use client";
 
-import { useModalIsolation } from "@/lib/use-modal-isolation";
+import { getApiErrorMessage } from "@/lib/api-client";
+import ModalSurface from "@/components/ModalSurface";
 
 import { formatDateTime } from "@/lib/display-date";
 
-import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { FileMutationResult, FileRecord } from "@/lib/api";
 import { getDownloadUrl, getFileViewUrl } from "@/lib/api";
 import { DownloadIcon, EditIcon, FileTextIcon, UploadIcon } from "@/components/Icons";
@@ -28,90 +29,28 @@ interface DialogShellProps {
   busy?: boolean;
   onClose: () => void;
   children: ReactNode;
-  footer?: ReactNode;
+  footer?: ReactNode | ((close: () => void, closing: boolean) => ReactNode);
 }
 
 function DialogShell({ open, title, eyebrow, subtitle, wide, busy, onClose, children, footer }: DialogShellProps) {
   const titleId = useId();
-  const panelRef = useRef<HTMLDivElement>(null);
-  useModalIsolation(panelRef, open);
-
-  useEffect(() => {
-    if (!open) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => {
-      const initialFocus = panelRef.current?.querySelector<HTMLElement>("[data-autofocus]")
-        || panelRef.current?.querySelector<HTMLElement>(
-          'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled)',
-        );
-      initialFocus?.focus();
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      previousFocus?.focus({ preventScroll: true });
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !panelRef.current) return;
-      const focusable = Array.from(
-        panelRef.current.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [busy, onClose, open]);
-
   if (!open) return null;
-
-  return (
-    <div
-      className={styles.overlay}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose();
-      }}
-    >
-      <div
-        ref={panelRef}
-        className={`${styles.dialog} ${wide ? styles.wideDialog : ""}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-      >
+  return <ModalSurface onClose={onClose} busy={busy} labelledBy={titleId} className={`${styles.dialog} ${wide ? styles.wideDialog : ""}`}>
+    {(close, closing) => <>
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>{eyebrow}</p>
             <h2 id={titleId} className={styles.title}>{title}</h2>
             {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
           </div>
-          <button type="button" className={styles.close} onClick={onClose} disabled={busy} aria-label="Close dialog">
+          <button type="button" className={styles.close} onClick={close} disabled={busy || closing} aria-label="Close dialog">
             ×
           </button>
         </header>
         <div className={styles.body}>{children}</div>
-        {footer && <footer className={styles.footer}>{footer}</footer>}
-      </div>
-    </div>
-  );
+        {footer && <footer className={styles.footer}>{typeof footer === "function" ? footer(close, closing) : footer}</footer>}
+    </>}
+  </ModalSurface>;
 }
 
 interface FilePreviewDialogProps {
@@ -206,17 +145,22 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
     setError("");
   }
 
-  async function submit() {
+  async function submit(close: () => void) {
     if (!selectedFile || !displayName.trim() || saving) return;
     setSaving(true);
     setError("");
-    const result = await onUpload(selectedFile, displayName.trim(), description.trim());
-    setSaving(false);
-    if (!result.ok) {
-      setError(result.error || "Could not upload file");
-      return;
+    try {
+      const result = await onUpload(selectedFile, displayName.trim(), description.trim());
+      if (!result.ok) {
+        setSaving(false);
+        setError(result.error || "Could not upload file");
+        return;
+      }
+      close();
+    } catch (error) {
+      setSaving(false);
+      setError(getApiErrorMessage(error));
     }
-    onClose();
   }
 
   return (
@@ -227,14 +171,14 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
       subtitle="Add a clear public name and optional context before publishing it to Drive."
       busy={saving}
       onClose={onClose}
-      footer={
+      footer={(close, closing) =>
         <>
-          <button type="button" className={styles.button} onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="button" className={styles.button} onClick={close} disabled={saving || closing}>Cancel</button>
           <button
             type="button"
             className={`${styles.button} ${styles.primary}`}
-            onClick={submit}
-            disabled={!selectedFile || !displayName.trim() || saving}
+            onClick={() => void submit(close)}
+            disabled={!selectedFile || !displayName.trim() || saving || closing}
           >
             {saving ? "Uploading…" : "Upload file"}
           </button>
@@ -334,17 +278,22 @@ export function FileEditDialog({ file, onClose, onSave }: FileEditDialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function submit() {
+  async function submit(close: () => void) {
     if (!displayName.trim() || saving) return;
     setSaving(true);
     setError("");
-    const result = await onSave(file, displayName.trim(), description.trim());
-    setSaving(false);
-    if (!result.ok) {
-      setError(result.error || "Could not save file details");
-      return;
+    try {
+      const result = await onSave(file, displayName.trim(), description.trim());
+      if (!result.ok) {
+        setSaving(false);
+        setError(result.error || "Could not save file details");
+        return;
+      }
+      close();
+    } catch (error) {
+      setSaving(false);
+      setError(getApiErrorMessage(error));
     }
-    onClose();
   }
 
   return (
@@ -355,14 +304,14 @@ export function FileEditDialog({ file, onClose, onSave }: FileEditDialogProps) {
       subtitle={`Original file: ${file.orig_name}`}
       busy={saving}
       onClose={onClose}
-      footer={
+      footer={(close, closing) =>
         <>
-          <button type="button" className={styles.button} onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="button" className={styles.button} onClick={close} disabled={saving || closing}>Cancel</button>
           <button
             type="button"
             className={`${styles.button} ${styles.primary}`}
-            onClick={submit}
-            disabled={!displayName.trim() || saving}
+            onClick={() => void submit(close)}
+            disabled={!displayName.trim() || saving || closing}
           >
             {saving ? "Saving…" : "Save changes"}
           </button>

@@ -32,6 +32,8 @@
 .secondary:hover { background: var(--bg-hover); }
 .primary { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-base); }
 .primary:hover { background: var(--text-secondary); border-color: var(--text-secondary); }
+:global(body.theme-light) .primary { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
+:global(body.theme-light) .primary:hover:not(:disabled) { background: var(--file-primary-hover); border-color: var(--file-primary-hover); }
 .quiet { background: var(--bg-base); color: var(--text-secondary); }
 .quiet:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
 .button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
@@ -56,3 +58,27 @@
   .dialogActions { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .button { transition: none; } }
+
+.recoveryActions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.conflictPanel { min-width: 0; }
+.conflictHeading { min-width: 0; overflow-wrap: anywhere; }
+.conflictToolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.conflictToolbar .button, .conflictFooter .button { min-height: 40px; }
+.conflictPreview { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color); }
+.conflictMetadata { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.conflictMetadata time { flex-shrink: 0; }
+.conflictLabel { display: block; color: var(--text-secondary); font-size: 12px; }
+.conflictContent { display: block; box-sizing: border-box; width: 100%; min-height: 160px; height: 180px; max-height: 360px; margin-top: 8px; padding: 14px 16px; resize: vertical; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-base); color: var(--text-primary); font: 13px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
+.conflictContent:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.conflictFooter { flex-wrap: wrap; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; }
+.conflictFooter .hint { margin: 0; max-width: 34rem; }
+.replaceAction { flex-shrink: 0; background: var(--bg-base); color: var(--accent-red); border-color: color-mix(in srgb, var(--accent-red) 35%, var(--border-color)); }
+.replaceAction:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-red) 8%, var(--bg-base)); border-color: var(--accent-red); }
+.conflictToolbar .button:disabled { opacity: .65; }
+.conflictFooter .button:disabled { opacity: 1; }
+@media (max-width: 600px) {
+  .conflictMetadata, .conflictFooter { flex-direction: column; gap: 10px; }
+  .conflictFooter .button { width: 100%; white-space: normal; }
+  .conflictContent { padding: 12px; }
+}

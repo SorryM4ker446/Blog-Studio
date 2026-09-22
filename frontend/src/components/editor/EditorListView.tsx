@@ -9,15 +9,22 @@ import type { Category, FileRecord, PostSummary } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
 import FileCard, { EditActionButton } from "@/components/files/FileCard";
-import { EditIcon, FileTextIcon, FolderIcon, InboxIcon, UploadIcon } from "@/components/Icons";
+import { InboxIcon, UploadIcon } from "@/components/Icons";
 import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 import EditorSelect from "@/components/editor/EditorSelect";
 import EditorPageLayout from "./EditorPageLayout";
 
-export type EditorTab = "posts" | "files";
+import type useLinksManager from "@/components/links/LinksManager";
+import EditorResourceTabs, { EditorHeading, type EditorTab } from "./EditorResourceTabs";
+export type { EditorTab } from "./EditorResourceTabs";
 
 interface EditorListViewProps {
+  openingPostId?: number | null;
+  openingError?: string;
+  onRetryOpen?: () => void;
+  onCancelOpen?: () => void;
   activeTab: EditorTab;
+  links: ReturnType<typeof useLinksManager>;
   searchQuery: string;
   postResultQuery?: ResourceQuery;
   fileResultQuery?: ResourceQuery;
@@ -53,7 +60,7 @@ interface EditorListViewProps {
   onRetryFiles: () => void;
 }
 
-function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+function PostCard({ post, onView, onEdit, onDelete, opening }: { opening?: boolean; post: PostSummary; onView: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
     <article className="ai-card editor-post-card" onClick={onView}>
       <button
@@ -98,7 +105,7 @@ function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onVie
           </span>
         </div>
         <span className="editor-post-card-actions" onClick={(event) => event.stopPropagation()}>
-          <EditActionButton onClick={onEdit} />
+          <EditActionButton onClick={onEdit} busy={opening} />
         </span>
       </div>
     </article>
@@ -108,15 +115,15 @@ function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onVie
 export default function EditorListView(controls: EditorListViewProps) {
   const [animatePages, setAnimatePages] = useState(false);
   const [animateCriteria, setAnimateCriteria] = useState(false);
-  const requestedLoading = controls.activeTab === "posts" ? controls.postsLoading : controls.filesLoading;
+  const requestedLoading = controls.activeTab === "links" ? controls.links.loading : controls.activeTab === "posts" ? controls.postsLoading : controls.filesLoading;
   const resultQuery = controls.activeTab === "posts" ? controls.postResultQuery : controls.fileResultQuery;
   const value = useMemo(() => ({ ...controls, scope: controls.activeTab,
-    query: resultQuery?.query ?? controls.searchQuery,
-    categoryId: resultQuery?.categoryId ?? controls.categoryId,
-    error: controls.activeTab === "posts" ? controls.postsError : controls.filesError,
+    query: controls.activeTab === "links" ? controls.links.query : resultQuery?.query ?? controls.searchQuery,
+    categoryId: controls.activeTab === "links" ? "" : resultQuery?.categoryId ?? controls.categoryId,
+    error: controls.activeTab === "links" ? controls.links.error : controls.activeTab === "posts" ? controls.postsError : controls.filesError,
   }), [controls, resultQuery]);
   const { displayed: props, ref, changing } = useScopeTransition(value, controls.activeTab, requestedLoading,
-    { query: controls.searchQuery, categoryId: controls.activeTab === "posts" ? controls.categoryId : "" }, animateCriteria && !controls.restoring);
+    { query: controls.activeTab === "links" ? controls.links.query : controls.searchQuery, categoryId: controls.activeTab === "posts" ? controls.categoryId : "" }, animateCriteria && !controls.restoring);
   function changeTab(tab: EditorTab) { setAnimateCriteria(true); controls.onTabChange(tab); }
   const loading = props.activeTab === "posts" ? props.postsLoading : props.filesLoading;
   const error = props.activeTab === "posts" ? props.postsError : props.filesError;
@@ -128,46 +135,9 @@ export default function EditorListView(controls: EditorListViewProps) {
 
   return (
     <div>
-      <header style={{ marginBottom: "2rem" }}>
-        <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "0.5rem" }}>
-          <EditIcon size={28} /> Content Editor
-        </h1>
-        <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Manage and edit your posts and cloud drive files.</p>
-      </header>
-
+      <EditorHeading />
       <div className="editor-list-toolbar">
-        <div role="tablist" aria-label="Editor resources" className="editor-tabs" data-active-tab={controls.activeTab} onKeyDown={event => {
-          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-          event.preventDefault();
-          const tab = event.key === "Home" ? "posts" : event.key === "End" ? "files" : controls.activeTab === "posts" ? "files" : "posts";
-          changeTab(tab);
-          document.getElementById(`editor-${tab}-tab`)?.focus({ preventScroll: true });
-        }}>
-          <button
-            type="button"
-            role="tab"
-            id="editor-posts-tab"
-            tabIndex={controls.activeTab === "posts" ? 0 : -1}
-            aria-controls="editor-resource-panel"
-            aria-selected={controls.activeTab === "posts"}
-            className={controls.activeTab === "posts" ? "editor-tab editor-tab-active" : "editor-tab"}
-            onClick={() => changeTab("posts")}
-          >
-            <FileTextIcon size={18} /> Posts{controls.postCount === null ? "" : ` (${controls.postCount})`}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id="editor-files-tab"
-            tabIndex={controls.activeTab === "files" ? 0 : -1}
-            aria-controls="editor-resource-panel"
-            aria-selected={controls.activeTab === "files"}
-            className={controls.activeTab === "files" ? "editor-tab editor-tab-active" : "editor-tab"}
-            onClick={() => changeTab("files")}
-          >
-            <FolderIcon size={18} /> Files{controls.fileCount === null ? "" : ` (${controls.fileCount})`}
-          </button>
-        </div>
+        <EditorResourceTabs activeTab={controls.activeTab} onChange={changeTab} counts={{ posts: controls.postCount, files: controls.fileCount, links: controls.links.count }} />
 
         <div className="editor-list-actions">
           {controls.activeTab === "posts" && <EditorSelect
@@ -182,13 +152,17 @@ export default function EditorListView(controls: EditorListViewProps) {
             ]}
             onChange={category => { setAnimateCriteria(true); controls.onCategoryChange(category); }}
           />}
-          <SearchInput placeholder={`Search ${controls.activeTab}...`} onSearch={query => { setAnimateCriteria(true); controls.onSearch(query); }} style={{ width: "220px" }} value={controls.searchQuery} />
-          <button type="button" onClick={controls.activeTab === "posts" ? controls.onNewPost : controls.onUploadFile} className="editor-primary-action">
+          <SearchInput variant="editor" placeholder={`Search ${controls.activeTab}...`} onSearch={query => { setAnimateCriteria(true); if (controls.activeTab === "links") controls.links.search(query); else controls.onSearch(query); }} style={{ width: "220px" }} value={controls.activeTab === "links" ? controls.links.query : controls.searchQuery} />
+          {controls.activeTab === "links" ? controls.links.toolbar : <button type="button" onClick={controls.activeTab === "posts" ? controls.onNewPost : controls.onUploadFile} className="editor-primary-action">
             {controls.activeTab === "posts" ? "+ New Post" : <><UploadIcon size={16} /> Upload File</>}
-          </button>
+          </button>}
         </div>
       </div>
 
+      {controls.openingError && <div className="editor-open-error">
+        <ErrorState title="Article could not be loaded" message={controls.openingError} onRetry={controls.onRetryOpen} />
+        <button type="button" className="editor-publication-action" onClick={controls.onCancelOpen}>Cancel</button>
+      </div>}
       <section
         id="editor-resource-panel"
         role="tabpanel"
@@ -199,9 +173,9 @@ export default function EditorListView(controls: EditorListViewProps) {
         ref={ref}
         inert={changing}
       >
-        {loading && hasItems && <span className="sr-only" role="status">Refreshing {props.activeTab}…</span>}
+        {props.activeTab !== "links" && loading && hasItems && <span className="sr-only" role="status">Refreshing {props.activeTab}…</span>}
 
-        {!error && !props.restoring && !hasItems ? (
+        {props.activeTab === "links" ? props.links.content : !error && !props.restoring && !hasItems ? (
           <EmptyState
             title={props.query ? `No matching ${props.activeTab}` : `No ${props.activeTab} yet`}
             message={props.query ? "Try a different search term." : props.activeTab === "posts" ? "Create a post to get started." : "Upload a file to get started."}
@@ -229,6 +203,7 @@ export default function EditorListView(controls: EditorListViewProps) {
                       <PostCard
                         key={post.id}
                         post={post}
+                        opening={controls.openingPostId === post.id && !controls.openingError}
                         onView={() => props.onViewPost(post)}
                         onEdit={() => props.onEditPost(post)}
                         onDelete={() => props.onDeletePost(post.id)}

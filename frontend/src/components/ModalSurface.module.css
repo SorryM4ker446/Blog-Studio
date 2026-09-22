@@ -1,0 +1,13 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--file-dialog-overlay, rgba(0, 0, 0, .6));
+}
+
+@media (max-width: 640px) {
+  .overlay { padding: 12px; }
+}

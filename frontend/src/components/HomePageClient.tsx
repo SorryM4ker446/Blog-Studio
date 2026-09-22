@@ -7,23 +7,25 @@ import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { getApiErrorMessage, getPostTimeline, getPosts } from "@/lib/api";
 import type { PostSummary } from "@/lib/api";
 import { 
-  StarIcon, 
-  GridIcon, 
-  LayoutIcon, 
-  ZapIcon, 
   FileTextIcon, 
   SearchIcon, 
   EnterIcon 
 } from "@/components/Icons";
 import Link from "next/link";
+import HomeLinks from "./links/HomeLinks";
+import type { HomepageLink } from "@/lib/links";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
 export default function HomePageClient({
   initialPosts,
   initialPostsError = "",
+  initialLinks = [],
+  initialLinksError = "",
 }: {
   initialPosts: PostSummary[];
   initialPostsError?: string;
+  initialLinks?: HomepageLink[];
+  initialLinksError?: string;
 }) {
   const router = useRouter();
   const [posts, setPosts] = useState<PostSummary[]>(initialPosts);
@@ -60,56 +62,7 @@ export default function HomePageClient({
     <div>
       <h1 className="page-title">Explore Blog posts</h1>
 
-      {/* 网格四象限卡片 */}
-      <div className="card-grid">
-        <div className="ai-card static-card">
-          <div className="card-header">
-            <div className="card-icon" style={{ backgroundColor: "rgba(251, 210, 132, 0.15)", color: "var(--accent-yellow)" }}>
-              <StarIcon size={18} />
-            </div>
-            Featured Post
-          </div>
-          <p className="card-desc">
-            Test out my most advanced and newly published coding tutorials.
-          </p>
-        </div>
-
-        <div className="ai-card static-card">
-          <div className="card-header">
-            <div className="card-icon" style={{ backgroundColor: "rgba(168, 199, 250, 0.15)", color: "var(--accent-blue)" }}>
-              <GridIcon size={18} />
-            </div>
-            Code and Backend
-          </div>
-          <p className="card-desc">
-            Build RESTful APIs, scalable services, and database tuning with Go.
-          </p>
-        </div>
-
-        <div className="ai-card static-card">
-          <div className="card-header">
-            <div className="card-icon" style={{ backgroundColor: "rgba(109, 214, 140, 0.15)", color: "var(--accent-green)" }}>
-              <LayoutIcon size={18} />
-            </div>
-            Frontend UI
-          </div>
-          <p className="card-desc">
-            Generate and engineer pixel-perfect Next.js web applications.
-          </p>
-        </div>
-
-        <div className="ai-card static-card">
-          <div className="card-header">
-            <div className="card-icon" style={{ backgroundColor: "rgba(242, 139, 130, 0.15)", color: "var(--accent-red)" }}>
-              <ZapIcon size={18} />
-            </div>
-            Real-time Thoughts
-          </div>
-          <p className="card-desc">
-            Read real-time insights, journals, and reflections on development life.
-          </p>
-        </div>
-      </div>
+      <HomeLinks initialLinks={initialLinks} initialError={initialLinksError} />
 
       {/* 博客文章列表 */}
       <div style={{ marginTop: "3.5rem" }}>

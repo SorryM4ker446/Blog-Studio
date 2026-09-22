@@ -23,10 +23,10 @@ interface FileCardProps {
   showDescription?: boolean;
 }
 
-export function EditActionButton({ onClick }: { onClick: MouseEventHandler<HTMLButtonElement> }) {
+export function EditActionButton({ onClick, busy = false }: { onClick: MouseEventHandler<HTMLButtonElement>; busy?: boolean }) {
   return (
-    <button type="button" className={styles.action} onClick={onClick}>
-      <EditIcon size={14} /> Edit
+    <button type="button" className={styles.action} onClick={onClick} disabled={busy} aria-busy={busy}>
+      {busy ? <svg className="editor-opening-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" opacity=".2" /><path d="M12 3a9 9 0 0 1 9 9" /></svg> : <EditIcon size={14} />} Edit
     </button>
   );
 }

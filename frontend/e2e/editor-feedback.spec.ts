@@ -63,6 +63,17 @@ for (const theme of ["dark", "light"]) {
       expect(await dialog.evaluate(element => element.matches(":modal"))).toBe(true);
       const stay = dialog.getByRole("button", { name: "Stay in editor" });
       const leave = dialog.getByRole("button", { name: "Leave editor", exact: true });
+      if (theme === "light") {
+        expect(await leave.evaluate(element => {
+          const probe = document.createElement("span");
+          probe.style.backgroundColor = "var(--accent-blue)";
+          document.body.append(probe);
+          const expected = getComputedStyle(probe).backgroundColor;
+          probe.remove();
+          const actual = getComputedStyle(element);
+          return actual.backgroundColor === expected && actual.color === "rgb(255, 255, 255)";
+        })).toBe(true);
+      }
       await expect(stay).toBeFocused();
       await page.keyboard.press("Tab"); await expect(leave).toBeFocused();
       await page.keyboard.press("Tab"); await expect(stay).toBeFocused();

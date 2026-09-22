@@ -12,7 +12,7 @@ async function login(page: Page) {
   return { "X-CSRF-Token": (await response.json()).csrf_token };
 }
 async function copies(page: Page) {
-  return page.evaluate(() => new Promise<{ id: string; target: string; tab: string; fields: { title: string; content: string } }[]>((resolve, reject) => {
+  return page.evaluate(() => new Promise<{ id: string; target: string; tab: string; updatedAt: number; fields: { title: string; content: string } }[]>((resolve, reject) => {
     const request = indexedDB.open("blog-studio-editor-recovery", 1);
     request.onerror = () => reject(new Error("Unable to inspect test copies"));
     request.onsuccess = () => {
@@ -30,6 +30,35 @@ async function restore(page: Page, title?: string) {
   if (title) await notice.getByRole("listitem").filter({ hasText: title }).getByRole("button", { name: /Restore copy/ }).click();
   else await notice.getByRole("button", { name: "Restore copy 1", exact: true }).click();
 }
+
+test("continuing the saved version keeps the previous browser copy recoverable", async ({ page }) => {
+  const headers = await login(page);
+  const response = await page.request.post(`${E2E_API_URL}/admin/posts`, { headers, data: { title: "Keep previous browser copy", content: "Server content" } });
+  const post = await response.json();
+  page.on("dialog", dialog => dialog.accept());
+  try {
+    await page.goto(`/editor?edit=${post.id}`);
+    await body(page).fill("Previous unsaved content");
+    await expect.poll(async () => (await copies(page)).some(copy => copy.fields.content === "Previous unsaved content")).toBe(true);
+    await page.reload();
+    const notice = page.getByRole("region", { name: "Browser recovery" });
+    await expect(notice).toBeVisible();
+    await expect(page.getByLabel("POST TITLE")).toBeDisabled();
+    await expect(page.getByText("Choose a recovery option above", { exact: true })).toBeVisible();
+    await notice.getByRole("button", { name: "Keep copies and continue" }).click();
+    await expect(notice).toHaveCount(0);
+    await expect(body(page)).toHaveValue("Server content");
+    await body(page).fill("New saved content");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("All changes saved", { exact: true })).toBeVisible();
+    expect((await copies(page)).some(copy => copy.fields.content === "Previous unsaved content")).toBe(true);
+    await page.reload();
+    await restore(page);
+    await expect(body(page)).toHaveValue("Previous unsaved content");
+    const saved = await page.request.get(`${E2E_API_URL}/admin/posts/${post.id}`, { headers });
+    expect((await saved.json()).content).toBe("New saved content");
+  } finally { await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers }); }
+});
 
 test("cancelled links and history preserve the editor and refresh recovery never writes articles", async ({ page }) => {
   const headers = await login(page);
@@ -100,13 +129,20 @@ test("cancelled links and history preserve the editor and refresh recovery never
     await page.evaluate(() => history.forward());
     await answerLeaveDialog(page, true);
     await expect(page).toHaveURL("/drive");
-    await page.goBack(); await restore(page);
+    await page.goBack();
+    await expect(page.getByRole("region", { name: "Browser recovery" })).toBeVisible();
+    const offered = (await copies(page)).sort((a, b) => b.updatedAt - a.updatedAt);
+    const retainedIDs = offered.slice(1).map(copy => copy.id).sort();
+    await restore(page);
     expect(writes).toBe(0);
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByText("All changes saved", { exact: true })).toBeVisible();
-    await expect.poll(async () => (await copies(page)).length).toBe(0);
+    // Save clears the chosen source and current edit, preserving unselected alternatives.
+    await expect.poll(async () => (await copies(page)).map(copy => copy.id).sort()).toEqual(retainedIDs);
     await page.reload(); await expect(body(page)).toHaveValue("Unsaved text\n".repeat(80));
+    await page.getByRole("button", { name: "Keep copies and continue" }).click();
     await expect(page.getByRole("region", { name: "Browser recovery" })).toHaveCount(0);
+    expect((await copies(page)).map(copy => copy.id).sort()).toEqual(retainedIDs);
     expect(writes).toBe(1);
   } finally { await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers }); }
 });

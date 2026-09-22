@@ -58,6 +58,7 @@ func setupRouter(
 		// 公开接口
 		public := api.Group("/")
 		{
+			public.GET("/links", handlers.GetLinks)
 			public.GET("/posts", handlers.GetPosts)
 			public.GET("/posts/:id", handlers.GetPost)
 			public.GET("/categories", handlers.GetCategories)
@@ -87,6 +88,11 @@ func setupRouter(
 		auth := api.Group("/admin")
 		auth.Use(middleware.AuthMiddleware(), middleware.RequireAdminMiddleware(), middleware.CSRFMiddleware())
 		{
+			auth.GET("/links", handlers.AdminGetLinks)
+			auth.POST("/links", handlers.CreateLink)
+			auth.PUT("/links/:id", handlers.UpdateLink)
+			auth.DELETE("/links/:id", handlers.DeleteLink)
+			auth.POST("/links/:id/move", handlers.MoveLink)
 			auth.GET("/posts", handlers.AdminGetPosts)
 			auth.GET("/posts/:id", handlers.AdminGetPost)
 			auth.GET("/categories", handlers.AdminGetCategories)

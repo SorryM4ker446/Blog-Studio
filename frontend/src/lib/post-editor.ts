@@ -12,3 +12,11 @@ export function isPostDirty(current: PostSnapshot, saved: PostSnapshot): boolean
   return current.title !== saved.title || current.summary !== saved.summary
     || current.content !== saved.content || current.category_id !== saved.category_id;
 }
+
+export function validatePostFields(fields: Pick<PostSnapshot, "title" | "summary" | "content">) {
+  return {
+    title: !fields.title.trim() ? "Please enter a post title." : fields.title.length > 255 ? "Keep the title within 255 characters." : "",
+    summary: fields.summary.length > 1000 ? "Keep the introduction within 1,000 characters." : "",
+    content: !fields.content.trim() ? "Please enter some post content." : "",
+  };
+}

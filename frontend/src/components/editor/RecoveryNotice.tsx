@@ -6,9 +6,9 @@ import type { RecoveryCopy } from "@/lib/editor-recovery-store";
 import { useState } from "react";
 import styles from "./EditorFeedback.module.css";
 
-export default function RecoveryNotice({ copies, error, onRestore, onDiscard }: {
+export default function RecoveryNotice({ copies, error, onRestore, onDiscard, onContinue }: {
   copies: RecoveryCopy[]; error: string;
-  onRestore: (copy: RecoveryCopy) => void; onDiscard: () => Promise<void>;
+  onRestore: (copy: RecoveryCopy) => void; onDiscard: () => Promise<void>; onContinue: () => void;
 }) {
   const [discarding, setDiscarding] = useState(false);
   async function discard() {
@@ -28,7 +28,7 @@ export default function RecoveryNotice({ copies, error, onRestore, onDiscard }: 
         <div><p className={styles.eyebrow}>BROWSER RECOVERY</p><h2 className={styles.title}>Continue where you left off</h2></div>
         <span className={styles.count}>{copies.length} {copies.length === 1 ? "copy" : "copies"}</span>
       </div>
-      <p className={styles.description}>Unsaved browser copies found. Restore one to review your changes, or discard the copies below. Nothing is saved to the server until you choose Save or Publish.</p>
+      <p className={styles.description}>Editing is paused while you choose a version. Restore a browser copy, continue with the current version while keeping the copies, or discard them. Nothing is saved to the server until you choose Save or Publish.</p>
       <ul className={styles.copies}>
         {copies.map((copy, index) => <li className={styles.copy} key={copy.id}>
           <div className={styles.copyDetails}>
@@ -42,8 +42,9 @@ export default function RecoveryNotice({ copies, error, onRestore, onDiscard }: 
       <p className={styles.hint}>Copies may come from another tab. Previously uploaded files may have been removed; check previews before saving.</p>
       <div className={styles.panelFooter}>
         <span className={styles.timestamp}>Stored in this browser · Not saved to server</span>
+        <div className={styles.recoveryActions}><button type="button" className={`${styles.button} ${styles.secondary}`} disabled={discarding} onClick={onContinue}>Keep copies and continue</button>
         <button type="button" className={`${styles.button} ${styles.quiet}`} disabled={discarding}
-          onClick={() => void discard()}>{discarding ? "Discarding…" : "Discard browser copies"}</button>
+          onClick={() => void discard()}>{discarding ? "Discarding…" : "Discard browser copies"}</button></div>
       </div>
     </section>}
   </>;

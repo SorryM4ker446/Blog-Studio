@@ -58,3 +58,19 @@ type Setting struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// Link is an administrator-managed homepage shortcut.
+type Link struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	URL         string    `json:"url"`
+	Icon        string    `json:"icon"`
+	Color       string    `json:"color"`
+	Visible     bool      `json:"visible"`
+	Position    int64     `json:"position"`
+	Version     int64     `json:"version"`
+	RequestID   string    `json:"-"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}

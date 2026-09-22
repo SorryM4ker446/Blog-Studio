@@ -1,43 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { getAdminPost, getApiErrorMessage, type PostDetail } from "@/lib/api";
-import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
+import { readEditorTarget } from "@/lib/resource-query";
+import type MarkdownEditor from "./MarkdownEditor";
 
 interface PostDetailLoaderProps {
   postId: number;
-  onLoaded: (post: PostDetail) => void;
-  onBack: () => void;
+  attempt: number;
+  onLoaded: (post: PostDetail, editor: typeof MarkdownEditor) => void;
+  onError: (error: string) => void;
 }
 
-export default function PostDetailLoader({ postId, onLoaded, onBack }: PostDetailLoaderProps) {
-  const [attempt, setAttempt] = useState(0);
-  const [error, setError] = useState("");
-
+// Own the request independently of the visible list, so navigation cancels it.
+export default function PostDetailLoader({ postId, attempt, onLoaded, onError }: PostDetailLoaderProps) {
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
-    getAdminPost(postId, { signal: controller.signal })
-      .then((post) => { if (active) onLoaded(post); })
-      .catch((requestError) => {
-        if (active) setError(getApiErrorMessage(requestError, "Could not load the article."));
-      });
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [postId, attempt, onLoaded]);
-
-  return (
-    <section>
-      <button type="button" className="editor-back-button" onClick={onBack} aria-label="Back to content list">←</button>
-      {error ? (
-        <ErrorState
-          title="Article could not be loaded"
-          message={error}
-          onRetry={() => { setError(""); setAttempt((current) => current + 1); }}
-        />
-      ) : <LoadingState label="Loading article…" rows={3} />}
-    </section>
-  );
+    const isCurrent = () => active && window.location.pathname === "/editor"
+      && readEditorTarget(new URLSearchParams(window.location.search)) === postId;
+    Promise.all([
+      getAdminPost(postId, { signal: controller.signal }),
+      import("./MarkdownEditor"),
+    ]).then(([post, editor]) => {
+      if (isCurrent()) onLoaded(post, editor.default);
+    }).catch((error) => {
+      if (isCurrent()) onError(getApiErrorMessage(error, "Could not load the article."));
+    });
+    return () => { active = false; controller.abort(); };
+  }, [postId, attempt, onLoaded, onError]);
+  return null;
 }

@@ -74,6 +74,6 @@ func OpenDatabase() (*gorm.DB, error) {
 // database name before this function is called.
 func ResetDatabase(db *gorm.DB) error {
 	return db.Exec(
-		"TRUNCATE TABLE settings, files, posts, categories, users RESTART IDENTITY CASCADE",
+		"TRUNCATE TABLE links, settings, files, posts, categories, users RESTART IDENTITY CASCADE",
 	).Error
 }

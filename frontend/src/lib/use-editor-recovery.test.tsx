@@ -37,6 +37,54 @@ it("discards selected records without changing the server baseline or calling re
   expect(result.current.copies).toEqual([]); expect(onRestore).not.toHaveBeenCalled();
   expect(await recoveryStorage.list(1, "post:7")).toEqual([]);
 });
+it("keeps recovery choices available when discard fails and allows retry", async () => {
+  const copy = await seed();
+  const view = renderHook(() => useEditorRecovery(initial));
+  await waitFor(() => expect(view.result.current.copies).toHaveLength(1));
+  vi.spyOn(recoveryStorage, "remove").mockRejectedValueOnce(new Error("Storage unavailable"));
+  await act(() => view.result.current.discard());
+  expect(view.result.current.copies).toEqual([copy]);
+  expect(view.result.current.error).toContain("unavailable");
+  await act(() => view.result.current.discard());
+  expect(view.result.current.copies).toEqual([]);
+  expect(await recoveryStorage.list(1, "post:7")).toEqual([]);
+});
+
+it("clears only the restored same-tab copy and keeps unselected copies", async () => {
+  const first = renderHook(() => useEditorRecovery({ ...initial, dirty: true, fields }));
+  await waitFor(() => expect(first.result.current.checking).toBe(false));
+  await act(() => first.result.current.flush());
+  const [original] = await recoveryStorage.list(1, "post:7");
+  first.unmount();
+  const other = { ...original, id: "another-same-tab-copy", fields: { ...fields, content: "Keep this alternative" } };
+  await recoveryStorage.put(await recoveryStorage.start(1), other);
+  const view = renderHook(() => useEditorRecovery(initial));
+  await waitFor(() => expect(view.result.current.copies).toHaveLength(2));
+  act(() => view.result.current.restore(original));
+  await act(() => view.result.current.clear());
+  expect(await recoveryStorage.list(1, "post:7")).toEqual([other]);
+});
+it("keeps this tab's previous copy when continuing and saving the current version", async () => {
+  const first = renderHook(() => useEditorRecovery({ ...initial, dirty: true, fields }));
+  await waitFor(() => expect(first.result.current.checking).toBe(false));
+  await act(() => first.result.current.flush());
+  const [original] = await recoveryStorage.list(1, "post:7");
+  first.unmount();
+  const onRestore = vi.fn();
+  const next = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: { ...initial, onRestore } });
+  await waitFor(() => expect(next.result.current.copies).toHaveLength(1));
+  act(() => next.result.current.continueWithoutRestoring());
+  expect(next.result.current.copies).toEqual([]);
+  expect(onRestore).not.toHaveBeenCalled();
+  next.rerender({ ...initial, onRestore, dirty: true, fields: { ...baseline, content: "New edit" } });
+  await act(() => next.result.current.flush());
+  expect(await recoveryStorage.list(1, "post:7")).toHaveLength(2);
+  await act(() => next.result.current.clear());
+  expect(await recoveryStorage.list(1, "post:7")).toEqual([original]);
+  next.unmount();
+  const reopened = renderHook(() => useEditorRecovery(initial));
+  await waitFor(() => expect(reopened.result.current.copies).toEqual([original]));
+});
 it("does not expose another user's copies and reports unavailable storage", async () => {
   await seed();
   const { result, unmount } = renderHook(() => useEditorRecovery({ ...initial, userId: 2 }));
@@ -89,6 +137,21 @@ it("does not start storage without an account and target", async () => {
   await act(() => view.result.current.flush());
   expect(start).not.toHaveBeenCalled();
   expect(view.result.current.checking).toBe(false);
+});
+it("ignores continue during discovery, after navigation and after logout", async () => {
+  const view = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: initial });
+  act(() => view.result.current.continueWithoutRestoring());
+  expect(view.result.current.checking).toBe(true);
+  await waitFor(() => expect(view.result.current.checking).toBe(false));
+  const obsoleteContinue = view.result.current.continueWithoutRestoring;
+  view.rerender({ ...initial, target: "post:8" });
+  act(() => obsoleteContinue());
+  await waitFor(() => expect(view.result.current.checking).toBe(false));
+  act(() => window.dispatchEvent(new Event("blog:recovery-logout")));
+  act(() => view.result.current.continueWithoutRestoring());
+  view.rerender({ ...initial, target: "post:8", dirty: true, fields });
+  await act(() => view.result.current.flush());
+  expect(await recoveryStorage.list(1, "post:8")).toEqual([]);
 });
 
 it("adopts its own copy, flushes on hiding, and clears adopted copies after saving", async () => {

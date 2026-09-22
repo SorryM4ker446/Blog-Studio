@@ -103,6 +103,10 @@ func TestBackupRestoresDatabaseAndUploadsIntoIsolatedTargets(t *testing.T) {
 	if err := sourceDB.Create(&setting).Error; err != nil {
 		t.Fatalf("create source setting: %v", err)
 	}
+	link := models.Link{Title: "Restored shortcut", Description: "Persisted homepage link", URL: "https://example.org/restored", Icon: "book", Color: "green", Visible: true, Position: 7, Version: 3, RequestID: "restore-link-fixture"}
+	if err := sourceDB.Create(&link).Error; err != nil {
+		t.Fatalf("create source link: %v", err)
+	}
 	uploadDir := t.TempDir()
 	storageKey := "restore-fixture.txt"
 	content := []byte("database and upload content stay paired")
@@ -184,6 +188,13 @@ func TestBackupRestoresDatabaseAndUploadsIntoIsolatedTargets(t *testing.T) {
 		t.Fatalf("verify restored migrations: %v", err)
 	}
 	var restoredSetting models.Setting
+	var restoredLink models.Link
+	if err := targetDB.First(&restoredLink, link.ID).Error; err != nil {
+		t.Fatalf("load restored link: %v", err)
+	}
+	if restoredLink.Title != link.Title || restoredLink.Description != link.Description || restoredLink.URL != link.URL || restoredLink.Icon != link.Icon || restoredLink.Color != link.Color || restoredLink.Visible != link.Visible || restoredLink.Position != link.Position || restoredLink.Version != link.Version || restoredLink.RequestID != link.RequestID {
+		t.Fatal("restored homepage link differs")
+	}
 	var restoredPost models.Post
 	if err := targetDB.First(&restoredPost, post.ID).Error; err != nil {
 		t.Fatal("load restored article")

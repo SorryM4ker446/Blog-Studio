@@ -100,7 +100,6 @@ export function useEditorRecovery(input: RecoveryInput) {
     }), claimTab()]).then(([session, rows]) => {
       if (!active || revoked.current) return;
       writer.current = new RecoveryWriter(recoveryStorage, session, () => { if (active) reportError(); });
-      adopted.current = rows.filter(copy => copy.tab === tabIdentity() && copy.target === target).map(copy => copy.id);
       setCopies(rows); decided.current = rows.length === 0; setChecking(false);
       schedule();
     }).catch(() => { if (active) { decided.current = true; setChecking(false); reportError(); } });
@@ -142,12 +141,20 @@ export function useEditorRecovery(input: RecoveryInput) {
     setCopies([]);
     input.onRestore(copy);
   };
+  const continueWithoutRestoring = () => {
+    if (checking || revoked.current || live.current.userId !== input.userId || live.current.target !== input.target) return;
+    // Existing copies remain independently recoverable, including this tab's old copy.
+    adopted.current = [];
+    decided.current = true;
+    setCopies([]);
+    schedule();
+  };
   const discard = async () => {
     const owner = writer.current;
-    await owner?.clear(copies.map(copy => copy.id));
+    if (!owner || !await owner.clear(copies.map(copy => copy.id))) return;
     if (writer.current !== owner || live.current.userId !== input.userId || live.current.target !== input.target) return;
     setCopies([]); decided.current = true;
     schedule();
   };
-  return { copies, checking, error, restore, discard, clear, flush };
+  return { copies, checking, error, restore, discard, continueWithoutRestoring, clear, flush };
 }

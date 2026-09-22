@@ -63,7 +63,9 @@ test("article summaries stay body-free and editing loads complete content with r
     await expect(page.getByText("Article could not be loaded")).toBeVisible();
     await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Try again" }).click();
-    await expect(page.getByText("Loading article…")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Content Editor", exact: true })).toBeVisible();
+    await expect(page.getByText("Loading article…")).toHaveCount(0);
+    await expect(page.locator(".editor-opening-icon")).toBeVisible();
     await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
     allowDetail();
 

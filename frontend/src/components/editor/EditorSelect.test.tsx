@@ -9,6 +9,31 @@ const options = [
 ];
 
 describe("EditorSelect", () => {
+  it("manages only the selected category while another option is hovered or keyboard-highlighted", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    const onRename = vi.fn().mockResolvedValue(null);
+    render(<EditorSelect value="draft" options={options} onChange={vi.fn()} ariaLabel="Category" onRenameOption={onRename} onDeleteOption={onDelete} />);
+    await user.click(screen.getByRole("combobox"));
+    await user.hover(screen.getByRole("option", { name: "Published" }));
+    expect(screen.getByRole("group", { name: "Manage Draft" })).toBeInTheDocument();
+    await user.keyboard("{End}");
+    await user.click(screen.getByRole("button", { name: "Rename Draft" }));
+    await user.clear(screen.getByLabelText("New category name"));
+    await user.type(screen.getByLabelText("New category name"), "Renamed{Enter}");
+    expect(onRename).toHaveBeenCalledWith("draft", "Renamed");
+    await user.hover(screen.getByRole("option", { name: "Published" }));
+    await user.click(screen.getByRole("button", { name: "Delete Draft" }));
+    expect(onDelete).toHaveBeenCalledWith("draft");
+  });
+
+  it("does not manage an unselected fallback when the selection is unavailable", async () => {
+    const user = userEvent.setup();
+    render(<EditorSelect value="removed" options={options} onChange={vi.fn()} ariaLabel="Category" onDeleteOption={vi.fn()} />);
+    await user.click(screen.getByRole("combobox"));
+    await user.hover(screen.getByRole("option", { name: "Published" }));
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+  });
   it("restores rename focus after a disabled refresh without closing the management menu", async () => {
     const user = userEvent.setup();
     let finish!: (result: null) => void;

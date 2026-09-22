@@ -1,3 +1,4 @@
+import type { HomepageLink } from "@/lib/links";
 import HomePageClient from "@/components/HomePageClient";
 import type { PaginatedResponse, PostSummary } from "@/lib/api";
 import { requestServerJSON } from "@/lib/server-api";
@@ -23,9 +24,11 @@ async function resolveInitialRecentPosts(): Promise<{
 }
 
 export default async function Home() {
-  const initialState = await resolveInitialRecentPosts();
+  const [initialState, links] = await Promise.all([resolveInitialRecentPosts(), requestServerJSON<HomepageLink[]>("/links")]);
   return (
     <HomePageClient
+      initialLinks={links.ok ? links.data : []}
+      initialLinksError={links.ok ? "" : "Homepage links could not be loaded."}
       initialPosts={initialState.posts}
       initialPostsError={initialState.error}
     />
