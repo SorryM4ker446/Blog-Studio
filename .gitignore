@@ -43,6 +43,9 @@ deploy/.env
 deploy/secrets/*
 !deploy/secrets/README.md
 deploy/backups/
+deploy/.deployment/
+deploy/__pycache__/
+deploy/tests/__pycache__/
 
 # Global
 .codex-runtime/

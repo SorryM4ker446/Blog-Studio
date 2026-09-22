@@ -1,5 +1,9 @@
 # Automated Testing
 
+Deployment automation tests run with `python -m unittest discover -s deploy/tests -v` and gate image publication alongside the existing CI jobs. They cover deployment failure boundaries, stale/repeated runs, immutable release references, persistent failure guards, server locking, SSH input validation and real Compose overlay parsing. See [automatic deployment](automatic-deployment.md) for production setup and validation limits.
+
+Local automation validation (2026-09-22): 14 tests collected, 13 passed and the Linux-only `flock` test skipped on Windows; real Docker Compose configuration parsing, actionlint v1.7.12 and diff checks passed. Docker Desktop's Linux engine and WSL were unavailable, so no containers, SSH connection, GHCR publication, remote CI or VPS deployment were executed locally. The Linux CI deployment-tests job includes the lock test; existing container and application suites remain prerequisites for publishing.
+
 Blog Studio uses an isolated PostgreSQL database for integration and browser tests. Test tooling refuses to connect unless the configured database name ends in `_test`.
 
 ## Test database

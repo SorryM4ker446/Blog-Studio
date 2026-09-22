@@ -1,5 +1,7 @@
 # Docker Compose Deployment
 
+For opt-in GitHub Actions → GHCR → VPS upgrades, see [automatic deployment](automatic-deployment.md). After adopting that flow, use its current-release helper rather than the bootstrap image-tag commands below.
+
 Blog Studio's deployment baseline targets one Linux host running Docker Compose. Caddy is the only public service; it terminates HTTPS and routes same-origin requests to one Next.js container and one Go API container. PostgreSQL and uploaded content remain on named volumes.
 
 This deployment layout does not replace native development. The existing `npm run dev`, `go run ./cmd/migrate up`, and `go run ./cmd/server` commands continue to use the local environment examples and host ports.
