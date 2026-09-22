@@ -2588,3 +2588,15 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-bl
   transition: opacity 200ms ease, transform 320ms var(--sidebar-motion-easing);
 }
 .sidebar-categories-extra[data-expanded="true"] > .sidebar-categories-extra-content { opacity: 1; transform: translateY(0); }
+
+/* Editor requests keep their action footprint while details are prepared. */
+.editor-opening-icon { flex: 0 0 14px; animation: editorOpening 1s linear infinite; opacity: .65; }
+@keyframes editorOpening { to { transform: rotate(360deg); } }
+.editor-field-error { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0 0; color: var(--accent-red); font-size: .8125rem; line-height: 1.5; }
+.editor-field-error svg { flex: 0 0 14px; margin-top: 3px; }
+.editor-title-input[aria-invalid="true"], .editor-summary-input[aria-invalid="true"],
+.custom-editor-wrapper[data-invalid="true"] .rc-md-editor { border-color: var(--accent-red) !important; }
+.editor-title-input:focus-visible, .editor-summary-input:focus-visible { outline: 2px solid var(--text-muted) !important; outline-offset: 3px; border-radius: 4px; }
+.editor-title-input[aria-invalid="true"]:focus-visible, .editor-summary-input[aria-invalid="true"]:focus-visible { outline-color: var(--accent-red) !important; }
+.editor-open-error { margin-bottom: 1rem; }
+@media (prefers-reduced-motion: reduce) { .editor-opening-icon { animation: none; } }

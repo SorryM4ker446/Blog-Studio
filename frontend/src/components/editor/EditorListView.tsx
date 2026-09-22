@@ -17,6 +17,10 @@ import EditorPageLayout from "./EditorPageLayout";
 export type EditorTab = "posts" | "files";
 
 interface EditorListViewProps {
+  openingPostId?: number | null;
+  openingError?: string;
+  onRetryOpen?: () => void;
+  onCancelOpen?: () => void;
   activeTab: EditorTab;
   searchQuery: string;
   postResultQuery?: ResourceQuery;
@@ -53,7 +57,7 @@ interface EditorListViewProps {
   onRetryFiles: () => void;
 }
 
-function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+function PostCard({ post, onView, onEdit, onDelete, opening }: { opening?: boolean; post: PostSummary; onView: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
     <article className="ai-card editor-post-card" onClick={onView}>
       <button
@@ -98,7 +102,7 @@ function PostCard({ post, onView, onEdit, onDelete }: { post: PostSummary; onVie
           </span>
         </div>
         <span className="editor-post-card-actions" onClick={(event) => event.stopPropagation()}>
-          <EditActionButton onClick={onEdit} />
+          <EditActionButton onClick={onEdit} busy={opening} />
         </span>
       </div>
     </article>
@@ -189,6 +193,10 @@ export default function EditorListView(controls: EditorListViewProps) {
         </div>
       </div>
 
+      {controls.openingError && <div className="editor-open-error">
+        <ErrorState title="Article could not be loaded" message={controls.openingError} onRetry={controls.onRetryOpen} />
+        <button type="button" className="editor-publication-action" onClick={controls.onCancelOpen}>Cancel</button>
+      </div>}
       <section
         id="editor-resource-panel"
         role="tabpanel"
@@ -229,6 +237,7 @@ export default function EditorListView(controls: EditorListViewProps) {
                       <PostCard
                         key={post.id}
                         post={post}
+                        opening={controls.openingPostId === post.id && !controls.openingError}
                         onView={() => props.onViewPost(post)}
                         onEdit={() => props.onEditPost(post)}
                         onDelete={() => props.onDeletePost(post.id)}

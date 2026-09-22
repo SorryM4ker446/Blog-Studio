@@ -64,6 +64,8 @@ vi.mock("@/components/editor/EditorListView", () => ({
     posts: PostSummary[];
     postsError: string;
     postsLoading: boolean;
+    openingError?: string;
+    onRetryOpen: () => void;
     onTabChange: (tab: "posts" | "files") => void;
     onEditPost: (post: PostSummary) => void;
     onNewPost: () => void;
@@ -72,6 +74,7 @@ vi.mock("@/components/editor/EditorListView", () => ({
       <button type="button" onClick={() => props.onTabChange("posts")}>Posts</button>
       <button type="button" onClick={() => props.onTabChange("files")}>Files</button>
       <button type="button" onClick={props.onNewPost}>New article</button>
+      {props.openingError && <><span>Article could not be loaded</span><button onClick={props.onRetryOpen}>Try again</button></>}
       <span data-testid="active-tab">{props.activeTab}</span>
       {props.postsLoading && <span>Recovering posts</span>}
       {!props.postsLoading && props.postsError && <span>{props.postsError}</span>}
@@ -88,6 +91,7 @@ vi.mock("@/components/editor/PostEditorForm", () => ({
       <input aria-label="Article title" value={props.title} onChange={event => props.onTitleChange(event.target.value)} />
       <textarea aria-label="Loaded article body" value={props.content} onChange={event => props.onContentChange(event.target.value)} />
       <span role="status">{props.saveMessage}</span>
+      {props.validationAttempted && <span data-testid="field-validation">Required fields checked</span>}
       <button disabled={props.saving || props.conflict || props.recoveryPending} onClick={() => void props.onSave()}>Save article</button>
       <button onClick={props.onBack}>Back to content list</button>
       <span>{props.dirty ? "Unsaved changes" : "All changes saved"}</span>
@@ -168,10 +172,10 @@ describe("Editor article detail loading", () => {
     fireEvent.click(screen.getByRole("button", { name: "New article" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Title and content are required");
+    expect(screen.getByTestId("field-validation")).toBeVisible();
     fireEvent.change(screen.getByLabelText("Article title"), { target: { value: "Title only" } });
     fireEvent.click(screen.getByRole("button", { name: "Publish article" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Title and content are required");
+    expect(screen.getByTestId("field-validation")).toBeVisible();
     expect(createPostMock).not.toHaveBeenCalled();
     expect(publishPostMock).not.toHaveBeenCalled();
   });
@@ -260,7 +264,9 @@ describe("Editor article detail loading", () => {
     expect(getAdminPostMock).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
-    expect(screen.getByText("Loading article…")).toBeVisible();
+    expect(screen.getByTestId("editor-list")).toBeVisible();
+    expect(screen.queryByText("Loading article…")).not.toBeInTheDocument();
+    expect(document.querySelector("[data-editor-view]" )).not.toHaveClass("fade-in");
     expect(screen.queryByRole("button", { name: "Save article" })).not.toBeInTheDocument();
     expect(getAdminPostMock).toHaveBeenCalledWith(7, { signal: expect.any(AbortSignal) });
     expect(createPostMock).not.toHaveBeenCalled();
@@ -268,6 +274,7 @@ describe("Editor article detail loading", () => {
 
     await act(async () => pending.resolve(fullPost));
     expect(screen.getByTestId("editing-title")).toHaveTextContent("Fresh server title");
+    expect(document.querySelector("[data-editor-view]" )).toHaveClass("fade-in");
     expect(screen.getByRole("textbox", { name: "Loaded article body" })).toHaveValue(fullPost.content);
     await waitFor(() => expect(screen.getByRole("button", { name: "Save article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save article" }));
@@ -372,10 +379,11 @@ describe("Editor article detail loading", () => {
     const old = pendingDetail();
     const current = pendingDetail();
     getAdminPostMock.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
-    render(<EditorPageClient initialState={readyState} />);
+    const view = render(<EditorPageClient initialState={readyState} />);
     fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
     const oldSignal = getAdminPostMock.mock.calls[0][1].signal as AbortSignal;
-    fireEvent.click(screen.getByRole("button", { name: "Back to content list" }));
+    fireEvent.click(screen.getByRole("button", { name: "Posts" }));
+    view.rerender(<EditorPageClient initialState={readyState} />);
     expect(oldSignal.aborted).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Another article" }));
     await act(async () => current.resolve({ ...fullPost, id: 8, title: "Current article", content: "Current body" }));
@@ -383,6 +391,22 @@ describe("Editor article detail loading", () => {
     expect(screen.getByTestId("editing-title")).toHaveTextContent("Current article");
     expect(screen.getByRole("textbox", { name: "Loaded article body" })).toHaveValue("Current body");
     expect(updatePostMock).not.toHaveBeenCalled();
+  });
+
+  it("switches pending articles without applying the previous response", async () => {
+    const old = pendingDetail();
+    const current = pendingDetail();
+    getAdminPostMock.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+    render(<EditorPageClient initialState={readyState} />);
+    fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
+    const signal = getAdminPostMock.mock.calls[0][1].signal as AbortSignal;
+    fireEvent.click(screen.getByRole("button", { name: "Another article" }));
+    expect(signal.aborted).toBe(true);
+    await act(async () => old.resolve(fullPost));
+    expect(screen.getByTestId("editor-list")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Save article" })).not.toBeInTheDocument();
+    await act(async () => current.resolve({ ...fullPost, id: 8, title: "Latest target" }));
+    expect(screen.getByTestId("editing-title")).toHaveTextContent("Latest target");
   });
 
   it("starts a new draft without a detail request", () => {
@@ -482,7 +506,7 @@ describe("Editor article detail loading", () => {
     getAdminPostMock.mockReturnValue(new Promise<PostDetail>((_resolve, fail) => { reject = fail; }));
     render(<EditorPageClient initialState={readyState} />);
     fireEvent.click(screen.getByRole("button", { name: recoveredPost.title }));
-    fireEvent.click(screen.getByRole("button", { name: "Back to content list" }));
+    fireEvent.click(screen.getByRole("button", { name: "Posts" }));
     await act(async () => reject(new DOMException("Cancelled", "AbortError")));
     expect(screen.getByTestId("editor-list")).toBeVisible();
     expect(screen.queryByText("Article could not be loaded")).not.toBeInTheDocument();

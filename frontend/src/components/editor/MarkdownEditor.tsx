@@ -1,6 +1,6 @@
 "use client";
 
-import { cloneElement, useEffect, useRef } from "react";
+import { cloneElement, useEffect, useLayoutEffect, useRef } from "react";
 import MdEditor from "react-markdown-editor-lite";
 import type { ComponentProps } from "react";
 
@@ -29,8 +29,19 @@ class PrerenderedEditor extends MdEditor {
 }
 
 // The upstream toolbar uses spans; keep its commands while exposing keyboard controls.
-export default function MarkdownEditor(props: ComponentProps<typeof MdEditor>) {
+type MarkdownEditorProps = ComponentProps<typeof MdEditor> & { invalid?: boolean; errorId?: string };
+
+export default function MarkdownEditor({ invalid, errorId, ...props }: MarkdownEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  // The upstream component does not forward accessibility props to its textarea.
+  useLayoutEffect(() => {
+    const input = rootRef.current?.querySelector("textarea");
+    if (!input) return;
+    input.setAttribute("aria-required", "true");
+    input.setAttribute("aria-invalid", String(Boolean(invalid)));
+    if (errorId) input.setAttribute("aria-describedby", errorId);
+    else input.removeAttribute("aria-describedby");
+  }, [invalid, errorId]);
   const pendingMenuRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const root = rootRef.current;

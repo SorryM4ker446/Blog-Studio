@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { useAuth } from "@/context/AuthContext";
@@ -29,7 +29,8 @@ import {
   uploadFileWithMetadata,
 } from "@/lib/api";
 import { readResourceQuery, readEditorTab, readEditorTarget, readEditorDraft, writeEditorTarget, resourceURL, setResourceQuery, writeResourceQuery, type EditorTarget, type ResourceQuery } from "@/lib/resource-query";
-import { isPostDirty, postSnapshot, type PostAction } from "@/lib/post-editor";
+import { isPostDirty, postSnapshot, validatePostFields, type PostAction } from "@/lib/post-editor";
+import { navigationRevision } from "@/lib/navigation-entry";
 import { requestEditorNavigation } from "@/lib/editor-navigation";
 import { useEditorRecovery } from "@/lib/use-editor-recovery";
 import RecoveryNotice from "@/components/editor/RecoveryNotice";
@@ -37,6 +38,7 @@ import { useResourcePage } from "@/lib/use-resource-page";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
 import PostEditorForm from "@/components/editor/PostEditorForm";
+import type MarkdownEditor from "@/components/editor/MarkdownEditor";
 import PostDetailLoader from "@/components/editor/PostDetailLoader";
 import EditorViewTransition from "@/components/editor/EditorViewTransition";
 import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
@@ -98,6 +100,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     return () => cancelAnimationFrame(frame);
   }, [editTarget, draftId]);
 
+  const scrollOnOpenRef = useRef<{ target: EditorTarget; revision: number } | null>(null);
   const isMountedRef = useRef(true);
   const editorSessionRef = useRef(0);
   const saveOperationRef = useRef<symbol | null>(null);
@@ -126,6 +129,12 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const files = fileResource.restoring ? [] : fileData;
   const postsLoading = postResource.loading;
   const filesLoading = fileResource.loading;
+  const [hasShownList, setHasShownList] = useState(editTarget === null);
+  if (editTarget === null && !hasShownList) setHasShownList(true);
+  const [detailError, setDetailError] = useState("");
+  const [detailAttempt, setDetailAttempt] = useState(0);
+  const [preparedEditor, setPreparedEditor] = useState<{ component: typeof MarkdownEditor } | null>(null);
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [formTarget, setFormTarget] = useState<EditorTarget>(editTarget);
   const [formDraft, setFormDraft] = useState(draftId);
   const [categories, setCategories] = useState<Category[]>(initialState.categories);
@@ -134,6 +143,20 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const initialPost = initialState.post?.id === editTarget ? initialState.post : null;
   const [editingPost, setEditingPost] = useState<PostDetail | null>(initialPost);
   const [postToLoad, setPostToLoad] = useState<number | null>(typeof editTarget === "number" && !initialPost ? editTarget : null);
+  useLayoutEffect(() => {
+    const opening = scrollOnOpenRef.current;
+    if (!opening) return;
+    if (opening.target !== editTarget || opening.revision !== navigationRevision()) {
+      scrollOnOpenRef.current = null;
+      return;
+    }
+    if (postToLoad !== null) return;
+    // Reset only a fresh explicit open, after the full form replaces the list.
+    // History traversal keeps the shell's existing scroll restoration owner.
+    const scroller = document.querySelector<HTMLElement>(".content-scroll");
+    if (scroller) scroller.scrollTop = 0;
+    scrollOnOpenRef.current = null;
+  }, [editTarget, postToLoad]);
   const [editTitle, setEditTitle] = useState(initialPost?.title ?? "");
   const [editSummary, setEditSummary] = useState(initialPost?.summary ?? "");
   const [editContent, setEditContent] = useState(() => normalizeMarkdownFileUrls(initialPost?.content ?? ""));
@@ -178,6 +201,8 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const [deleteErrorCode, setDeleteErrorCode] = useState("");
 
   function resetForm(target: EditorTarget) {
+    setDetailError("");
+    setValidationAttempted(false);
     setFormTarget(target);
     setFormDraft(draftId);
     setPostToLoad(typeof target === "number" ? target : null);
@@ -291,7 +316,8 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   }
   function handlePageChange(tab: EditorTab, page: number) { navigateList(tab, { page }); }
 
-  const applyPostDetail = useCallback((post: PostDetail) => {
+  const applyPostDetail = useCallback((post: PostDetail, editor?: typeof MarkdownEditor) => {
+    if (editor) setPreparedEditor({ component: editor });
     setEditingPost(post);
     setEditTitle(post.title);
     setEditSummary(post.summary);
@@ -305,7 +331,12 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   function openEditor(post: PostSummary | null) {
     if (saveOperationRef.current) return;
     const target = post?.id ?? "new";
+    if (target === editTarget) {
+      if (detailError) { setDetailError(""); setDetailAttempt(value => value + 1); }
+      return;
+    }
     writeEditorTarget(target);
+    scrollOnOpenRef.current = { target, revision: navigationRevision() };
     resetForm(target);
   }
 
@@ -335,9 +366,12 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
   async function handleSave(action: PostAction = "save") {
     if (postToLoad || saveOperationRef.current || conflict || recovery.checking || recovery.copies.length) return;
-    if (action !== "unpublish" && (!editTitle.trim() || !editContent.trim())) {
-      setSaveMessage("❌ Title and content are required.");
-      if (!editTitle.trim()) document.getElementById("post-title")?.focus();
+    const errors = validatePostFields(currentSnapshot);
+    if (action !== "unpublish" && Object.values(errors).some(Boolean)) {
+      setValidationAttempted(true);
+      setSaveMessage("");
+      if (errors.title) document.getElementById("post-title")?.focus();
+      else if (errors.summary) document.getElementById("post-summary")?.focus();
       else document.querySelector<HTMLElement>(".custom-editor-wrapper textarea")?.focus();
       return;
     }
@@ -522,9 +556,15 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
   return (
     <>
-      <EditorViewTransition detail={editTarget !== null}>
-      {editTarget === null ? (
+      {postToLoad !== null && <PostDetailLoader key={postToLoad} postId={postToLoad} attempt={detailAttempt}
+        onLoaded={applyPostDetail} onError={setDetailError} />}
+      <EditorViewTransition detail={editTarget !== null && postToLoad === null}>
+      {editTarget === null || (postToLoad !== null && hasShownList) ? (
         <EditorListView
+          openingPostId={postToLoad}
+          openingError={detailError}
+          onRetryOpen={() => { setDetailError(""); setDetailAttempt(value => value + 1); }}
+          onCancelOpen={closeEditor}
           activeTab={urlTab}
           searchQuery={searchQuery}
           postResultQuery={postResource.resultQuery}
@@ -561,17 +601,19 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           onCategoryChange={(categoryId) => navigateList("posts", { categoryId, page: 1 })}
         />
       ) : postToLoad ? (
-        <PostDetailLoader
-          key={postToLoad}
-          postId={postToLoad}
-          onLoaded={applyPostDetail}
-          onBack={closeEditor}
-        />
+        <section>
+          <button type="button" className="editor-back-button" onClick={closeEditor} aria-label="Back to content list">←</button>
+          {detailError ? <ErrorState title="Article could not be loaded" message={detailError}
+            onRetry={() => { setDetailError(""); setDetailAttempt(value => value + 1); }} />
+            : <p role="status">Loading article…</p>}
+        </section>
       ) : (
         <div className="editor-detail-frame">
         <RecoveryNotice copies={recovery.copies} error={recovery.error}
           onRestore={recovery.restore} onDiscard={recovery.discard} />
         <PostEditorForm
+          MarkdownComponent={preparedEditor?.component}
+          validationAttempted={validationAttempted}
           editingPost={editingPost}
           title={editTitle}
           summary={editSummary}

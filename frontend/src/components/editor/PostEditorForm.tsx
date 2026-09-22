@@ -10,14 +10,18 @@ import type { Category, PostDetail } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
 import { createMarkdownParser } from "@/lib/markdown";
 import CategoryField from "@/components/editor/CategoryField";
-import type { PostAction } from "@/lib/post-editor";
+import { validatePostFields, type PostAction } from "@/lib/post-editor";
 import "react-markdown-editor-lite/lib/index.css";
 
-const MdEditor = dynamic(() => import("./MarkdownEditor"));
+import type MarkdownEditor from "./MarkdownEditor";
+
+const LazyMdEditor = dynamic(() => import("./MarkdownEditor"));
 
 const mdParser = createMarkdownParser();
 
 interface PostEditorFormProps {
+  MarkdownComponent?: typeof MarkdownEditor;
+  validationAttempted?: boolean;
   editingPost: PostDetail | null;
   title: string;
   summary: string;
@@ -65,6 +69,8 @@ const labelStyle = {
 } as const;
 
 export default function PostEditorForm(props: PostEditorFormProps) {
+  const MdEditor = props.MarkdownComponent ?? LazyMdEditor;
+  const errors = props.validationAttempted ? validatePostFields(props) : { title: "", summary: "", content: "" };
   const failed = props.saveMessage.startsWith("❌");
   const params = useSearchParams();
   const returnTo = `/editor?${params.toString()}`;
@@ -80,7 +86,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} aria-busy={props.saving}>
+    <form noValidate onSubmit={handleSubmit} aria-busy={props.saving}>
       <div className="editor-form-header">
         <button type="button" disabled={props.saving} onClick={props.onBack} className="editor-back-button" aria-label="Back to content list">←</button>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -138,22 +144,27 @@ export default function PostEditorForm(props: PostEditorFormProps) {
             onChange={(event) => props.onTitleChange(event.target.value)}
             required
             maxLength={255}
-            aria-describedby={failed ? "post-save-message" : undefined}
+            aria-invalid={Boolean(errors.title)}
+            aria-describedby={errors.title ? "post-title-error" : undefined}
             className="editor-title-input"
             placeholder="Enter post title…"
           />
+          <FieldError id="post-title-error" message={errors.title} />
         </div>
 
         <div style={{ marginBottom: "2rem" }}>
           <label htmlFor="post-summary" style={labelStyle}>INTRODUCTION</label>
           <textarea
             id="post-summary"
+            aria-invalid={Boolean(errors.summary)}
+            aria-describedby={errors.summary ? "post-summary-error" : undefined}
             value={props.summary}
             onChange={(event) => props.onSummaryChange(event.target.value)}
             maxLength={1000}
             className="editor-summary-input"
             placeholder="Write a brief introduction for this post…"
           />
+          <FieldError id="post-summary-error" message={errors.summary} />
         </div>
 
         <fieldset style={{ border: 0, padding: 0, margin: "0 0 2rem" }}>
@@ -184,12 +195,15 @@ export default function PostEditorForm(props: PostEditorFormProps) {
           <label htmlFor="post-markdown_md" id="post-content-label" style={labelStyle}>CONTENT (MARKDOWN) · REQUIRED</label>
             <div
               className="custom-editor-wrapper"
+              data-invalid={Boolean(errors.content)}
               role="group"
               aria-label="Markdown editor"
-              aria-describedby={failed ? "post-save-message" : undefined}
+              aria-describedby={errors.content ? "post-content-error" : undefined}
             >
               <MdEditor
                 id="post-markdown"
+                invalid={Boolean(errors.content)}
+                errorId={errors.content ? "post-content-error" : undefined}
                 value={props.content}
                 readOnly={props.saving}
                 style={{ height: "calc(100dvh - 450px)", minHeight: "450px", borderRadius: "12px", border: "1px solid var(--border-color)" }}
@@ -199,6 +213,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
                 onPaste={handlePaste}
               />
             </div>
+          <FieldError id="post-content-error" message={errors.content} />
         </div>
 
       </fieldset>
@@ -216,4 +231,13 @@ export default function PostEditorForm(props: PostEditorFormProps) {
       </div>
     </form>
   );
+}
+
+function FieldError({ id, message }: { id: string; message: string }) {
+  return message ? <p id={id} className="editor-field-error" role="alert">
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 4h.01" />
+    </svg>
+    <span>{message}</span>
+  </p> : null;
 }
