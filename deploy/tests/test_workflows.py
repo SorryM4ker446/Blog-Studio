@@ -11,6 +11,34 @@ CI = (ROOT / ".github/workflows/ci.yml").read_text()
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_cd_trigger_filters_source_branches_before_the_deployment_gate(self):
+        trigger = CD.split("\npermissions:", 1)[0]
+        self.assertIn("  workflow_run:\n", trigger)
+        self.assertIn("    workflows: [CI]\n", trigger)
+        self.assertIn("    types: [completed]\n", trigger)
+        match = re.search(r"^    branches: \[([^\]]+)\]$", trigger, re.MULTILINE)
+        self.assertIsNotNone(match, "CD must filter branches before creating a run")
+        branches = {branch.strip() for branch in match.group(1).split(",")}
+        self.assertEqual(branches, {"main", "master"})
+        ci_push = CI.split("  push:\n", 1)[1].split("  pull_request:", 1)[0]
+        self.assertEqual(set(re.findall(r"^      - (\S+)$", ci_push, re.MULTILINE)), branches)
+        for branch in ("codex", "feature/example"):
+            self.assertNotIn(branch, branches)
+        for branch in branches:
+            for event in ("push", "workflow_dispatch"):
+                with self.subTest(branch=branch, event=event):
+                    self.assertTrue(self.allowed(**{
+                        "vars.DEPLOY_BRANCH": branch,
+                        "github.event.workflow_run.head_branch": branch,
+                        "github.event.workflow_run.event": event,
+                    }))
+            # A matching source branch alone must not authorize a PR deployment.
+            self.assertFalse(self.allowed(**{
+                "vars.DEPLOY_BRANCH": branch,
+                "github.event.workflow_run.head_branch": branch,
+                "github.event.workflow_run.event": "pull_request",
+            }))
+
     def allowed(self, **changes):
         values = {
             "vars.ENABLE_VPS_DEPLOY": "true",
