@@ -148,10 +148,12 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
             onChange={(scope) => changeFilter({ scope })}
           />
         </div>
-        {targetQuery.scope === "posts" && <div className={`search-filter-field ${styles.categoryReveal}`}>
+        <div className={`search-filter-field ${styles.categoryReveal}`} data-open={targetQuery.scope === "posts"}
+          inert={targetQuery.scope !== "posts"} aria-hidden={targetQuery.scope !== "posts"}>
           <span>Article category</span>
           <EditorSelect
             ariaLabel="Search category"
+            disabled={targetQuery.scope !== "posts"}
             unavailableLabel="Unavailable category"
             value={targetQuery.categoryId}
             width="15rem"
@@ -162,7 +164,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
             ]}
             onChange={(categoryId) => changeFilter({ categoryId })}
           />
-        </div>}
+        </div>
       </div>
       <section ref={resultsRef} aria-label="Search results" aria-busy={loading || changingScope} inert={changingScope && (searched || Boolean(error))}>
       {error && (

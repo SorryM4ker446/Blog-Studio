@@ -161,15 +161,15 @@ The committed CI workflow validates that the fixed proxy address is separated fr
 
 ## Build and dependency maintenance
 
-The backend build stage is pinned to `golang:1.26.8-alpine`, matching `backend/go.mod` and CI. It compiles the API, migration, seed and backup/restore commands; rebuild both backend and maintenance targets after dependency fixes. The frontend continues to use Node.js 22, locked npm dependencies and standalone output. No environment variable, secret mount, database extension requirement or application port changes are needed.
+The backend build stage is pinned to `golang:1.26.8-alpine`, matching `backend/go.mod` and CI. It compiles the API, migration, seed and backup/restore commands; rebuild both backend and maintenance targets after dependency fixes. The frontend continues to use Node.js 22, locked npm dependencies and standalone output.
 
 [Dependency health](dependency-maintenance.md) reports npm and Go findings but does not audit OS image packages or run a deployment. CI keeps its full image-build and disposable Compose topology checks. Local native/cross-compilation evidence is distinct from those container results; run and review the latter after publishing the change.
 
 
 ### Homepage links schema upgrade
 
-Releases containing homepage Links require migration `2026092201` (`add_homepage_links`). Run the existing migration step before starting the new backend. It creates the links table and four hidden templates without external URLs; configure and enable them in Content Editor → Links. This is an additive schema change and does not alter posts, files or settings. Existing backups must include the new table through the normal whole-database backup procedure. No new environment variables or services are required.
+Releases containing homepage Links require migration `2026092201` (`add_homepage_links`). Run the existing migration step before starting the new backend. It creates the links table and four hidden templates without external URLs; configure and enable them in Content Editor → Links. This is an additive schema change and does not alter posts, files or settings. Existing backups must include the new table through the normal whole-database backup procedure.
 
 Older binaries reject unknown migration versions. Do not roll back only the executable after applying this migration. Prefer a forward fix; if a full rollback is necessary, use the established backup restoration procedure with a matching application release and account for link changes made since that backup. Do not manually remove migration history to bypass verification.
 
-Custom link colors require migration `2026092301` (`allow_custom_link_colors`). The normal pre-start migration step expands the existing color constraint to accept six-digit HEX values while preserving all existing links and named presets. Deploy matching frontend/backend/maintenance images. Older backends reject custom colors and unknown migration versions; rolling back requires the established pre-upgrade database restore procedure, not simply starting an older backend against the upgraded database. No new environment variables or services are needed.
+Custom link colors require migration `2026092301` (`allow_custom_link_colors`). The normal pre-start migration step expands the existing color constraint to accept six-digit HEX values while preserving all existing links and named presets. Deploy matching frontend/backend/maintenance images. Older backends reject custom colors and unknown migration versions; rolling back requires the established pre-upgrade database restore procedure, not simply starting an older backend against the upgraded database.

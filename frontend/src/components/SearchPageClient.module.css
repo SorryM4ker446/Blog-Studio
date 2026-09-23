@@ -1,5 +1,12 @@
 .categoryReveal {
-  animation: category-enter 220ms cubic-bezier(.22, 1, .36, 1);
+  display: none;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: opacity 220ms ease-out, transform 220ms cubic-bezier(.22, 1, .36, 1), display 220ms allow-discrete;
+}
+.categoryReveal[data-open="true"] { display: flex; opacity: 1; transform: none; }
+@starting-style {
+  .categoryReveal[data-open="true"] { opacity: 0; transform: translateX(-10px); }
 }
 
 .pending {
@@ -13,11 +20,7 @@
 .pendingLabel { animation: pending-enter 160ms ease-out; }
 @keyframes pending-enter { from { opacity: 0; } to { opacity: 1; } }
 
-@keyframes category-enter {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .categoryReveal, .pendingLabel { animation: none; }
+  .categoryReveal { transition: none; }
+  .pendingLabel { animation: none; }
 }

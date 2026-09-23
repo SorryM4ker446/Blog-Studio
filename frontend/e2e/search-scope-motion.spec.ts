@@ -1,6 +1,66 @@
 import { expect, test } from "@playwright/test";
+import os from "node:os";
+import path from "node:path";
 
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
+  test(`idle search stays stable and categories retract with ${reducedMotion} motion`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion });
+    await page.goto("/search");
+    await expect(page).toHaveTitle("Blog Studio");
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    const results = page.getByRole("region", { name: "Search results", exact: true });
+    const category = page.locator('.search-filter-field[data-open]');
+    await page.evaluate(() => {
+      const original = Element.prototype.animate;
+      Object.assign(window, { idleAnimations: 0 });
+      Element.prototype.animate = function (frames, options) {
+        if (this.getAttribute("aria-label") === "Search results") (window as unknown as { idleAnimations: number }).idleAnimations++;
+        return original.call(this, frames, options);
+      };
+    });
+    const choose = async (name: string) => {
+      await page.getByRole("combobox", { name: "Search scope" }).click();
+      await page.getByRole("option", { name, exact: true }).click();
+    };
+    for (const width of [1280, 375]) {
+      await page.setViewportSize({ width, height: 900 });
+      await choose("Posts");
+      await expect(category).toHaveCSS("opacity", "1");
+      await expect(page.getByRole("combobox", { name: "Search category" })).toBeEnabled();
+      await expect(results).toHaveAttribute("aria-busy", "false");
+      await page.getByRole("combobox", { name: "Search scope" }).click();
+      const exit = await page.getByRole("option", { name: "Posts and files", exact: true }).evaluate(option => {
+        (option as HTMLElement).click();
+        return new Promise<{ count: number; opacity: number }>(resolve => requestAnimationFrame(() => {
+          const node = document.querySelector<HTMLElement>('.search-filter-field[data-open]')!;
+          const animations = node.getAnimations();
+          for (const animation of animations) { animation.pause(); animation.currentTime = 110; }
+          resolve({ count: animations.length, opacity: Number(getComputedStyle(node).opacity) });
+        }));
+      });
+      await expect(category).toHaveAttribute("inert", "");
+      await expect(page.getByRole("combobox", { name: "Search category" })).toHaveCount(0);
+      if (reducedMotion === "no-preference") {
+        expect(exit.count).toBeGreaterThan(0);
+        expect(exit.opacity).toBeGreaterThan(0);
+        expect(exit.opacity).toBeLessThan(1);
+        await page.screenshot({ path: path.join(os.tmpdir(), `search-category-exit-${width}.png`) });
+      } else expect(exit.count).toBe(0);
+      // Reverse an unfinished exit: no stale completion may hide the active field.
+      await choose("Posts");
+      await expect(category).toHaveCSS("opacity", "1");
+      await expect(category).not.toHaveAttribute("inert");
+      await choose("Files");
+      await expect(category).toHaveCSS("display", "none");
+      await expect(results).toHaveAttribute("aria-busy", "false");
+      await expect(results).toHaveCSS("opacity", "1");
+      await expect(results).toContainText("Enter a keyword to search across posts and files.");
+    }
+    expect(await page.evaluate(() => (window as unknown as { idleAnimations: number }).idleAnimations)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
   test(`search scope fades to current results with ${reducedMotion} motion`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion });
     await page.goto("/search");
