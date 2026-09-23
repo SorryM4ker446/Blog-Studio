@@ -14,6 +14,23 @@ The server takes a Linux file lock, rejects older CI run numbers, captures runni
 
 There is a maintenance window during backup/migration. This is not zero downtime. Additional writers outside this Compose stack must be stopped separately; do not enable unattended deployment while such writers exist.
 
+## Review before approving production
+
+CD first runs `prepare-release` without the production environment or SSH secrets. Open the CD run's **Summary** after that job succeeds to review:
+
+- the exact commit and branch, with links to the commit and successful source CI run;
+- associated pull requests for that commit (up to 100), or an explicit no-match/API-unavailable notice;
+- the frontend, backend and maintenance digest-pinned images downloaded from that exact CI run;
+- the release manifest checksum and the migrations registered in the checked-out release.
+
+The migration section lists the release's full registry, not a computed difference against production. The summary job does not contact the VPS, inspect its database, or verify an existing backup. The deployment stage still creates and verifies its backup before running pending migrations; a failed backup blocks migration. Follow the recovery procedure if migration has begun rather than rolling back only an image.
+
+`deploy-production` depends on successful preparation and artifact upload. With required reviewers configured on `production`, it waits for approval only after the summary is available. Read Summary, then select **Review deployments → production → Approve and deploy**. The approval popup itself is unchanged. If no required reviewers are configured, deployment proceeds automatically after preparation.
+
+The reviewed `release.json` and a copy of the summary are saved in a CD artifact named by CD run ID and attempt, retained for 30 days. Deployment downloads that artifact from the same CD run and checks its SHA-256, source commit and CI sequence before any SSH action. It does not rebuild images or re-read mutable tags. Missing/malformed image metadata, foreign-package references, unreadable migration metadata, or a missing/changed reviewed manifest block deployment. An unavailable PR lookup is clearly reported but does not block an otherwise valid release.
+
+Retrying only failed jobs reuses the successful preparation outputs and its artifact. Rerunning the whole workflow prepares a new artifact for that attempt and produces a new summary. If artifacts expire or are deleted, rerun preparation while the original CI image metadata remains available (retained for 14 days), or run CI again for the intended commit. Do not substitute another release's artifact. The default branch and the selected CI commit must contain the new preparation script before this workflow can deploy that release; old commits without it fail preparation safely.
+
 ## One-time VPS preparation
 
 Requirements:
@@ -193,3 +210,9 @@ This is a local application-image policy, not a total disk quota. Bootstrap/loca
 ## Validation
 
 Run `python -m unittest discover -s deploy/tests -v`. Fault-injection tests cover pull/backup/migration/health failures, ordering, immutable images, architecture checks, idempotence, stale-run rejection, persistent guards and SSH parameter validation. The real Compose parser verifies preserved volumes and versioned configuration mounts; Linux CI exercises `flock`. Retention tests cover three-version selection, repeated SHAs, stopped containers, shared image IDs, manual tags, incomplete releases, corrupted metadata, failed removals and repeat execution. Workflow gate tests exercise failed/PR/fork/non-production events and source CI identity bindings. Existing container CI still builds/boots the topology. Actual registry authentication, GitHub workflow chaining, Docker image removal, SSH permissions, HTTPS and VPS deployment require a real environment run.
+
+## Approval summary privacy
+
+Treat the Summary and its artifacts as public release information in a public repository. Output is limited to repository/commit/CI/PR identifiers and links, the production branch name, validated image references, manifest checksum, registered migration identifiers/names, and fixed operational guidance. Commit messages, PR titles/bodies, author email addresses, complete GitHub event/API responses, environment dumps and server diagnostics are not copied into the report.
+
+Preparation has no production environment, SSH credentials or VPS access. Its GitHub token is used only for the authenticated PR lookup and is never written to the summary or release manifest. PR lookup failures and preparation failures use fixed messages without raw exception diagnostics. Artifact upload explicitly includes only `release.json` and `summary.md`, not an entire directory. The deploy job retains the existing production Secret bindings and private SSH diagnostic handling. This does not erase any information already published in earlier workflow runs or repository history; maintain secrets in production environment Secrets and never in commit/branch/migration names or public metadata.

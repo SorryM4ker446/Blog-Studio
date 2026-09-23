@@ -61,6 +61,23 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn("VPS_SSH_PRIVATE_KEY", CI)
         self.assertIn("needs: [frontend, backend, e2e, containers, deployment-tests]", CI)
 
+    def test_summary_precedes_environment_approval_and_deployment_uses_reviewed_artifact(self):
+        preparation, deployment = CD.split("  deploy-production:", 1)
+        self.assertIn("  prepare-release:", preparation)
+        self.assertNotIn("environment: production", preparation)
+        self.assertNotIn("VPS_", preparation.replace("ENABLE_VPS_DEPLOY", "ENABLE_DEPLOY"))
+        self.assertIn("pull-requests: read", preparation)
+        self.assertIn("deploy/prepare_release.py", preparation)
+        self.assertIn("if-no-files-found: error", preparation)
+        self.assertIn("path: |\n            reviewed-release/release.json\n            reviewed-release/summary.md", preparation)
+        self.assertNotIn("path: reviewed-release/", preparation)
+        self.assertIn("needs: prepare-release", deployment)
+        self.assertIn("environment: production", deployment)
+        self.assertIn("name: ${{ needs.prepare-release.outputs.artifact_name }}", deployment)
+        self.assertIn("RELEASE_MANIFEST_SHA256: ${{ needs.prepare-release.outputs.manifest_sha256 }}", deployment)
+        self.assertNotIn("image-metadata", deployment)
+        self.assertNotIn("always()", deployment)
+
 
 if __name__ == "__main__":
     unittest.main()
