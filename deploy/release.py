@@ -99,6 +99,90 @@ class Deployer:
         with deployment_lock(self.state / "lock"):
             self._execute_locked()
 
+    def retain_images(self):
+        """Remove only recorded obsolete application digests, under the deploy lock."""
+        if (self.state / "attention.json").exists():
+            raise ReleaseError("Image cleanup requires a resolved deployment guard")
+        current = read_json(self.state / "current.json")
+        current_bundle = Path(current["path"]).resolve()
+        records = []
+        for path in (self.state / "releases").glob("*/release.json"):
+            if path.resolve().parent.parent != (self.state / "releases").resolve():
+                raise ReleaseError("Release metadata must stay inside the releases directory")
+            manifest = validate_manifest(read_json(path))
+            status_path = path.parent / "status.json"
+            status = read_json(status_path).get("state") if status_path.exists() else None
+            successful = status == "success" or path.parent.resolve() == current_bundle
+            records.append((path.parent, manifest, successful))
+
+        # A retry of the same commit does not consume an additional version slot.
+        versions = [current["sha"]]
+        for _, manifest, successful in sorted(records, key=lambda item: item[1]["sequence"], reverse=True):
+            if successful and manifest["sha"] not in versions and len(versions) < 3:
+                versions.append(manifest["sha"])
+        protected, candidates = set(), set()
+        for bundle, manifest, successful in records:
+            if not successful or manifest["sha"] in versions:
+                protected.update(manifest["images"].values())
+            else:
+                candidates.update(manifest["images"].values())
+            # Preserve immediate rollback images of the active or unresolved release.
+            if not successful or bundle.resolve() == current_bundle:
+                previous = bundle / "previous-images.json"
+                if previous.exists():
+                    protected.update(service["image"] for service in read_json(previous)["services"].values())
+        candidates -= protected
+        if not candidates:
+            return {"removed": 0, "protected": 0, "failed": 0}
+
+        # Inventory first: a missing old digest is already cleaned, not an error.
+        inventory = self.run(["docker", "image", "ls", "--all", "--digests", "--no-trunc", "--format", "{{json .}}"], capture=True)
+        references, tagged = {}, set()
+        for line in inventory.splitlines():
+            item = json.loads(line)
+            image_id = item["ID"]
+            if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+                raise ReleaseError("Unexpected Docker image identity")
+            if item["Tag"] != "<none>":
+                tagged.add(image_id)
+            if item["Digest"] != "<none>":
+                references[item["Repository"] + "@" + item["Digest"]] = image_id
+        protected_ids = {references.get(ref, ref) for ref in protected} | tagged
+        # Include stopped containers and other Compose projects, not only this app.
+        containers = self.run(["docker", "container", "ls", "--all", "--quiet"], capture=True)
+        for container in containers.splitlines():
+            protected_ids.add(self.run(["docker", "container", "inspect", "--format", "{{.Image}}", container], capture=True))
+        result = {"removed": 0, "protected": 0, "failed": 0}
+        for ref in sorted(candidates):
+            if ref not in references:
+                continue
+            if references[ref] in protected_ids:
+                result["protected"] += 1
+                continue
+            try:
+                # Never force removal or prune unrelated images, containers or volumes.
+                self.run(["docker", "image", "rm", ref], capture=True)
+                result["removed"] += 1
+            except Exception as error:
+                print("Image cleanup failed: " + str(error), file=sys.stderr)
+                result["failed"] += 1
+        return result
+
+    def complete(self, message):
+        # Cleanup failure must not misreport or roll back a healthy committed release.
+        self.phase = "cleanup"
+        self.status("running")
+        try:
+            result = self.retain_images()
+            write_json(self.release / "cleanup.json", result)
+            if result["failed"] or result["protected"]:
+                message += " Some old images remain; review private cleanup results."
+        except Exception as error:
+            print("Image retention needs review: " + str(error), file=sys.stderr)
+            message += " Image cleanup needs operator review."
+        self.phase = "complete"
+        self.status("success", message)
+
     def _execute_locked(self):
         try:
             self.status("running")
@@ -118,7 +202,7 @@ class Deployer:
                 self.health(config)
                 current["sequence"] = manifest["sequence"]
                 write_json(current_path, current)
-                self.status("success", "This commit is already deployed")
+                self.complete("This commit is already deployed")
                 return
             if current and manifest["sequence"] == current["sequence"]:
                 raise ReleaseError("A CI sequence cannot identify two different commits")
@@ -186,8 +270,7 @@ class Deployer:
             self.health(updated)
             write_json(current_path, {"sha": manifest["sha"], "sequence": manifest["sequence"], "path": str(self.release)})
             (self.state / "attention.json").unlink()
-            self.phase = "complete"
-            self.status("success", "Release is healthy")
+            self.complete("Release is healthy")
         except Exception:
             # Never roll back an image across a possibly changed migration history.
             if self.stopped and not self.migration_started:

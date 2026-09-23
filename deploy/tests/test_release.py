@@ -1,7 +1,10 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
+import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -124,6 +127,23 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse(any("stop" in args for args in fake.calls))
         self.assertFalse((self.state / "attention.json").exists())
 
+    def test_cleanup_runs_only_after_healthy_current_pointer_and_guard_clear(self):
+        def cleanup(worker):
+            self.assertEqual(release.read_json(self.state / "current.json")["sha"], SHA)
+            self.assertFalse((self.state / "attention.json").exists())
+            self.assertEqual(worker.phase, "cleanup")
+            return {"removed": 0, "protected": 0, "failed": 0}
+        with patch.object(release.Deployer, "retain_images", autospec=True, side_effect=cleanup) as clean:
+            self.deploy()
+            clean.assert_called_once()
+
+    def test_failed_deployment_never_starts_cleanup(self):
+        fake = FakeDocker(lambda args: args[0] == "curl")
+        with patch.object(release.Deployer, "retain_images") as clean:
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.deploy(fake)
+            clean.assert_not_called()
+
     def test_backup_failure_restarts_old_services_without_migrating_new_release(self):
         fake = FakeDocker(lambda args: "/app/backup" in args)
         with self.assertRaises(subprocess.CalledProcessError):
@@ -210,13 +230,44 @@ class ReleaseTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_dispatch_binds_manifest_to_source_ci_not_cd_defaults(self):
+        env = {"VPS_HOST": "example.test", "VPS_USER": "deploy", "VPS_PORT": "", "VPS_DEPLOY_PATH": "/srv/blog",
+               "DEPLOY_SHA": SHA, "DEPLOY_SEQUENCE": "123", "GITHUB_RUN_ID": "900", "GITHUB_RUN_ATTEMPT": "2",
+               "GITHUB_SHA": "f" * 40, "GITHUB_RUN_NUMBER": "1",
+               "VPS_SSH_PRIVATE_KEY": "test", "VPS_KNOWN_HOSTS": "test"}
+        uploaded = []
+        def transport(args):
+            if args[0] == "scp":
+                self.assertEqual(args[args.index("-P") + 1], "22")
+                with tarfile.open(args[-2]) as archive:
+                    uploaded.append(json.load(archive.extractfile("release.json")))
+                self.assertTrue(args[-1].endswith("/releases/900-2/release.tar.gz"))
+            return '{"state":"success","phase":"complete","message":"Release is healthy"}'
+        previous_directory = Path.cwd()
+        with tempfile.TemporaryDirectory() as directory:
+            try:
+                os.chdir(directory)
+                Path("image-metadata").mkdir()
+                for service, image in MANIFEST["images"].items():
+                    release.write_json(Path("image-metadata") / (service + ".json"), {"image": image})
+                for name in ("compose.yaml", "deploy/Caddyfile", "deploy/postgres/initialize-search.sql", "deploy/release.py"):
+                    path = Path(name)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("test fixture")
+                with patch.dict(os.environ, env, clear=True), patch.dict(sys.modules, {"release": release}), patch.object(dispatch, "transport", side_effect=transport):
+                    self.assertEqual(dispatch.main(), 0)
+            finally:
+                os.chdir(previous_directory)
+        self.assertEqual(uploaded, [{"sha": SHA, "sequence": 123, "images": MANIFEST["images"]}])
+
     def test_rejects_shell_injection_and_missing_secrets(self):
         env = {"VPS_HOST": "example.test", "VPS_USER": "deploy", "VPS_PORT": "22", "VPS_DEPLOY_PATH": "/srv/blog",
-               "GITHUB_SHA": SHA, "GITHUB_RUN_NUMBER": "1", "GITHUB_RUN_ID": "2", "GITHUB_RUN_ATTEMPT": "1",
+               "DEPLOY_SHA": SHA, "DEPLOY_SEQUENCE": "1", "GITHUB_RUN_ID": "2", "GITHUB_RUN_ATTEMPT": "1",
                "VPS_SSH_PRIVATE_KEY": "test", "VPS_KNOWN_HOSTS": "test"}
         self.assertEqual(dispatch.validate_settings(env), "/srv/blog")
         for key, value in (("VPS_HOST", "host;id"), ("VPS_DEPLOY_PATH", "/srv/../etc"),
-                           ("VPS_DEPLOY_PATH", "/srv/$(id)"), ("VPS_PORT", "65536"), ("VPS_KNOWN_HOSTS", "")):
+                           ("VPS_DEPLOY_PATH", "/srv/$(id)"), ("VPS_PORT", "65536"), ("VPS_KNOWN_HOSTS", ""),
+                           ("DEPLOY_SHA", ""), ("DEPLOY_SEQUENCE", "0"), ("DEPLOY_SEQUENCE", "")):
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 dispatch.validate_settings({**env, key: value})
 

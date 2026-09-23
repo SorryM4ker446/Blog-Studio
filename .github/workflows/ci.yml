@@ -334,30 +334,3 @@ jobs:
           name: deploy-image-${{ matrix.service }}
           path: ${{ matrix.service }}.json
           retention-days: 14
-
-  deploy-production:
-    needs: publish-images
-    runs-on: ubuntu-latest
-    timeout-minutes: 100
-    environment: production
-    concurrency:
-      group: production-deploy
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: deploy-image-*
-          path: image-metadata
-          merge-multiple: true
-      - name: Deploy verified release to VPS
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
-          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
-        run: python3 deploy/dispatch.py
