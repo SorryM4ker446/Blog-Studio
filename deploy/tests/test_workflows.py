@@ -11,6 +11,23 @@ CI = (ROOT / ".github/workflows/ci.yml").read_text()
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_go_caches_use_existing_module_checksum_files(self):
+        for workflow in (ROOT / ".github/workflows").glob("*.yml"):
+            steps = re.findall(
+                r"^      - uses: actions/setup-go@[^\n]+\n((?:(?: {8,}[^\n]*|)\n)*)",
+                workflow.read_text(), re.MULTILINE,
+            )
+            for step in steps:
+                with self.subTest(workflow=workflow.name):
+                    module = re.search(r"go-version-file: (\S+)", step)
+                    cache = re.search(r"cache-dependency-path: (\S+)", step)
+                    self.assertIsNotNone(module)
+                    self.assertIsNotNone(cache, "Go cache must resolve the module's checksum file")
+                    module_path = ROOT / module.group(1)
+                    cache_path = ROOT / cache.group(1)
+                    self.assertTrue(cache_path.is_file())
+                    self.assertEqual(cache_path, module_path.with_name("go.sum"))
+
     def test_cd_trigger_filters_source_branches_before_the_deployment_gate(self):
         trigger = CD.split("\npermissions:", 1)[0]
         self.assertIn("  workflow_run:\n", trigger)

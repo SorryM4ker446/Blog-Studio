@@ -226,6 +226,8 @@ These are local native-server Chromium checks, including API and PostgreSQL beha
 
 ## Dependency and workflow checks
 
+CI, CD and dependency checks use GitHub-hosted Ubuntu 24.04 runners. Keep the OS version explicit and validate a runner image upgrade before changing it.
+
 Run `node --test tools/quality/*.test.mjs` from the repository root to validate the gate helpers, including their rejection paths. From `backend`, run `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12` to check workflow syntax and semantics without invoking Docker. CI uses the same pinned validator. The [dependency maintenance workflow](dependency-maintenance.md) checks security and available versions manually and weekly; ordinary newer versions are informational, while check failures remain failures.
 
 The backend toolchain is Go 1.26.8 in the module, CI and Docker build stage. Test/build the server, migration, seed and backup/restore commands after dependency updates. The existing PostgreSQL 18 test database, fixed historical migration fixtures and real pg_dump/pg_restore drill remain mandatory for final backend acceptance. Container builds and Compose topology are validated separately in GitHub Actions.
