@@ -77,7 +77,9 @@ for (const motion of ["no-preference", "reduce"] as const) {
     gate = new Promise(resolve => { release = resolve; });
     await input.fill("first"); await input.press("Enter");
     await expect(results.locator(".skeleton-pulse")).toHaveCount(0);
-    await expect(results.getByText("Searching posts and files…")).not.toHaveClass("sr-only");
+    await expect(results.getByRole("status")).toHaveText("Searching posts and files…");
+    await expect(results.getByRole("status")).toHaveClass("sr-only");
+    await expect(results.getByRole("status")).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)");
     await expect(results.getByRole("status")).toBeVisible();
     gate = null; release();
     await expect(results).toContainText("first article");

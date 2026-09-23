@@ -126,7 +126,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
             padding: "0 1.5rem",
             fontSize: "0.9rem",
             fontWeight: 500,
-            cursor: loading ? "wait" : "pointer",
+            cursor: "pointer",
           }}
         >
           Search

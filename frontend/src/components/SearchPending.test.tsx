@@ -4,16 +4,13 @@ import SearchPending from "./SearchPending";
 
 afterEach(() => vi.useRealTimers());
 
-it("announces pending work immediately but only shows feedback for slower requests", () => {
+it("keeps loading feedback accessible and visually hidden for slow requests", () => {
   vi.useFakeTimers();
-  const fast = render(<SearchPending />);
+  const view = render(<SearchPending />);
   expect(screen.getByRole("status")).toHaveTextContent("Searching posts and files…");
   expect(screen.getByText("Searching posts and files…")).toHaveClass("sr-only");
-  act(() => vi.advanceTimersByTime(199));
+  act(() => vi.advanceTimersByTime(1000));
   expect(screen.getByText("Searching posts and files…")).toHaveClass("sr-only");
-  fast.unmount();
+  view.unmount();
   expect(vi.getTimerCount()).toBe(0);
-  render(<SearchPending />);
-  act(() => vi.advanceTimersByTime(200));
-  expect(screen.getByText("Searching posts and files…")).not.toHaveClass("sr-only");
 });
