@@ -10,15 +10,15 @@ permissions:
 
 jobs:
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -40,7 +40,7 @@ jobs:
           node ../tools/quality/check-outdated.mjs "$RUNNER_TEMP/frontend-outdated.json" "$status"
       - name: Retain frontend dependency reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: frontend-dependency-health
           path: ${{ runner.temp }}/frontend-*.json
@@ -48,17 +48,18 @@ jobs:
           retention-days: 30
 
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: Verify module checksums
         run: go mod download && go mod verify
       - name: Record available module versions without upgrading
@@ -73,7 +74,7 @@ jobs:
           go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -show verbose ./... | tee "$RUNNER_TEMP/backend-vulnerabilities.txt"
       - name: Retain backend dependency reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: backend-dependency-health
           path: |
