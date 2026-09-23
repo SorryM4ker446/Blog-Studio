@@ -296,11 +296,10 @@ jobs:
         id: image
         env:
           REPOSITORY: ${{ github.repository }}
-          SERVICE: ${{ matrix.service }}
           PLATFORM: ${{ vars.VPS_PLATFORM || 'linux/amd64' }}
         run: |
           case "$PLATFORM" in linux/amd64|linux/arm64) ;; *) exit 1 ;; esac
-          echo "name=ghcr.io/${REPOSITORY,,}-$SERVICE" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -316,7 +315,7 @@ jobs:
           target: ${{ matrix.target }}
           platforms: ${{ steps.image.outputs.platform }}
           push: true
-          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          tags: ${{ steps.image.outputs.name }}:${{ matrix.service }}-${{ github.sha }}
           labels: org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.service }}-${{ steps.image.outputs.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}-${{ steps.image.outputs.platform }}
@@ -355,10 +354,10 @@ jobs:
           merge-multiple: true
       - name: Deploy verified release to VPS
         env:
-          VPS_HOST: ${{ vars.VPS_HOST }}
-          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
-          VPS_USER: ${{ vars.VPS_USER }}
-          VPS_DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
           VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: python3 deploy/dispatch.py

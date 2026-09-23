@@ -6,7 +6,7 @@ This is an opt-in upgrade path for an **existing, healthy Linux Docker Compose i
 
 The existing `CI` workflow runs frontend coverage/build, backend tests, browser tests, container topology checks, and deployment-script tests. Only successful push/manual runs on the configured production branch publish images. Pull requests never publish or deploy.
 
-Three GHCR images are built from the same commit: frontend `runtime`, backend `runtime`, and backend `maintenance`. SHA tags identify releases; the server actually uses **digests** recorded by those builds. Architecture and OCI revision are checked before downtime. The matching Compose file, Caddy configuration, initialization SQL, and deployment script arrive over SSH/SFTP; no secrets or application source are uploaded into the live checkout.
+Three independent GHCR images are built from the same commit in one package: frontend `runtime`, backend `runtime`, and backend `maintenance`. Service-prefixed SHA tags identify releases; the server actually uses **digests** recorded separately by those builds. Architecture and OCI revision are checked before downtime. The matching Compose file, Caddy configuration, initialization SQL, and deployment script arrive over SSH/SFTP; no secrets or application source are uploaded into the live checkout.
 
 The server takes a Linux file lock, rejects older CI run numbers, captures running image IDs, pulls new images, then stops Caddy/frontend/backend. PostgreSQL remains running. The old maintenance image runs `backup create`, which verifies storage consistency and the archive before publishing a complete bundle. New migrations run, services restart with health checks, and public HTTPS readiness/settings/links endpoints are checked. Only then does the current-release pointer change.
 
@@ -65,10 +65,14 @@ Store a **verified** known_hosts entry in GitHub. Compare its fingerprint with t
 Actions publishes with its `GITHUB_TOKEN` and `packages: write`. Image names are automatically lowercased:
 
 ```text
-ghcr.io/<owner>/<repository>-frontend
-ghcr.io/<owner>/<repository>-backend
-ghcr.io/<owner>/<repository>-maintenance
+ghcr.io/<owner>/<repository>:frontend-<commit-sha>
+ghcr.io/<owner>/<repository>:backend-<commit-sha>
+ghcr.io/<owner>/<repository>:maintenance-<commit-sha>
 ```
+
+For a repository named `Blog-Studio`, this creates one `blog-studio` package with three independently built images. There is no shared `latest` tag to overwrite between services. Deployment metadata still contains a separate digest for each service; migrate/seed continue to use the backend image.
+
+When upgrading from the three-package layout, grant the publishing repository and VPS read account access to the new package before enabling deployment. The old packages are not renamed or deleted automatically. Retain their digests/images while current/previous releases or recovery procedures reference them. Existing release manifests remain valid, and local Compose build names do not change.
 
 Private packages require the VPS account to log in once with a personal access token (classic) authorized for those packages and `read:packages`; organization SSO authorization may also be needed. Enter it interactively:
 
@@ -95,14 +99,18 @@ Create **Settings → Environments → production**, restrict it to the producti
 
 | Kind | Name | Value |
 | --- | --- | --- |
-| Variable | `VPS_HOST` | IPv4 address or DNS hostname; IPv6 literals are not accepted |
-| Variable | `VPS_PORT` | SSH port; default `22` |
-| Variable | `VPS_USER` | Deployment account |
-| Variable | `VPS_DEPLOY_PATH` | Existing absolute root, e.g. `/srv/Blog-Studio`; no spaces or shell metacharacters |
+| Secret | `VPS_HOST` | IPv4 address or DNS hostname; IPv6 literals are not accepted |
+| Secret | `VPS_PORT` | Optional SSH port; defaults privately to `22` in the deployment script |
+| Secret | `VPS_USER` | Deployment account |
+| Secret | `VPS_DEPLOY_PATH` | Existing absolute root, e.g. `/srv/Blog-Studio`; no spaces or shell metacharacters |
 | Secret | `VPS_SSH_PRIVATE_KEY` | Complete private key, including BEGIN/END lines |
 | Secret | `VPS_KNOWN_HOSTS` | Verified known_hosts record for this host/port |
 
 Enable/branch/platform must be repository variables: image publishing runs before entering the production environment. Approval requirements, if desired and supported by your plan, belong to that environment. Without required approval, eligible successful runs deploy automatically. Protect the branch and review workflow/script changes.
+
+For existing installations, copy the four VPS connection settings from production Variables to same-named production Secrets, then remove the old Variables. There is intentionally no Variables fallback: runner step headers can expose their values before the deployment script starts. Missing required Secrets fail before SSH. Secrets are masked by GitHub; the dispatcher additionally captures SSH/SCP diagnostics and reports transport failures without command arguments or server paths. Inspect SSH connectivity privately when a transport failure occurs.
+
+This change only protects future runs. Review and delete previously exposed Actions logs through GitHub's log controls; changing Variables to Secrets does not retroactively sanitize historical logs. Do not paste existing values into issues, source files or migration notes.
 
 The site URL is read from the existing VPS configuration. No duplicate `SITE_URL` setting or database/JWT secret in GitHub is needed. The VPS does not need repository access; release files arrive over SSH/SFTP.
 

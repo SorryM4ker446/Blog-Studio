@@ -37,8 +37,18 @@ def validate_settings(env):
     return root
 
 
+def transport(args):
+    # SSH diagnostics and command arguments can expose host/user/path information.
+    # Never forward them to public Actions logs, including on subprocess failure.
+    try:
+        return subprocess.run(args, check=True, text=True, capture_output=True).stdout.strip()
+    except (subprocess.CalledProcessError, OSError):
+        raise RuntimeError("SSH transport failed; verify production secrets, connectivity and server state privately.") from None
+
+
 def main():
-    env = os.environ
+    env = dict(os.environ)
+    env["VPS_PORT"] = env.get("VPS_PORT") or "22"
     root = validate_settings(env)
     release = f"{root}/deploy/.deployment/releases/{env['GITHUB_RUN_ID']}-{env['GITHUB_RUN_ATTEMPT']}"
     images = {}
@@ -62,7 +72,7 @@ def main():
         target = f"{env['VPS_USER']}@{env['VPS_HOST']}"
 
         def ssh(code):
-            return subprocess.check_output(["ssh", *options, "-p", env["VPS_PORT"], target, code], text=True).strip()
+            return transport(["ssh", *options, "-p", env["VPS_PORT"], target, code])
 
         ssh("umask 077; mkdir -p " + shlex.quote(root + "/deploy/.deployment/releases") + "; mkdir " + shlex.quote(release))
         manifest_path = directory / "release.json"
@@ -72,7 +82,7 @@ def main():
             for name in ("compose.yaml", "deploy/Caddyfile", "deploy/postgres/initialize-search.sql", "deploy/release.py"):
                 archive.add(name, arcname=name)
             archive.add(manifest_path, arcname="release.json")
-        subprocess.run(["scp", *options, "-P", env["VPS_PORT"], str(bundle), target + ":" + release + "/release.tar.gz"], check=True)
+        transport(["scp", *options, "-P", env["VPS_PORT"], str(bundle), target + ":" + release + "/release.tar.gz"])
         launcher = (
             "import subprocess; "
             f"log=open({release + '/deploy.log'!r},'a'); "
@@ -81,7 +91,7 @@ def main():
         )
         ssh("umask 077; tar -xzf " + shlex.quote(release + "/release.tar.gz") + " -C " + shlex.quote(release)
             + " && python3 -c " + shlex.quote(launcher))
-        print("Server deployment started. Logs: " + release + "/deploy.log", flush=True)
+        print("Server deployment started. Detailed logs remain in the private server release directory.", flush=True)
         deadline = time.monotonic() + 5400
         previous = None
         while time.monotonic() < deadline:

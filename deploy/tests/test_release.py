@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 def module(name):
@@ -17,8 +18,38 @@ release = module("release")
 dispatch = module("dispatch")
 SHA = "a" * 40
 MANIFEST = {"sha": SHA, "sequence": 20, "images": {
-    service: f"ghcr.io/example/blog-{service}@sha256:" + "b" * 64
-    for service in ("frontend", "backend", "maintenance")}}
+    service: "ghcr.io/example/blog@sha256:" + digest * 64
+    for service, digest in (("frontend", "a"), ("backend", "b"), ("maintenance", "c"))}}
+
+
+class TransportPrivacyTests(unittest.TestCase):
+    def test_captures_transport_diagnostics_without_printing(self):
+        with patch.object(dispatch.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, " result\n", "private diagnostic")) as run:
+            self.assertEqual(dispatch.transport(["ssh", "example.test"]), "result")
+        run.assert_called_once_with(["ssh", "example.test"], check=True, text=True, capture_output=True)
+
+    def test_transport_failures_do_not_expose_arguments_or_output(self):
+        args = ["ssh", "deploy@example.test", "cat /srv/private/status.json"]
+        failures = [subprocess.CalledProcessError(255, args, output="private output", stderr="private diagnostic"),
+                    OSError("private path")]
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__), patch.object(dispatch.subprocess, "run", side_effect=failure):
+                with self.assertRaises(RuntimeError) as caught:
+                    dispatch.transport(args)
+                self.assertEqual(str(caught.exception), "SSH transport failed; verify production secrets, connectivity and server state privately.")
+
+
+class ImageManifestTests(unittest.TestCase):
+    def test_one_package_retains_distinct_service_digests(self):
+        validated = release.validate_manifest(MANIFEST)
+        self.assertEqual(len(set(validated["images"].values())), 3)
+        self.assertEqual({image.split("@")[0] for image in validated["images"].values()}, {"ghcr.io/example/blog"})
+
+    def test_existing_separate_packages_remain_valid(self):
+        previous = {**MANIFEST, "images": {
+            service: f"ghcr.io/example/blog-{service}@sha256:" + "b" * 64
+            for service in MANIFEST["images"]}}
+        self.assertEqual(release.validate_manifest(previous), previous)
 
 
 class FakeDocker:
