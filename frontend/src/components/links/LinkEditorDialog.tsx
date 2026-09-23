@@ -14,6 +14,7 @@ export default function LinkEditorDialog({ link, blockedReason = "", onSave, onC
   const [requestID] = useState(() => crypto.randomUUID());
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [visibilityPointerFocus, setVisibilityPointerFocus] = useState(false);
   const [error, setError] = useState("");
   const live = useRef({ saving: false });
   const errors = attempted ? validateLink(fields) : { title: "", description: "", url: "" };
@@ -43,7 +44,10 @@ export default function LinkEditorDialog({ link, blockedReason = "", onSave, onC
         </div>)}
         <fieldset className={styles.choices}><legend className={styles.legend}>ICON</legend>{linkIcons.map(icon => <button type="button" key={icon} aria-label={`${icon} icon`} aria-pressed={fields.icon === icon} onClick={() => field("icon",icon)}><LinkIcon icon={icon} /></button>)}</fieldset>
         <LinkColorPicker value={fields.color} onChange={color => field("color", color)} />
-        <label className={styles.visibility}><input type="checkbox" checked={fields.visible} onChange={e => field("visible",e.target.checked)} /> Show on homepage</label>
+        <label className={styles.visibility} data-pointer-focus={visibilityPointerFocus || undefined}
+          onPointerDown={() => setVisibilityPointerFocus(true)} onKeyDown={() => setVisibilityPointerFocus(false)} onBlur={() => setVisibilityPointerFocus(false)}>
+          <input type="checkbox" checked={fields.visible} onChange={e => field("visible",e.target.checked)} /> Show on homepage
+        </label>
       </div><aside className={styles.preview}><p className={styles.legend}>LIVE PREVIEW</p><div className={styles.card}><LinkCardContent link={fields} /></div><p className={styles.hint} style={{ marginTop: 12 }}>{fields.visible ? "Visible after saving." : "Hidden from visitors. You can enable it later."}</p></aside></div>
       </fieldset>
       <div className={styles.saveFeedback}>

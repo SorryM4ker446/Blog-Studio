@@ -18,7 +18,7 @@ export function useScopeTransition<T extends Criteria & { error: string; searche
   if (!changing && valueKey === targetKey && displayed !== value) setSnapshot({ value, key: valueKey, initialEntry: false });
 
   if (!hasOutgoingResults && changing && !pending && (valueKey === targetKey || value.error)) {
-    setSnapshot({ value, key: targetKey, initialEntry: true });
+    setSnapshot({ value, key: targetKey, initialEntry: value.searched !== false || Boolean(value.error) || Boolean(displayed.error) });
   }
 
   useLayoutEffect(() => {

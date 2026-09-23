@@ -39,7 +39,7 @@ Article mutations and conflict-detail reads handle HTTP 401 locally to avoid red
 
 Migration `2026090901` adds `posts.version` and a PostgreSQL update trigger. Historical articles start at 1 without changing their content or timestamps. Every row update advances the version, including foreign-key updates when a category is deleted; these category changes do not rewrite article timeline timestamps. Conditional writes and response reloads run in one transaction, so a failed reload rolls back the write and its version change. The maximum supported version is JavaScript's maximum safe integer, 9007199254740991.
 
-Deploy frontend and backend together, apply pending migrations before API startup, and reload old clients: writes without versions are incompatible. No new environment variable or extension is required beyond the existing search migration prerequisites. See [deployment](deployment.md) and [backup and restore](backup-restore.md); image-only rollback across a new migration is unsupported.
+Deploy frontend and backend together, apply pending migrations before API startup, and reload old clients: writes without versions are incompatible. See [deployment](deployment.md) and [backup and restore](backup-restore.md); image-only rollback across a new migration is unsupported.
 
 ## Browser recovery copies
 
@@ -75,7 +75,7 @@ Refresh, tab closure and departures to another document use the browser's native
 
 ## Frontend deployment
 
-This recovery change adds no backend endpoint, schema migration, environment variable or service. The existing frontend build includes `instrumentation-client.ts`; deploy the rebuilt frontend and reload older open clients to activate recovery and navigation protection. Existing server version checks remain required. IndexedDB's schema version and each record's format version are independent of article versions. Unsupported or malformed records are never restored.
+The existing frontend build includes `instrumentation-client.ts`; deploy the rebuilt frontend and reload older open clients to activate recovery and navigation protection. Existing server version checks remain required. IndexedDB's schema version and each record's format version are independent of article versions. Unsupported or malformed records are never restored.
 
 List return snapshots are optional browser-memory optimizations, isolated by user for protected data and bounded to 20 entries and five minutes. Logout and session expiry clear them. They contain no unsaved article text. Matching server-rendered data or a target-page loading area works without a snapshot. Client route entry revalidates even when its server snapshot already matches the URL; errors remain visible and retryable.
 
@@ -85,7 +85,7 @@ Content Editor no longer measures or stores list dimensions. The obsolete sessio
 
 The content scroller saves offsets before departures and restores them after the target layout commits. Delayed content can be retried for at most two seconds, after which browser clamping determines the reachable offset. Wheel, touch, pointer and scroll-key input cancel restoration; navigation and unmount clean up pending callbacks. Input before hydration also cancels the later takeover. Changed server content may shorten a public list or remove an item, so restoration does not promise an unchanged historical content snapshot.
 
-Deploy the rebuilt frontend and refresh existing clients. No API, schema, configuration, dependency or service change is required. Old URL-keyed scroll records are no longer read; an older history entry without the new metadata starts without a saved offset. Browser history loss still loses its source and position. Recovery copies, preference Cookies, article widths and editor version checks remain independent of these list changes.
+Deploy the rebuilt frontend and refresh existing clients. Old URL-keyed scroll records are no longer read; an older history entry without the new metadata starts without a saved offset. Browser history loss still loses its source and position. Recovery copies, preference Cookies, article widths and editor version checks remain independent of these list changes.
 
 Posts/Files tabs share a sliding selection background. Explicit tab, category and search changes retain the previous results until the requested response is available, then run the existing scope exit/entrance transition. Empty results participate in the same transition. Response criteria stay paired with their rows, including inactive tabs' server snapshots; an older response cannot label rows with a newer query. Pagination keeps its separate motion, and scope changes do not replay a page animation. Narrow toolbars wrap complete controls rather than splitting tab labels. Reduced motion commits the result without animation.
 

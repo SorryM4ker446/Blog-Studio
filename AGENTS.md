@@ -10,6 +10,14 @@ These rules apply to all Codex work in this repository.
 - Preserve unrelated user changes and never overwrite or discard them.
 - Do not record real passwords, database connection strings, signing secrets, or other credentials in repository files, logs, or handoff notes.
 
+## Documentation Principles
+
+- Keep repository documentation focused on its purpose: current behavior, contracts, usage, operational procedures, compatibility, and meaningful validation coverage or evidence.
+- Review related artifacts as required, but do not mechanically append change-scope checklists or statements such as "No API, migration or deployment configuration changes are required," "No new dependencies are needed," or "Other behavior is unchanged." Report such conclusions in the conversation or pull request description when they help assess the change.
+- Preserve information that affects a reader's decisions, including migration prerequisites, rollback constraints, credential requirements, browser fallbacks, and the limits of test evidence. A negative statement is appropriate when it explains a real contract, limitation, or operational requirement; do not remove it merely because it says "no" or "unchanged."
+- Update the relevant existing section instead of accumulating repetitive delivery notes. Keep temporary planning, approval status, and handoff details out of product and operational documentation. Retain historical measurements or validation records when they serve the document's purpose and clearly identify their scope.
+- For documentation-only edits, verify the changed wording, Markdown structure, links, and diff. Run application tests only if the edit changes an executable example or reveals an implementation concern that warrants them.
+
 ## Project-wide Engineering and Acceptance Principles
 
 These principles apply to features, bug fixes, refactoring, performance work, dependencies, configuration, CI, deployment, migrations, and operational tooling.
@@ -233,4 +241,3 @@ Use engineering judgment rather than maximum ceremony.
 The goal is not exhaustive investigation or maximum process. The goal is to make the requested change **correct, coherent, maintainable, proportionate to its risk, and supported by sufficient evidence**.
 
 When correctness and scope discipline conflict with speculative improvement, prefer correctness and scope discipline.
-

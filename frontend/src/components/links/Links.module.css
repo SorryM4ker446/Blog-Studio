@@ -52,7 +52,10 @@
 .dialog .button:hover { background: var(--bg-hover); }
 .dialog .primary:hover { background: var(--file-primary-hover); }
 .error { color: var(--accent-red); font-size: 12px; line-height: 1.5; margin-top: 8px; }
-.visibility { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.visibility { display: inline-flex; max-width: 100%; min-height: 28px; gap: 8px; align-items: center; font-size: 13px; line-height: 20px; cursor: pointer; }
+.visibility input { flex: 0 0 auto; width: 14px; height: 14px; margin: 0; cursor: inherit; }
+.visibility input:focus:not(:focus-visible) { outline: none; }
+.visibility[data-pointer-focus] input:focus { outline: none !important; }
 .colorPicker { min-width: 0; margin: 0 0 18px; padding: 0; border: 0; }
 .colorToolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .colorToolbar .choices { margin: 0; }

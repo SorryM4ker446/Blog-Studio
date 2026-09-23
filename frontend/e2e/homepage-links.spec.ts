@@ -6,6 +6,107 @@ import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 import type { HomepageLink } from "../src/lib/links";
 
 for (const theme of ["dark", "light"]) {
+  test(`link visibility hit area stays beside its text in ${theme}`, async ({ page, context }) => {
+    await context.addCookies([{ name: "blog_theme", value: theme, url: E2E_APP_URL }]);
+    await loginAdmin(page);
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    await page.goto("/editor?tab=links");
+    await expect(page).toHaveTitle("Blog Studio");
+    await page.getByRole("button", { name: "+ New Link", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "New link" });
+    const checkbox = dialog.getByRole("checkbox", { name: "Show on homepage" });
+    const label = dialog.locator("label").filter({ has: page.getByRole("checkbox", { name: "Show on homepage" }) });
+    for (const width of [1280, 375]) {
+      await page.setViewportSize({ width, height: 900 });
+      await checkbox.scrollIntoViewIfNeeded();
+      await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))));
+      const geometry = await label.evaluate(element => {
+        const box = element.getBoundingClientRect();
+        const input = element.querySelector("input")!.getBoundingClientRect();
+        const text = [...element.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())!;
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const words = range.getBoundingClientRect();
+        return { right: box.right, centerY: box.y + box.height / 2, parentRight: element.parentElement!.getBoundingClientRect().right,
+          textRight: words.right, inputCenter: input.y + input.height / 2, textCenter: words.y + words.height / 2 };
+      });
+      expect(Math.abs(geometry.inputCenter - geometry.textCenter)).toBeLessThanOrEqual(2);
+      expect(geometry.right - geometry.textRight).toBeLessThanOrEqual(2);
+      expect(geometry.parentRight - geometry.right).toBeGreaterThan(30);
+      await expect(checkbox).toBeChecked();
+      await page.mouse.click(geometry.right + 20, geometry.centerY);
+      await expect(checkbox).toBeChecked();
+      await label.click({ position: { x: 50, y: 14 } });
+      await expect(checkbox).not.toBeChecked();
+      await expect(checkbox).toHaveCSS("outline-style", "none");
+      await expect(checkbox).toHaveCSS("box-shadow", "none");
+      await checkbox.click();
+      await expect(checkbox).toBeChecked();
+      await expect(checkbox).toBeFocused();
+      await expect(checkbox).toHaveCSS("outline-style", "none");
+      await page.screenshot({ path: path.join(os.tmpdir(), `blog-link-visibility-pointer-${theme}-${width}.png`) });
+      await page.keyboard.press("Tab");
+      await expect(checkbox).not.toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(checkbox).toBeFocused();
+      await expect(checkbox).toHaveCSS("outline-style", "solid");
+      await expect(checkbox).toHaveCSS("outline-width", "2px");
+      await expect(checkbox).toHaveCSS("box-shadow", "none");
+      await checkbox.press("Space");
+      await expect(checkbox).not.toBeChecked();
+      await expect(checkbox).toHaveCSS("outline-style", "solid");
+      await checkbox.press("Space");
+      await expect(checkbox).toBeChecked();
+      await expectNoOverflow(page);
+      await page.screenshot({ path: path.join(os.tmpdir(), `blog-link-visibility-${theme}-${width}.png`) });
+      await checkbox.click();
+      await expect(checkbox).not.toBeChecked();
+      await expect(checkbox).toBeFocused();
+      await expect(checkbox).toHaveCSS("outline-style", "none");
+      await expect(checkbox).toHaveCSS("box-shadow", "none");
+      await checkbox.press("Space");
+      await expect(checkbox).toBeChecked();
+      await expect(checkbox).toHaveCSS("outline-style", "solid");
+      await checkbox.click();
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      await expect(checkbox).toBeFocused();
+      await expect(checkbox).toHaveCSS("outline-style", "solid");
+      await checkbox.press("Space");
+      await expect(checkbox).toBeChecked();
+      for (const name of ["TITLE", "DESCRIPTION", "DESTINATION URL"]) {
+        const field = dialog.getByLabel(name, { exact: true });
+        await field.click();
+        await expect(field).toBeFocused();
+        await expect(field).toHaveCSS("box-shadow", theme === "dark"
+          ? "rgba(168, 199, 250, 0.2) 0px 0px 0px 3px"
+          : "rgba(26, 115, 232, 0.1) 0px 0px 0px 3px");
+      }
+      await dialog.getByRole("button", { name: "Custom", exact: true }).click();
+      for (const name of ["Hue", "Saturation", "Brightness"]) {
+        const slider = dialog.getByRole("slider", { name, exact: true });
+        await slider.click();
+        await expect(slider).toHaveCSS("box-shadow", "none");
+        await slider.press("Home");
+        await slider.press("ArrowRight");
+        await expect(slider).toHaveValue("1");
+        await expect(slider).toHaveCSS("outline-style", "solid");
+        await expect(slider).toHaveCSS("outline-width", "2px");
+        await expect(slider).toHaveCSS("box-shadow", "none");
+      }
+      const hex = dialog.getByLabel("HEX", { exact: true });
+      await hex.click();
+      await expect(hex).toHaveCSS("box-shadow", theme === "dark"
+        ? "rgba(168, 199, 250, 0.2) 0px 0px 0px 3px"
+        : "rgba(26, 115, 232, 0.1) 0px 0px 0px 3px");
+      await dialog.getByRole("button", { name: "Close color picker" }).click();
+      await expect(hex).toHaveCount(0);
+    }
+    expect(errors).toEqual([]);
+  });
+
   test(`link card regions stay aligned with empty and maximum-length text in ${theme}`, async ({ page, context }) => {
     await context.addCookies([{ name: "blog_theme", value: theme, url: E2E_APP_URL }]);
     const headers = await loginAdmin(page);

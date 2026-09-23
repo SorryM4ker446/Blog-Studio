@@ -151,18 +151,18 @@ body {
   background: var(--scrollbar-track);
 }
 
-input,
+input:where(:not([type]), [type="text" i], [type="search" i], [type="password" i], [type="email" i], [type="url" i], [type="tel" i], [type="number" i]),
 textarea {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-input:focus,
+input:where(:not([type]), [type="text" i], [type="search" i], [type="password" i], [type="email" i], [type="url" i], [type="tel" i], [type="number" i]):focus,
 textarea:focus {
   border-color: var(--accent-blue) !important;
   box-shadow: 0 0 0 3px rgba(168, 199, 250, 0.2);
 }
 
-body.theme-light input:focus,
+body.theme-light input:where(:not([type]), [type="text" i], [type="search" i], [type="password" i], [type="email" i], [type="url" i], [type="tel" i], [type="number" i]):focus,
 body.theme-light textarea:focus {
   box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
 }

@@ -18,6 +18,18 @@ afterEach(() => {
 });
 
 describe("search scope presentation", () => {
+  it("keeps the idle prompt stable when only the scope changes", () => {
+    const animate = vi.spyOn(Element.prototype, "animate").mockReturnValue({ cancel: vi.fn() } as unknown as Animation);
+    const idle = { ...initial, searched: false, query: "" };
+    const view = render(<Probe value={idle} query="" />);
+    for (const scope of ["posts", "files", "all"]) {
+      view.rerender(<Probe value={idle} query="" scope={scope} pending />);
+      view.rerender(<Probe value={{ ...idle, scope }} query="" scope={scope} />);
+      expect(screen.getByText(idle.title)).toHaveStyle({ opacity: "1", transform: "none" });
+    }
+    expect(animate).not.toHaveBeenCalled();
+  });
+
   it("cancels an obsolete exit callback before it can reveal the wrong scope", () => {
     const animations: { cancel: ReturnType<typeof vi.fn>; onfinish: (() => void) | null }[] = [];
     vi.spyOn(Element.prototype, "animate").mockImplementation(() => {

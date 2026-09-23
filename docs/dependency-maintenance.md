@@ -28,4 +28,4 @@ The September 14–15, 2026 review found reachable advisories in Go 1.26.2, pgx 
 
 The SSH/OpenPGP packages are not imported by this application, which uses x/crypto for bcrypt. The unmaintained OpenPGP package advisory has no fixed module version; retaining bcrypt does not justify importing OpenPGP. This boundary remains visible in govulncheck reports and the risk register. Ordinary frontend newer versions remain informational; the frontend lockfile was not upgraded.
 
-These changes add no application configuration, API contract, schema migration or backup-format change. Use matching PostgreSQL 18 clients and retain extension/restore permission checks. Local tests, vulnerability reports and native builds are evidence for those commands only; remote CI, container execution and deployment-host operation require their own results.
+Use matching PostgreSQL 18 clients and retain extension/restore permission checks. Local tests, vulnerability reports and native builds are evidence for those commands only; remote CI, container execution and deployment-host operation require their own results.

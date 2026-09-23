@@ -81,17 +81,18 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
   test(`article category appears only for posts with ${reducedMotion} motion`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion });
     const response = await page.goto("/search?q=category-reveal&scope=all&category=0");
-    expect(await response!.text()).not.toContain("Article category");
+    expect(await response!.text()).toMatch(/data-open="false" inert="" aria-hidden="true"/);
+    await expect(page.locator('.search-filter-field[data-open="false"]')).toHaveCSS("display", "none");
     const category = page.getByRole("combobox", { name: "Search category" });
     await expect(category).toHaveCount(0);
     await expect.poll(() => new URL(page.url()).searchParams.has("category")).toBe(false);
     await page.evaluate(() => {
       const entries: Keyframe[][] = [];
       Object.assign(window, { categoryEntries: entries });
-      document.addEventListener("animationstart", event => {
+      document.addEventListener("transitionrun", event => {
         const node = event.target;
-        if (node instanceof HTMLElement && node.classList.contains("search-filter-field") && node.textContent?.includes("Article category")) {
-          const effect = node.getAnimations()[0]?.effect;
+        if (["opacity", "transform"].includes(event.propertyName) && node instanceof HTMLElement && node.classList.contains("search-filter-field") && node.textContent?.includes("Article category")) {
+          const effect = node.getAnimations().find(animation => animation instanceof CSSTransition && animation.transitionProperty === event.propertyName)?.effect;
           if (effect instanceof KeyframeEffect) entries.push(effect.getKeyframes());
         }
       });
@@ -108,11 +109,13 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       await expect(field).toHaveCSS("animation-name", "none");
       expect(await page.evaluate(() => (window as unknown as { categoryEntries: unknown[] }).categoryEntries.length)).toBe(0);
     } else {
-      await expect.poll(() => page.evaluate(() => (window as unknown as { categoryEntries: unknown[] }).categoryEntries.length)).toBe(1);
-      const frames = await page.evaluate(() => (window as unknown as { categoryEntries: Keyframe[][] }).categoryEntries[0]);
-      expect(frames[0].opacity).toBe("0");
-      expect(frames[0].transform).toMatch(/^translate(?:X)?\(-10px(?:, 0px)?\)$/);
-      expect(frames.at(-1)?.opacity).toBe("1");
+      await expect.poll(() => page.evaluate(() => (window as unknown as { categoryEntries: unknown[] }).categoryEntries.length)).toBe(2);
+      const entries = await page.evaluate(() => (window as unknown as { categoryEntries: Keyframe[][] }).categoryEntries);
+      const opacity = entries.find(frames => frames[0].opacity !== undefined)!;
+      const transform = entries.find(frames => frames[0].transform !== undefined)!;
+      expect(opacity[0].opacity).toBe("0");
+      expect(transform[0].transform).toMatch(/^translate(?:X)?\(-10px(?:, 0px)?\)$/);
+      expect(opacity.at(-1)?.opacity).toBe("1");
     }
     await category.click();
     await page.getByRole("option", { name: "Uncategorized", exact: true }).click();
