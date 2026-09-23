@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -40,7 +39,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	ip := requestIP(c.Request.RemoteAddr)
+	ip := c.ClientIP()
 	if allowed, retryAfter := loginLimiter.Allow(ip, creds.Username); !allowed {
 		seconds := int(retryAfter.Seconds()) + 1
 		c.Header("Retry-After", strconv.Itoa(seconds))
@@ -178,14 +177,6 @@ func UpdatePassword(c *gin.Context) {
 	}
 	session.ClearCookies(c.Writer)
 	apiresponse.Message(c, http.StatusOK, "Password updated; please sign in again")
-}
-
-func requestIP(remoteAddress string) string {
-	host, _, err := net.SplitHostPort(remoteAddress)
-	if err == nil {
-		return host
-	}
-	return remoteAddress
 }
 
 func mustHashDummyPassword() []byte {

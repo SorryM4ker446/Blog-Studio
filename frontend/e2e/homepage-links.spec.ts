@@ -47,6 +47,8 @@ for (const theme of ["dark", "light"]) {
       await page.getByRole("tab", { name: /^Files/ }).click();
       await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "editor-files-tab");
       await page.getByRole("tab", { name: /^Links/ }).click();
+      // Changes made outside this editor session are read on document reload.
+      await page.reload();
       const last = page.getByRole("article", { name: `Links ${theme} 6`, exact: true });
       await last.getByRole("button", { name: `Move Links ${theme} 6 earlier` }).click();
       await expect.poll(() => page.getByRole("article").evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label")))).toEqual([1,2,3,4,6,5].map(n => `Links ${theme} ${n}`));
@@ -152,6 +154,41 @@ test("link search, last-page deletion and direct dialog cancellation preserve na
   } finally { await clearLinks(page,headers,ids); }
 });
 
+test("a conflicting link edit retains the draft and invalidates the list for the next entry", async ({ page }) => {
+  const headers = await loginAdmin(page);
+  const ids: number[] = [];
+  try {
+    const fields = { title: "Original link", description: "", url: "", icon: "link", color: "blue", visible: false };
+    const created = await page.request.post(`${E2E_API_URL}/admin/links`, { headers, data: { ...fields, request_id: crypto.randomUUID() } });
+    expect(created.ok()).toBeTruthy();
+    const link: HomepageLink = await created.json();
+    ids.push(link.id);
+    await page.goto("/editor?tab=links");
+    const changed = await page.request.put(`${E2E_API_URL}/admin/links/${link.id}`, { headers, data: { ...fields, title: "Updated elsewhere", version: link.version } });
+    expect(changed.ok()).toBeTruthy();
+    await page.getByRole("article", { name: "Original link", exact: true }).getByRole("button", { name: "Edit", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit link" });
+    await dialog.getByLabel("TITLE", { exact: true }).fill("Unsaved local draft");
+    const response = page.waitForResponse(r => r.url().endsWith(`/api/admin/links/${link.id}`) && r.request().method() === "PUT");
+    await dialog.getByRole("button", { name: "Save link", exact: true }).click();
+    expect((await response).status()).toBe(409);
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    await expect(dialog.getByLabel("TITLE", { exact: true })).toHaveValue("Unsaved local draft");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    let reads = 0;
+    await page.route("**/api/admin/links", async route => { reads++; await route.continue(); });
+    await page.getByRole("tab", { name: /^Posts/ }).click();
+    await page.getByRole("tab", { name: /^Links/ }).click();
+    await expect(page.getByRole("article", { name: "Updated elsewhere", exact: true })).toBeVisible();
+    expect(reads).toBe(1);
+    await page.getByRole("tab", { name: /^Files/ }).click();
+    await page.getByRole("tab", { name: /^Links/ }).click();
+    await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-busy", "false");
+    expect(reads).toBe(1);
+  } finally { await clearLinks(page, headers, ids); }
+});
+
 test("Markdown validation keeps rounded chrome and usable toolbar menus", async ({page}) => {
  await loginAdmin(page);
  await page.setViewportSize({width:1600,height:1000});
@@ -175,7 +212,7 @@ test("Markdown validation keeps rounded chrome and usable toolbar menus", async 
 });
 
 for (const reducedMotion of [false, true]) {
-  test(`Links share tab transitions and retain outgoing content during slow reads (reduced: ${reducedMotion})`, async ({ page }) => {
+  test(`Links share tab transitions and reuse resolved empty results without another read (reduced: ${reducedMotion})`, async ({ page }) => {
     await loginAdmin(page);
     await page.emulateMedia({ reducedMotion: reducedMotion ? "reduce" : "no-preference" });
     await page.goto("/editor?tab=files");
@@ -190,20 +227,15 @@ for (const reducedMotion of [false, true]) {
         return original.apply(this, args);
       };
     });
-    let release = () => {};
-    const gate = new Promise<void>(resolve => { release = resolve; });
-    let requested = false;
-    await page.route("**/api/admin/links", async route => { requested = true; await gate; await route.continue(); });
-    try {
+    let reads = 0;
+    await page.route("**/api/admin/links", async route => { reads++; await route.continue(); });
+    {
       await page.getByRole("tab", { name: /^Links/ }).click();
-      await expect.poll(() => requested).toBe(true);
-      await expect(panel).toHaveAttribute("aria-labelledby", "editor-files-tab");
-      await expect(panel).toHaveAttribute("aria-busy", "true");
-      await expect(panel).toHaveCSS("opacity", "1");
+      await expect(panel).toHaveAttribute("aria-labelledby", "editor-links-tab");
+      await expect(panel).toHaveAttribute("aria-busy", "false");
+      await expect(page.getByRole("button", { name: "+ New Link", exact: true })).toBeEnabled();
       await expect(page.getByText("Loading links…", { exact: true })).toHaveCount(0);
-      // Cancel a pending entry by choosing another resource; the late response cannot switch it back.
       await page.getByRole("tab", { name: /^Posts/ }).click();
-      release();
       await expect(panel).toHaveAttribute("aria-labelledby", "editor-posts-tab");
       await expect(panel).toHaveAttribute("aria-busy", "false");
       await page.getByRole("tab", { name: /^Links/ }).click();
@@ -217,17 +249,17 @@ for (const reducedMotion of [false, true]) {
       await page.keyboard.press("ArrowLeft");
       await expect(page.getByRole("tab", { name: /^Files/ })).toBeFocused();
       await expect(panel).toHaveAttribute("aria-labelledby", "editor-files-tab");
-    } finally { release(); }
+      expect(reads).toBe(0);
+    }
   });
 }
 
 for (const theme of ["dark", "light"]) {
-  test(`Links counts survive refresh and revalidation, ordering stays stable and empty states match in ${theme}`, async ({ page, context, browser }, info) => {
+  test(`Links reuse loaded counts, allow drafts during ordering and keep action appearance stable in ${theme}`, async ({ page, context, browser }, info) => {
     await context.addCookies([{ name: "blog_theme", value: theme, url: E2E_APP_URL }]);
     await page.setViewportSize({ width: 1600, height: 1000 });
     const headers = await loginAdmin(page);
     const ids: number[] = [];
-    let releaseRead = () => {};
     let releaseMove = () => {};
     try {
       for (let i = 1; i <= 3; i++) {
@@ -251,17 +283,21 @@ for (const theme of ["dark", "light"]) {
       await page.reload();
       await expect(linksTab).toBeVisible();
       const tabWidth = (await linksTab.boundingBox())!.width;
-      let readPending = false;
-      const readGate = new Promise<void>(resolve => { releaseRead = resolve; });
-      await page.route("**/api/admin/links", async route => { readPending = true; await readGate; await route.continue(); });
+      let reads = 0;
+      await page.route("**/api/admin/links", async route => { reads++; await route.continue(); });
       await linksTab.click();
-      await expect.poll(() => readPending).toBe(true);
       await expect(linksTab).toBeVisible();
       expect((await linksTab.boundingBox())!.width).toBe(tabWidth);
-      releaseRead();
       await expect(page.getByRole("article")).toHaveCount(3);
       await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-busy", "false");
       await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished.catch(() => {}))));
+      expect(reads).toBe(0);
+      const newLink = page.getByRole("button", { name: "+ New Link", exact: true });
+      const appearance = (node: HTMLElement | SVGElement) => {
+        const css = getComputedStyle(node);
+        return { opacity: css.opacity, background: css.backgroundColor, color: css.color, border: css.borderColor };
+      };
+      const beforeNewAppearance = await newLink.evaluate(appearance);
       const grid = page.locator("[data-link-id]").first().locator("..");
       const gridTop = (await grid.boundingBox())!.y;
       let moveRequests = 0;
@@ -277,7 +313,20 @@ for (const theme of ["dark", "light"]) {
       expect((await grid.boundingBox())!.y).toBe(gridTop);
       await expect(move).toHaveCSS("opacity", beforeOpacity);
       await expect(page.getByText("Link order updated.")).toHaveCount(0);
+      await expect(newLink).toBeEnabled();
+      expect(await newLink.evaluate(appearance)).toEqual(beforeNewAppearance);
+      await newLink.click();
+      const draft = page.getByRole("dialog", { name: "New link" });
+      await draft.getByLabel("TITLE", { exact: true }).fill("Draft while ordering");
+      await draft.getByLabel("Show on homepage").uncheck();
+      await expect(draft.getByRole("button", { name: "Save link", exact: true })).toBeDisabled();
+      await expect(draft.getByRole("status")).toContainText("Wait for the current link update");
+      await page.screenshot({ path: path.join(os.tmpdir(), `blog-links-pending-draft-${theme}.png`) });
       releaseMove();
+      await expect(draft.getByRole("button", { name: "Save link", exact: true })).toBeEnabled();
+      await expect(draft.getByLabel("TITLE", { exact: true })).toHaveValue("Draft while ordering");
+      await draft.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(draft).toHaveCount(0);
       await expect(page.getByRole("article").first()).toHaveAttribute("aria-label", "Stable 2");
       await expect(move).toHaveAttribute("aria-disabled", "false");
       await move.evaluate(node => (node as HTMLButtonElement).click());
@@ -298,6 +347,6 @@ for (const theme of ["dark", "light"]) {
       await page.getByRole("tab", { name: /^Files/ }).click();
       const filesEmpty = page.getByRole("heading", { name: "No files yet", exact: true }).locator("../..");
       await expect(filesEmpty).toHaveClass(emptyClass!);
-    } finally { releaseRead(); releaseMove(); await clearLinks(page, headers, ids); }
+    } finally { releaseMove(); await clearLinks(page, headers, ids); }
   });
 }

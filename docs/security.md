@@ -15,6 +15,7 @@ Before login or another state-changing request, the frontend obtains a CSRF toke
 ## Login and password controls
 
 - Five failed login attempts within 15 minutes block further attempts from the same IP address. The API returns `429 Too Many Requests` and `Retry-After`.
+- Login resolves the client through Gin's configured trusted proxies for checks, failure counts and successful-login resets. Independent clients behind the configured Caddy proxy have separate budgets; untrusted callers cannot choose their budget through forwarded headers. Clients sharing a public NAT address still share that IP budget.
 - Passwords must contain 12–128 Unicode characters, fit within bcrypt's 72-byte input limit, must not be on the built-in common-password list, and must not contain the username.
 - Login failures use a single error message and perform a password-hash comparison even when the username does not exist.
 

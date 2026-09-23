@@ -21,7 +21,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(initialError);
   const [resolved, setResolved] = useState(!initialError);
-  const firstRead = useRef(true);
+  const needsRead = useRef(Boolean(initialError));
   const read = useRef<AbortController | null>(null);
   const [wasActive, setWasActive] = useState(active);
   const [animatePages, setAnimatePages] = useState(false);
@@ -32,26 +32,22 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   const [deleteError, setDeleteError] = useState("");
   if (wasActive !== active) {
     setWasActive(active);
-    if (active) setLoading(true);
-    else { setEditing(null); setDeleting(null); }
+    setLoading(active && needsRead.current);
+    if (!active) { setEditing(null); setDeleting(null); }
   }
   const live = useRef(true), working = useRef(false);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   useEffect(() => {
-    if (firstRead.current) {
-      firstRead.current = false;
-      if (!initialError) return;
-    }
-    if (!active) return;
+    if (!active || !needsRead.current) return;
     if (working.current) { setLoading(false); return; }
     setLoading(true);
     const controller = new AbortController();
     read.current = controller;
-    getAdminLinks(controller.signal).then(data => { if (!controller.signal.aborted) { setLinks(data); setResolved(true); setError(""); } })
+    getAdminLinks(controller.signal).then(data => { if (!controller.signal.aborted) { needsRead.current = false; setLinks(data); setResolved(true); setError(""); } })
       .catch(err => { if (!controller.signal.aborted) setError(getApiErrorMessage(err)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [attempt, active, initialError]);
+  }, [attempt, active]);
   const filtered = links.filter(link => `${link.title} ${link.description} ${link.url}`.toLowerCase().includes(query.toLowerCase()));
   const pages = Math.max(1, Math.ceil(filtered.length / 8));
   const page = Math.min(requestedPage, pages);
@@ -62,36 +58,42 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
     window.history[replace ? "replaceState" : "pushState"](null,"",`/editor?${target}`);
   }
   useEffect(() => { if (active && !loading && !error && page !== requestedPage) navigate(query,page,true); }, [active,loading,error,page,requestedPage,query]);
-  function refresh() { if (working.current) return; setLoading(true); setAttempt(n => n+1); }
+  function refresh() { if (working.current) return; needsRead.current = true; setLoading(true); setAttempt(n => n+1); }
+  const saveBlockedReason = busy ? "Wait for the current link update to finish before saving."
+    : loading ? "Wait for links to finish loading before saving."
+    : !resolved ? "Close this dialog and retry loading links before saving."
+    : !editing?.link && links.length >= 100 ? "You can have up to 100 links. Remove a link before saving a new one." : "";
   async function save(fields: LinkFields, requestID: string) {
-    if (working.current) return;
-    working.current = true; read.current?.abort(); setLoading(false);
+    if (!active || !live.current) throw new Error("This link editor is no longer active.");
+    if (working.current || saveBlockedReason) throw new Error(saveBlockedReason || "Wait for the current link update to finish before saving.");
+    working.current = true; read.current?.abort(); setLoading(false); setBusy(true);
     try {
       const result = editing?.link ? await updateLink(editing.link,fields) : await createLink(fields,requestID);
       if (!live.current) return;
       setLinks(current => [...current.filter(item => item.id !== result.id),result].sort((a,b) => a.position-b.position || a.id-b.id));
-    } finally { working.current = false; }
+    } catch (err) { needsRead.current = true; throw err; }
+    finally { working.current = false; if (live.current) setBusy(false); }
   }
   async function move(link: HomepageLink, neighbor: HomepageLink) {
     if (working.current || loading) return;
     working.current = true; read.current?.abort(); setLoading(false); setBusy(true); setError("");
-    try { const result = await moveLink(link,neighbor); if (live.current) { setLinks(result); } }
-    catch (err) { if (live.current) setError(getApiErrorMessage(err)); }
+    try { const result = await moveLink(link,neighbor); if (live.current) { needsRead.current = false; setLinks(result); } }
+    catch (err) { needsRead.current = true; if (live.current) setError(getApiErrorMessage(err)); }
     finally { working.current = false; if (live.current) setBusy(false); }
   }
   async function remove() {
     if (!deleting || working.current) return;
     working.current = true; read.current?.abort(); setLoading(false); setBusy(true); setDeleteError("");
     try { await deleteLink(deleting); if (live.current) { setLinks(items => items.filter(item => item.id !== deleting.id)); setDeleting(null); } }
-    catch (err) { if (live.current) setDeleteError(getApiErrorMessage(err)); }
+    catch (err) { needsRead.current = true; if (live.current) setDeleteError(getApiErrorMessage(err)); }
     finally { working.current = false; if (live.current) setBusy(false); }
   }
   return {
     query, loading, error, count: resolved ? links.length : null,
     search: (value: string) => navigate(value.trim(), 1),
-    toolbar: <button type="button" className="editor-primary-action" disabled={loading || busy || links.length >= 100} onClick={() => { setEditing({link:null}); }}>+ New Link</button>,
+    toolbar: <button type="button" className="editor-primary-action" disabled={resolved && links.length >= 100} onClick={() => { setEditing({link:null}); }}>+ New Link</button>,
     content: <>
-    {error && <ErrorState title="Links could not be updated" message={error} onRetry={refresh} />}
+    {error && <ErrorState title="Links could not be updated" message={error} onRetry={refresh} retrying={loading} />}
     {loading && !resolved && <p className={styles.hint} role="status">Loading links…</p>}
     {!error && resolved && !filtered.length ? <EmptyState
       title={query ? "No matching links" : "No links yet"}
@@ -110,7 +112,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
     </PaginatedResults>}
     </>,
     dialogs: <>
-  {editing && <LinkEditorDialog key={editing.link?.id ?? "new"} link={editing.link} onSave={save} onClose={() => setEditing(null)} />}
+  {editing && <LinkEditorDialog key={editing.link?.id ?? "new"} link={editing.link} blockedReason={saveBlockedReason} onSave={save} onClose={() => setEditing(null)} />}
   <EditorDeleteDialog open={Boolean(deleting)} resourceType="link" busy={busy} blocked={false} error={deleteError} onConfirm={() => void remove()} onCancel={() => { if (!working.current) setDeleting(null); }} />
   </>,
   };
