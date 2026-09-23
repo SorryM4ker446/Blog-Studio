@@ -5,6 +5,94 @@ import { loginAdmin, expectNoOverflow, scanAccessibility } from "./support/acces
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 import type { HomepageLink } from "../src/lib/links";
 
+for (const theme of ["dark", "light"]) {
+  test(`link card regions stay aligned with empty and maximum-length text in ${theme}`, async ({ page, context }) => {
+    await context.addCookies([{ name: "blog_theme", value: theme, url: E2E_APP_URL }]);
+    const headers = await loginAdmin(page);
+    const ids: number[] = [];
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    const samples = [
+      { title: "No description", description: "", url: "https://example.com/empty", visible: true },
+      { title: "W".repeat(100), description: "w".repeat(300), url: `https://example.com/${"x".repeat(1950)}`, visible: true },
+      { title: "标题".repeat(50), description: "介绍".repeat(150), url: "https://example.com/chinese", visible: true },
+      { title: "No destination", description: "Short introduction", url: "", visible: false },
+    ];
+    try {
+      for (const sample of samples) {
+        const response = await page.request.post(`${E2E_API_URL}/admin/links`, { headers, data: { ...sample, icon: "star", color: "blue", request_id: crypto.randomUUID() } });
+        expect(response.ok()).toBeTruthy();
+        ids.push((await response.json()).id);
+      }
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.goto("/editor?tab=links");
+      await expect(page).toHaveTitle("Blog Studio");
+      await expect(page.getByRole("article")).toHaveCount(4);
+      await expect(page.getByRole("article", { name: "No description", exact: true }).getByText("No introduction provided.")).toBeVisible();
+      await expect(page.getByRole("article", { name: "No destination", exact: true }).getByText("Set a destination before enabling this link.")).toBeVisible();
+      const geometry = () => page.getByRole("article").evaluateAll(nodes => nodes.map(node => {
+        const rect = node.getBoundingClientRect();
+        const paragraphs = node.querySelectorAll("p");
+        return {
+          height: rect.height, width: rect.width, top: rect.top,
+          description: paragraphs[0].getBoundingClientRect().top - rect.top,
+          url: paragraphs[1].getBoundingClientRect().top - rect.top,
+          actions: node.querySelector("button")!.getBoundingClientRect().top - rect.top,
+          overflow: node.scrollWidth > node.clientWidth,
+        };
+      }));
+      const desktop = await geometry();
+      expect(desktop[0].top).toBeCloseTo(desktop[1].top, 0);
+      for (const field of ["height", "width", "description", "url", "actions"] as const) {
+        expect(Math.max(...desktop.map(row => row[field])) - Math.min(...desktop.map(row => row[field])), field).toBeLessThan(1);
+      }
+      expect(desktop.every(row => !row.overflow)).toBe(true);
+      const longCard = page.getByRole("article", { name: samples[1].title, exact: true });
+      const description = longCard.locator("p").first();
+      await expect(description).toHaveCSS("-webkit-line-clamp", "2");
+      await expect(longCard.locator("p").nth(1)).toHaveCSS("-webkit-line-clamp", "2");
+      await expect(description).not.toHaveAttribute("title");
+      await description.hover();
+      await expect(page.getByRole("tooltip")).toHaveCount(0);
+      await expect(description).not.toHaveAttribute("tabindex");
+      await longCard.getByRole("button", { name: "Edit", exact: true }).click();
+      const details = page.getByRole("dialog", { name: "Edit link" });
+      await expect(details.getByLabel("DESCRIPTION", { exact: true })).toHaveValue(samples[1].description);
+      await details.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.screenshot({ path: path.join(os.tmpdir(), `blog-links-aligned-${theme}.png`) });
+      await page.setViewportSize({ width: 375, height: 850 });
+      await expectNoOverflow(page);
+      const mobile = await geometry();
+      for (const field of ["height", "width", "description", "url", "actions"] as const) {
+        expect(Math.max(...mobile.map(row => row[field])) - Math.min(...mobile.map(row => row[field]))).toBeLessThan(1);
+      }
+      expect(mobile.every(row => !row.overflow)).toBe(true);
+      await page.screenshot({ path: path.join(os.tmpdir(), `blog-links-aligned-mobile-${theme}.png`) });
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.goto("/");
+      const gallery = page.getByRole("region", { name: "Featured links" });
+      await expect(gallery.getByText("No introduction provided.")).toBeVisible();
+      const heights = await gallery.getByRole("link").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+      expect(heights).toHaveLength(3);
+      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
+      await page.goto("/editor?tab=links");
+      await page.getByRole("button", { name: "+ New Link", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "New link" });
+      await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))));
+      const preview = dialog.locator("aside");
+      const previewHeight = (await preview.boundingBox())!.height;
+      await expect(preview.getByText("No introduction provided.")).toBeVisible();
+      await dialog.getByLabel("TITLE", { exact: true }).fill(samples[1].title);
+      await dialog.getByLabel("DESCRIPTION", { exact: true }).fill(samples[1].description);
+      expect((await preview.boundingBox())!.height).toBeCloseTo(previewHeight, 0);
+      await expect(dialog.getByLabel("DESCRIPTION", { exact: true })).toHaveValue(samples[1].description);
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      expect(errors).toEqual([]);
+    } finally { await clearLinks(page, headers, ids); }
+  });
+}
+
 async function clearLinks(page: import("@playwright/test").Page, headers: Record<string,string>, ids: number[]) {
   if (!ids.length) return;
   const links: HomepageLink[] = await (await page.request.get(`${E2E_API_URL}/admin/links`)).json();
@@ -32,12 +120,83 @@ for (const theme of ["dark", "light"]) {
       await dialog.getByLabel("DESTINATION URL", { exact: true }).fill("https://example.com/one");
       await dialog.getByRole("button", { name: "globe icon" }).click();
       await dialog.getByRole("button", { name: "green color" }).click();
+      await expect(dialog.getByRole("slider", { name: "Hue", exact: true })).toHaveCount(0);
+      const beforePicker = await dialog.boundingBox();
+      await dialog.getByRole("button", { name: "Custom", exact: true }).click();
+      const picker = dialog.getByRole("group", { name: "Custom color picker", exact: true });
+      await expect(picker).toBeVisible();
+      expect(await dialog.boundingBox()).toEqual(beforePicker);
+      await picker.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+      expect((await picker.boundingBox())!.width).toBeLessThanOrEqual(272);
+      await expect(dialog.locator('input[type="color"]')).toHaveCount(0);
+      const plane = picker.locator('[aria-hidden="true"]').first();
+      const planeRect = (await plane.boundingBox())!;
+      await page.mouse.move(planeRect.x + 20, planeRect.y + 20);
+      await page.mouse.down();
+      await page.mouse.move(planeRect.x + planeRect.width * .75, planeRect.y + planeRect.height * .25, { steps: 4 });
+      await page.mouse.up();
+      expect(Number(await picker.getByRole("slider", { name: "Saturation", exact: true }).inputValue())).toBeCloseTo(75, 0);
+      await picker.getByLabel("HEX", { exact: true }).fill("#9955cc");
+      const hue = dialog.getByRole("slider", { name: "Hue", exact: true });
+      await hue.focus(); await page.keyboard.press("ArrowRight");
+      const chosenColor = await picker.getByLabel("HEX", { exact: true }).inputValue();
+      expect(chosenColor).not.toBe("#9955cc");
+      await expect(dialog.locator("aside [data-color]")).toHaveAttribute("data-color", chosenColor);
+      await picker.getByLabel("HEX", { exact: true }).fill("#xx");
+      await expect(picker.getByLabel("HEX", { exact: true })).toHaveAttribute("aria-invalid", "true");
+      await hue.focus();
+      await expect(picker.getByLabel("HEX", { exact: true })).toHaveValue(chosenColor);
+      await page.setViewportSize({ width: 375, height: 850 });
+      await picker.scrollIntoViewIfNeeded();
+      await expectNoOverflow(page);
+      const mobilePicker = (await picker.boundingBox())!;
+      expect(mobilePicker.x).toBeGreaterThanOrEqual(12);
+      expect(mobilePicker.x + mobilePicker.width).toBeLessThanOrEqual(363);
+      expect(mobilePicker.y).toBeGreaterThanOrEqual(12);
+      expect(mobilePicker.y + mobilePicker.height).toBeLessThanOrEqual(838);
+      await page.screenshot({ path: path.join(os.tmpdir(), `blog-links-custom-mobile-${theme}.png`) });
+      await page.keyboard.press("Escape");
+      await expect(picker).toHaveCount(0);
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Custom", exact: true })).toBeFocused();
+      await page.setViewportSize({ width: 1600, height: 1000 });
+      await dialog.getByRole("button", { name: "Custom", exact: true }).click();
       await scanAccessibility(page,info,`link-dialog-${theme}`);
       await page.screenshot({ path: path.join(os.tmpdir(),`blog-links-editor-${theme}.png`) });
+      await picker.evaluate(node => {
+        const animate = node.animate.bind(node);
+        node.animate = (...args) => {
+          const animation = animate(...args);
+          if (Array.isArray(args[0]) && args[0].at(-1)?.opacity === 0) animation.pause();
+          return animation;
+        };
+      });
+      await picker.getByRole("button", { name: "Close color picker" }).click();
+      const exitingPicker = dialog.locator('[popover][data-state="closing"]');
+      await expect(exitingPicker).toBeAttached();
+      await expect(exitingPicker).toHaveAttribute("inert", "");
+      await expect(dialog.getByRole("button", { name: "Custom", exact: true })).toBeFocused();
+      await exitingPicker.evaluate(node => node.getAnimations().forEach(animation => animation.finish()));
+      await expect(exitingPicker).toHaveCount(0);
+      await dialog.getByRole("button", { name: "Custom", exact: true }).click();
+      await dialog.getByLabel("TITLE", { exact: true }).click();
+      await expect(picker).toHaveCount(0);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await dialog.getByRole("button", { name: "Custom", exact: true }).click();
+      await expect(picker).toHaveCSS("animation-name", "none");
+      await picker.getByRole("button", { name: "Close color picker" }).click();
+      await expect(picker).toHaveCount(0);
+      await page.emulateMedia({ reducedMotion: "no-preference" });
       const createdResponse = page.waitForResponse(response => response.url().endsWith("/api/admin/links") && response.request().method() === "POST");
       await dialog.getByRole("button", { name: "Save link", exact: true }).click();
       const first: HomepageLink = await (await createdResponse).json(); ids.push(first.id);
+      expect(first.color).toBe(chosenColor);
       await expect(dialog).toHaveCount(0);
+      await page.getByRole("article", { name: `Links ${theme} 1`, exact: true }).getByRole("button", { name: "Edit", exact: true }).click();
+      const editDialog = page.getByRole("dialog", { name: "Edit link" });
+      await editDialog.getByRole("button", { name: "Custom", exact: true }).click();
+      await expect(editDialog.getByLabel("HEX", { exact: true })).toHaveValue(chosenColor);
+      await editDialog.getByRole("button", { name: "Cancel", exact: true }).click();
       for (let index=2; index<=6; index++) {
         const response = await page.request.post(`${E2E_API_URL}/admin/links`, { headers, data: { title: `Links ${theme} ${index}`, description: `Shortcut number ${index}`, url: `https://example.com/${index}`, icon: index%2 ? "code" : "book", color: "blue", visible: true, request_id: crypto.randomUUID() } });
         expect(response.ok()).toBeTruthy(); ids.push((await response.json()).id);
@@ -61,6 +220,9 @@ for (const theme of ["dark", "light"]) {
       await expect(cards.first()).toHaveAttribute("href","https://example.com/one");
       await expect(cards.first()).toHaveAttribute("target","_blank");
       await expect(cards.first()).toHaveAttribute("rel","noopener noreferrer");
+      await expect(cards.first().locator("[data-color]")).toHaveAttribute("data-color", chosenColor);
+      const expectedRGB = chosenColor.slice(1).match(/../g)!.map(value => parseInt(value, 16));
+      await expect(cards.first().locator("[data-color]")).toHaveCSS("color", `rgb(${expectedRGB.join(", ")})`);
       const boxes = await cards.evaluateAll(nodes => nodes.map(node => { const rect=node.getBoundingClientRect(); return { x:rect.x,y:rect.y,width:rect.width }; }));
       expect(new Set(boxes.map(box => box.y)).size).toBe(1);
       expect(boxes[3].x + boxes[3].width).toBeLessThan(1600);

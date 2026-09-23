@@ -19,6 +19,7 @@ import (
 const maxHomepageLinks = 100
 
 var linkRequestID = regexp.MustCompile(`^[a-zA-Z0-9-]{16,80}$`)
+var linkHexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 type linkInput struct {
 	Title       string `json:"title"`
@@ -46,7 +47,10 @@ func validLinkInput(input *linkInput) bool {
 	switch input.Color {
 	case "blue", "yellow", "green", "red":
 	default:
-		return false
+		if !linkHexColor.MatchString(input.Color) {
+			return false
+		}
+		input.Color = strings.ToLower(input.Color)
 	}
 	if input.URL == "" {
 		return !input.Visible

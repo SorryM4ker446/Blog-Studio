@@ -11,6 +11,7 @@ import LinkGrid from "./LinkGrid";
 import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 import LinkEditorDialog from "./LinkEditorDialog";
 import { LinkCardContent } from "./LinkCard";
+import ClampedText from "./ClampedText";
 import styles from "./Links.module.css";
 
 export default function useLinksManager(active: boolean, initialLinks: HomepageLink[], initialError: string) {
@@ -103,7 +104,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
       transitionGroup={query} animateChanges={animatePages} onPageChange={next => { setAnimatePages(true); navigate(query,next); }}>
     <LinkGrid order={filtered.slice((page-1)*8,page*8).map(link => link.id)}>{filtered.slice((page-1)*8,page*8).map(link => {
       const index = links.findIndex(item => item.id === link.id);
-      return <article className={styles.row} data-link-id={link.id} key={link.id} aria-label={link.title}><div className={styles.status}>{link.visible ? "Visible" : link.url ? "Hidden" : "Needs a URL"}</div><LinkCardContent link={link} /><p className={styles.url}>{link.url || "Set a destination before enabling this link."}</p>
+      return <article className={styles.row} data-link-id={link.id} key={link.id} aria-label={link.title}><div className={styles.status}>{link.visible ? "Visible" : link.url ? "Hidden" : "Needs a URL"}</div><LinkCardContent link={link} /><ClampedText paragraph className={styles.url} text={link.url || "Set a destination before enabling this link."} />
         <div className={styles.actions}><button className={styles.button} aria-disabled={busy || loading} onClick={() => { if (!working.current && !loading) setEditing({link}); }}>Edit</button>
           <button className={styles.button} aria-disabled={busy || loading} disabled={index === 0 || Boolean(query)} aria-label={`Move ${link.title} earlier`} onClick={() => void move(link,links[index-1])}>←</button>
           <button className={styles.button} aria-disabled={busy || loading} disabled={index === links.length-1 || Boolean(query)} aria-label={`Move ${link.title} later`} onClick={() => void move(link,links[index+1])}>→</button>

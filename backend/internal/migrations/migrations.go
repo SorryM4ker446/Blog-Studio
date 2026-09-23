@@ -36,6 +36,7 @@ var registered = []migration{
 	{version: 2026090601, name: "add_article_search_text_and_read_indexes", up: addArticleSearch},
 	{version: 2026090901, name: "add_article_versions", up: addPostVersions},
 	{version: 2026092201, name: "add_homepage_links", up: addHomepageLinks},
+	{version: 2026092301, name: "allow_custom_link_colors", up: allowCustomLinkColors},
 }
 
 // Apply serializes migration processes with a PostgreSQL transaction-level
