@@ -18,8 +18,8 @@ def validate_settings(env):
         "VPS_USER": r"[a-z_][a-z0-9_-]*",
         "VPS_PORT": r"[0-9]{1,5}",
         "VPS_DEPLOY_PATH": r"/[A-Za-z0-9_./-]+",
-        "GITHUB_SHA": r"[0-9a-f]{40}",
-        "GITHUB_RUN_NUMBER": r"[0-9]+",
+        "DEPLOY_SHA": r"[0-9a-f]{40}",
+        "DEPLOY_SEQUENCE": r"[1-9][0-9]*",
         "GITHUB_RUN_ID": r"[0-9]+",
         "GITHUB_RUN_ATTEMPT": r"[0-9]+",
     }
@@ -54,7 +54,7 @@ def main():
     images = {}
     for service in ("frontend", "backend", "maintenance"):
         images[service] = json.loads(Path(f"image-metadata/{service}.json").read_text())["image"]
-    manifest = {"sha": env["GITHUB_SHA"], "sequence": int(env["GITHUB_RUN_NUMBER"]), "images": images}
+    manifest = {"sha": env["DEPLOY_SHA"], "sequence": int(env["DEPLOY_SEQUENCE"]), "images": images}
     # Import shares validation with the server without running deployment code.
     from release import validate_manifest
     validate_manifest(manifest)

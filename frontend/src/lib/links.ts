@@ -2,9 +2,11 @@ import { apiRequest, publicApiRequest } from "./api-client";
 
 export const linkIcons = ["star", "grid", "layout", "zap", "link", "code", "book", "globe"] as const;
 export const linkColors = ["blue", "yellow", "green", "red"] as const;
+export type LinkColor = typeof linkColors[number] | `#${string}`;
+export const isCustomLinkColor = (color: string): color is `#${string}` => /^#[0-9a-f]{6}$/i.test(color);
 export interface LinkFields {
   title: string; description: string; url: string;
-  icon: typeof linkIcons[number]; color: typeof linkColors[number]; visible: boolean;
+  icon: typeof linkIcons[number]; color: LinkColor; visible: boolean;
 }
 export interface HomepageLink extends LinkFields { id: number; position: number; version: number }
 export function validateLink(fields: LinkFields) {

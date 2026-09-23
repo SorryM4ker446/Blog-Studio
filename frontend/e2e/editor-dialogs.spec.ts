@@ -99,7 +99,8 @@ for (const theme of ["dark", "light"]) {
         await save.click();
         await expect(overlay).toHaveAttribute("data-state", "closing");
         await expect(dialog).toHaveAttribute("aria-busy", "true");
-        await expect(dialog.locator('button[type="submit"], button').filter({ hasText: "Saving…" })).toHaveCount(1);
+        if (resource === "links") await expect(save).toHaveText("Save link");
+        else await expect(dialog.locator('button[type="submit"], button').filter({ hasText: "Saving…" })).toHaveCount(1);
         await finishExit();
         expect(writes).toBe(2);
         await page.unroute(endpoint);

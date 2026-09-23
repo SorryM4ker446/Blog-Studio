@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import ModalSurface from "@/components/ModalSurface";
-import { linkColors, linkIcons, validateLink, type HomepageLink, type LinkFields } from "@/lib/links";
+import { linkIcons, validateLink, type HomepageLink, type LinkFields } from "@/lib/links";
+import LinkColorPicker from "./LinkColorPicker";
 import { getApiErrorMessage } from "@/lib/api-client";
 import { registerLeaveGuard } from "@/lib/editor-navigation";
 import { LinkCardContent, LinkIcon } from "./LinkCard";
 import styles from "./Links.module.css";
 
-export default function LinkEditorDialog({ link, onSave, onClose }: { link: HomepageLink | null; onSave: (fields: LinkFields, requestID: string) => Promise<void>; onClose: () => void }) {
+export default function LinkEditorDialog({ link, blockedReason = "", onSave, onClose }: { link: HomepageLink | null; blockedReason?: string; onSave: (fields: LinkFields, requestID: string) => Promise<void>; onClose: () => void }) {
   const [baseline] = useState<LinkFields>(() => link ? { title: link.title, description: link.description, url: link.url, icon: link.icon, color: link.color, visible: link.visible } : { title: "", description: "", url: "", icon: "link", color: "blue", visible: true });
   const [fields, setFields] = useState(baseline);
   const [requestID] = useState(() => crypto.randomUUID());
@@ -19,12 +20,12 @@ export default function LinkEditorDialog({ link, onSave, onClose }: { link: Home
   useEffect(() => registerLeaveGuard({ dirty: () => false, busy: () => live.current.saving, flush: async () => {}, expire: async () => {} }), []);
   function field<K extends keyof LinkFields>(key: K, value: LinkFields[K]) { setFields(current => ({ ...current, [key]: value })); }
   async function save(close: () => void) {
-    if (live.current.saving) return;
+    if (live.current.saving || blockedReason) return;
     setAttempted(true);
     const invalid = validateLink(fields);
     const first = (Object.keys(invalid) as (keyof typeof invalid)[]).find(key => invalid[key]);
     if (first) { document.getElementById(`link-${first}`)?.focus(); return; }
-    live.current.saving = true; setSaving(true); setError("");
+    live.current.saving = true; setSaving(true);
     try { await onSave({ ...fields, title: fields.title.trim(), description: fields.description.trim(), url: fields.url.trim() }, requestID); close(); }
     catch (err) { live.current.saving = false; setSaving(false); setError(getApiErrorMessage(err)); }
   }
@@ -41,12 +42,16 @@ export default function LinkEditorDialog({ link, onSave, onClose }: { link: Home
           {errors[key] && <p id={`link-${key}-error`} className={styles.error} role="alert">{errors[key]}</p>}
         </div>)}
         <fieldset className={styles.choices}><legend className={styles.legend}>ICON</legend>{linkIcons.map(icon => <button type="button" key={icon} aria-label={`${icon} icon`} aria-pressed={fields.icon === icon} onClick={() => field("icon",icon)}><LinkIcon icon={icon} /></button>)}</fieldset>
-        <fieldset className={styles.choices}><legend className={styles.legend}>COLOR</legend>{linkColors.map(color => <button type="button" key={color} aria-label={`${color} color`} aria-pressed={fields.color === color} onClick={() => field("color",color)}><span style={{ display: "block", width: 14, height: 14, borderRadius: "50%", background: `var(--accent-${color})` }} /></button>)}</fieldset>
+        <LinkColorPicker value={fields.color} onChange={color => field("color", color)} />
         <label className={styles.visibility}><input type="checkbox" checked={fields.visible} onChange={e => field("visible",e.target.checked)} /> Show on homepage</label>
       </div><aside className={styles.preview}><p className={styles.legend}>LIVE PREVIEW</p><div className={styles.card}><LinkCardContent link={fields} /></div><p className={styles.hint} style={{ marginTop: 12 }}>{fields.visible ? "Visible after saving." : "Hidden from visitors. You can enable it later."}</p></aside></div>
       </fieldset>
-      {error && <p className={styles.error} role="alert">{error}</p>}
-      <div className={styles.footer}><button className={styles.button} type="button" disabled={saving || closing} onClick={close}>Cancel</button><button className={`${styles.button} ${styles.primary}`} type="submit" disabled={saving || closing}>{saving ? "Saving…" : "Save link"}</button></div>
+      <div className={styles.saveFeedback}>
+        {error && <p className={styles.error} role="alert">{error}</p>}
+        {blockedReason && !saving && <p id="link-save-blocked" className={styles.hint} role="status">{blockedReason}</p>}
+        {saving && <span className="sr-only" role="status">Saving link…</span>}
+      </div>
+      <div className={styles.footer}><button className={styles.button} type="button" disabled={saving || closing} onClick={close}>Cancel</button><button className={`${styles.button} ${styles.primary}`} type="submit" aria-describedby={blockedReason && !saving ? "link-save-blocked" : undefined} disabled={saving || closing || Boolean(blockedReason)}>Save link</button></div>
     </form>
     </>}
   </ModalSurface>;

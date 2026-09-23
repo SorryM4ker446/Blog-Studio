@@ -1,5 +1,7 @@
 import { StarIcon, GridIcon, LayoutIcon, ZapIcon } from "@/components/Icons";
-import type { LinkFields } from "@/lib/links";
+import { isCustomLinkColor, type LinkFields } from "@/lib/links";
+import type { CSSProperties } from "react";
+import ClampedText from "./ClampedText";
 import styles from "./Links.module.css";
 
 export function LinkIcon({ icon }: { icon: string }) {
@@ -17,9 +19,9 @@ export function LinkIcon({ icon }: { icon: string }) {
   </svg>;
 }
 export function LinkCardContent({ link }: { link: LinkFields }) {
-  return <><div className={styles.cardHeading}><span className={styles.icon} data-color={link.color} aria-hidden="true"><LinkIcon icon={link.icon} /></span>
-    <span>{link.title || "Your link title"}</span></div>
-    <p className={styles.description}>{link.description || ""}</p></>;
+  return <><div className={styles.cardHeading}><span className={styles.icon} data-color={link.color} style={isCustomLinkColor(link.color) ? { "--link-color": link.color } as CSSProperties : undefined} aria-hidden="true"><LinkIcon icon={link.icon} /></span>
+    <ClampedText className={styles.title} text={link.title || "Your link title"} /></div>
+    <ClampedText paragraph className={styles.description} empty={!link.description.trim()} text={link.description.trim() ? link.description : "No introduction provided."} /></>;
 }
 export default function LinkCard({ link }: { link: LinkFields }) {
   return <a draggable={false} className={styles.card} href={link.url} target="_blank" rel="noopener noreferrer">

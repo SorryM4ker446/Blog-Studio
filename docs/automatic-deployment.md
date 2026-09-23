@@ -4,7 +4,9 @@ This is an opt-in upgrade path for an **existing, healthy Linux Docker Compose i
 
 ## Release flow
 
-The existing `CI` workflow runs frontend coverage/build, backend tests, browser tests, container topology checks, and deployment-script tests. Only successful push/manual runs on the configured production branch publish images. Pull requests never publish or deploy.
+`CI` runs frontend coverage/build, backend tests, browser tests, container topology checks, and deployment-script tests, then publishes images for eligible successful production-branch push/manual runs. A separate `CD` workflow starts after CI completes. Its gate requires success, the same source repository, `.github/workflows/ci.yml`, a push/manual source event and the configured production branch. Pull requests never publish or deploy.
+
+CD checks out the source CI run's exact `head_sha` and downloads image metadata from that run ID, not the latest run. It uses the source CI `run_number` as the deployment sequence, preserving ordering across the split; the new CD run number must never replace it. The CD run ID/attempt only identifies the uploaded release directory. Deployment retries do not rebuild images or rerun tests. Only CD receives the production SSH secrets; image publishing retains narrowly scoped package-write permissions in CI.
 
 Three independent GHCR images are built from the same commit in one package: frontend `runtime`, backend `runtime`, and backend `maintenance`. Service-prefixed SHA tags identify releases; the server actually uses **digests** recorded separately by those builds. Architecture and OCI revision are checked before downtime. The matching Compose file, Caddy configuration, initialization SQL, and deployment script arrive over SSH/SFTP; no secrets or application source are uploaded into the live checkout.
 
@@ -119,9 +121,13 @@ The site URL is read from the existing VPS configuration. No duplicate `SITE_URL
 1. Review, commit/push and merge this implementation yourself, keeping automation disabled initially.
 2. Complete VPS setup, retain the old maintenance image, and configure GitHub.
 3. Set `ENABLE_VPS_DEPLOY=true`.
-4. Open **Actions → CI → Run workflow** and select the production branch. All checks run before publishing/deployment.
-5. Inspect `publish-images` and `deploy-production`. Verify login, saving articles, file previews/downloads and Links in the browser.
+4. Ensure `cd.yml` exists on the default branch, then open **Actions → CI → Run workflow** and select the production branch. All checks and image publishing run before CD.
+5. Inspect CI `publish-images`, then the separate **Actions → CD → deploy-production** run. Verify login, saving articles, file previews/downloads and Links in the browser.
 6. Future pushes/merges to the production branch deploy automatically. PRs and `codex` do not deploy.
+
+`workflow_run` runs the CD workflow from the default branch. Its production Environment branch rules must allow that default branch; the explicit CD gate separately restricts the source CI branch to `DEPLOY_BRANCH`. Prefer using the default branch as the production branch. Keep the CI workflow name `CI`, its file path, and its run-number history stable. Renaming/recreating the source workflow requires reviewing the server's sequence guard.
+
+To retry a transport or cleanup problem, first inspect server state and resolve any deployment guard, then use **Re-run failed jobs** (or **Re-run all jobs** for a successful run with a cleanup warning) on the corresponding CD run. The same source artifacts are retained for 14 days. Expired artifacts require a new CI run on the intended production revision; do not substitute artifacts from another run. Do not retry pre-split CI releases through CD: start a new CI run containing both workflow changes and the updated dispatcher. A newer successful deployment still prevents an older run from replacing it.
 
 The server process is detached from SSH. Losing the runner connection or cancelling polling does not terminate migrations. GitHub concurrency and the server lock prevent simultaneous deployments. Commands have deadlines (backup 35 minutes, others 30 minutes; health requests 30 seconds). Polling lasts up to 90 minutes. If it fails, inspect the running job before retrying. Pending GitHub runs can be superseded; active deployments are not automatically cancelled.
 
@@ -140,6 +146,7 @@ deploy/.deployment/
     previous-images.json
     deploy.log
     status.json
+    cleanup.json                 # removed/protected/failed old image counts
 ```
 
 JSON manifests contain no credentials. Raw logs stay private on the VPS and include the backup bundle path; review them before sharing. Backups use the existing `BACKUP_DIR`.
@@ -171,8 +178,18 @@ docker compose --project-directory "$ROOT" --env-file "$ROOT/deploy/.env" \
 
 Do not just delete the guard: the old maintenance image may no longer match the schema. Either finish and validate the attempted release, then reconcile `current.json` with its SHA/sequence/path, or restore the matched backup into isolated targets with the old release as described in [backup and restore](backup-restore.md). Only after database/uploads/running images/current pointer agree, and no job holds the lock, may an operator remove `attention.json` and retry.
 
-Never remove migration history or run `down --volumes`. Do not prune images, bundles or backups referenced by the current/previous release. Retention is manual: monitor disk usage and remove only reviewed, unreferenced artifacts after acceptance and off-host backup verification. Force-pushing or resetting CI run numbering is not a rollback mechanism.
+Never remove migration history or run `down --volumes`. Do not manually prune images, bundles or backups referenced by the current/previous release. Force-pushing or resetting CI run numbering is not a rollback mechanism.
+
+## VPS image retention
+
+After health checks pass, the current-release pointer is committed and the deployment guard is cleared. While still holding the server deployment lock, automatic cleanup retains the **latest three distinct successfully deployed commit versions**, each with frontend/backend/maintenance images (normally nine images, with shared layers counted once by Docker). Repeating the same SHA does not consume another version slot. Ordering uses the source CI sequence, not image creation time or directory timestamps. A same-SHA CD retry also retries cleanup.
+
+Only obsolete application digest references recorded in this installation's successful release manifests are candidates. Cleanup protects the active release, its immediate rollback image IDs, all unsuccessful/incomplete release manifests and their rollback snapshots, and all running or stopped containers. A shared local image ID is preserved if any retained reference needs it. Manually tagged images are left alone. It uses explicit `docker image rm` without force; it never calls `system prune`, removes containers/volumes, deletes GHCR packages or touches unrelated images.
+
+Safety exceptions can leave more than three versions. Candidate removals blocked by containers, tags or shared image IDs, and failed deletions, are reported in the successful deployment's message and private `cleanup.json`. Unsuccessful/incomplete releases and recovery references are excluded from the candidate set entirely. Invalid metadata, inventory errors or an unresolved guard prevent cleanup. A cleanup failure does not roll back or mark the healthy application release as failed; review its warning and private server log, resolve the cause and rerun CD. Interrupted releases remain protected until an operator reconciles their actual state. Do not mark them successful just to free space.
+
+This is a local application-image policy, not a total disk quota. Bootstrap/local-build images without successful release manifests, manually tagged images, backups, database/uploads, container logs, build cache and release metadata are not automatically deleted. Leave headroom for pulling a new version and creating its backup before cleanup; a full disk can prevent reaching cleanup. Monitor `docker system df` and filesystem free space, and maintain separate reviewed backup/log retention and off-host backup policies. Older recovery may require re-pulling the exact retained GHCR digest; keep registry images needed by backup recovery procedures.
 
 ## Validation
 
-Run `python -m unittest discover -s deploy/tests -v`. Fault-injection tests cover pull/backup/migration/health failures, ordering, immutable images, architecture checks, idempotence, stale-run rejection, persistent guards and SSH parameter validation. The real Compose parser verifies preserved volumes and versioned configuration mounts; Linux CI exercises `flock`. Existing container CI still builds/boots the topology. Actual registry authentication, SSH permissions, HTTPS and VPS deployment require the first real run.
+Run `python -m unittest discover -s deploy/tests -v`. Fault-injection tests cover pull/backup/migration/health failures, ordering, immutable images, architecture checks, idempotence, stale-run rejection, persistent guards and SSH parameter validation. The real Compose parser verifies preserved volumes and versioned configuration mounts; Linux CI exercises `flock`. Retention tests cover three-version selection, repeated SHAs, stopped containers, shared image IDs, manual tags, incomplete releases, corrupted metadata, failed removals and repeat execution. Workflow gate tests exercise failed/PR/fork/non-production events and source CI identity bindings. Existing container CI still builds/boots the topology. Actual registry authentication, GitHub workflow chaining, Docker image removal, SSH permissions, HTTPS and VPS deployment require a real environment run.
