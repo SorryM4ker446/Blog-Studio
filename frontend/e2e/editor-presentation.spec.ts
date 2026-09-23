@@ -26,8 +26,30 @@ for (const theme of ["dark", "light"]) {
       await page.getByRole("button", { name: "Create category", exact: true }).click();
       const create = page.getByRole("button", { name: "Create", exact: true });
       const cancel = page.getByRole("button", { name: "Cancel", exact: true });
-      const createBox = (await create.boundingBox())!, cancelBox = (await cancel.boundingBox())!;
-      expect(createBox.width).toBe(cancelBox.width); expect(createBox.height).toBe(cancelBox.height);
+      const createRow = page.locator(".editor-category-create");
+      await createRow.evaluate(async row => {
+        const animations = new Set<Animation>();
+        for (let node: Element | null = row; node; node = node.parentElement) {
+          for (const animation of node.getAnimations()) {
+            if (animation.effect?.getTiming().iterations !== Infinity) animations.add(animation);
+          }
+        }
+        await Promise.all([...animations].map(animation => animation.finished));
+      });
+      for (const button of [create, cancel]) {
+        await expect(button).toHaveCSS("width", "84px");
+        await expect(button).toHaveCSS("height", "40px");
+      }
+      const boxes = await createRow.locator("button").evaluateAll(buttons => buttons.map(button => {
+        const { width, height } = button.getBoundingClientRect();
+        return { width, height };
+      }));
+      expect(boxes).toHaveLength(2);
+      // DOM rectangles can differ by floating-point noise even for equal CSS dimensions.
+      for (const box of boxes) {
+        expect(box.width).toBeCloseTo(84, 2);
+        expect(box.height).toBeCloseTo(40, 2);
+      }
       await scanAccessibility(page, info, `editor-category-${theme}`);
       await page.screenshot({ path: path.join(os.tmpdir(), `blog-editor-category-${theme}.png`) });
       await cancel.click();
