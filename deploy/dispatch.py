@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """GitHub runner SSH transport; deployment itself survives runner disconnection."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -46,18 +47,24 @@ def transport(args):
         raise RuntimeError("SSH transport failed; verify production secrets, connectivity and server state privately.") from None
 
 
+def load_reviewed_manifest(path, expected_sha, expected_sequence, expected_digest):
+    from release import validate_manifest
+    payload = Path(path).read_bytes()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_digest) or hashlib.sha256(payload).hexdigest() != expected_digest:
+        raise ValueError("Reviewed release manifest checksum mismatch")
+    manifest = validate_manifest(json.loads(payload))
+    if manifest["sha"] != expected_sha or type(manifest["sequence"]) is not int or manifest["sequence"] != int(expected_sequence):
+        raise ValueError("Reviewed release does not match the source CI run")
+    return manifest
+
+
 def main():
     env = dict(os.environ)
     env["VPS_PORT"] = env.get("VPS_PORT") or "22"
     root = validate_settings(env)
     release = f"{root}/deploy/.deployment/releases/{env['GITHUB_RUN_ID']}-{env['GITHUB_RUN_ATTEMPT']}"
-    images = {}
-    for service in ("frontend", "backend", "maintenance"):
-        images[service] = json.loads(Path(f"image-metadata/{service}.json").read_text())["image"]
-    manifest = {"sha": env["DEPLOY_SHA"], "sequence": int(env["DEPLOY_SEQUENCE"]), "images": images}
-    # Import shares validation with the server without running deployment code.
-    from release import validate_manifest
-    validate_manifest(manifest)
+    manifest = load_reviewed_manifest("reviewed-release/release.json", env["DEPLOY_SHA"],
+                                      env["DEPLOY_SEQUENCE"], env["RELEASE_MANIFEST_SHA256"])
     with tempfile.TemporaryDirectory() as directory:
         directory = Path(directory)
         key = directory / "key"

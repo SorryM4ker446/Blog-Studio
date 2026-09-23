@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  deploy-production:
+  prepare-release:
     if: >-
       vars.ENABLE_VPS_DEPLOY == 'true' &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -17,6 +17,44 @@ jobs:
       github.event.workflow_run.path == '.github/workflows/ci.yml' &&
       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
       github.event.workflow_run.head_branch == (vars.DEPLOY_BRANCH || 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      manifest_sha256: ${{ steps.prepare.outputs.manifest_sha256 }}
+      artifact_name: ${{ steps.prepare.outputs.artifact_name }}
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: deploy-image-*
+          path: image-metadata
+          merge-multiple: true
+      - name: Prepare approval summary and immutable release manifest
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ARTIFACT: reviewed-release-${{ github.run_id }}-${{ github.run_attempt }}
+        run: python3 deploy/prepare_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare.outputs.artifact_name }}
+          path: |
+            reviewed-release/release.json
+            reviewed-release/summary.md
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy-production:
+    needs: prepare-release
     runs-on: ubuntu-latest
     timeout-minutes: 100
     environment: production
@@ -33,15 +71,13 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-          pattern: deploy-image-*
-          path: image-metadata
-          merge-multiple: true
+          name: ${{ needs.prepare-release.outputs.artifact_name }}
+          path: reviewed-release
       - name: Deploy verified release to VPS
         env:
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
           DEPLOY_SEQUENCE: ${{ github.event.workflow_run.run_number }}
+          RELEASE_MANIFEST_SHA256: ${{ needs.prepare-release.outputs.manifest_sha256 }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}

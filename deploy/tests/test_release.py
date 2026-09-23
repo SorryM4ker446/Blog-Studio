@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -247,9 +248,10 @@ class TransportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             try:
                 os.chdir(directory)
-                Path("image-metadata").mkdir()
-                for service, image in MANIFEST["images"].items():
-                    release.write_json(Path("image-metadata") / (service + ".json"), {"image": image})
+                Path("reviewed-release").mkdir()
+                payload = json.dumps({**MANIFEST, "sequence": 123}).encode("utf-8")
+                Path("reviewed-release/release.json").write_bytes(payload)
+                env["RELEASE_MANIFEST_SHA256"] = hashlib.sha256(payload).hexdigest()
                 for name in ("compose.yaml", "deploy/Caddyfile", "deploy/postgres/initialize-search.sql", "deploy/release.py"):
                     path = Path(name)
                     path.parent.mkdir(parents=True, exist_ok=True)
