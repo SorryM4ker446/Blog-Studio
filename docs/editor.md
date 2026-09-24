@@ -23,7 +23,7 @@ The form displays a compact publication badge and separate `Save` and `Publish`/
 
 `View article` opens in the current tab. Its URL carries a local `returnTo` editor URL matching the article ID, preserving the source list filters. The page Back button returns directly to that editor; browser Back also returns through history. Return targets outside the matching editor are rejected. Ordinary article links retain history-based return, with All Posts as the fallback when no history exists.
 
-Viewing uses the same browser recovery copies as other departures. Unsaved input prompts before leaving; on return, restore a copy, discard it, or keep it and continue with the current version. The former temporary in-memory preview handoff has been removed, so there is one recovery source. The matching editor return URL and list filters are retained.
+Viewing uses the same browser recovery copies as other departures. Unsaved input prompts before leaving; on return, restore a copy, discard it, or keep it and continue with the current version.
 
 Publishing a new article first creates a draft, then publishes that ID and version. If publication fails after draft creation succeeds, the editor retains the draft ID and updates its URL, so a retry does not create another article. If the creation response itself is lost, the outcome is uncertain: check the content list before retrying creation. The client does not automatically repeat creation requests after network failures.
 
@@ -42,6 +42,8 @@ Migration `2026090901` adds `posts.version` and a PostgreSQL update trigger. His
 Deploy frontend and backend together, apply pending migrations before API startup, and reload old clients: writes without versions are incompatible. See [deployment](deployment.md) and [backup and restore](backup-restore.md); image-only rollback across a new migration is unsupported.
 
 ## Browser recovery copies
+
+IndexedDB's schema version and each record's format version are independent of article versions. Unsupported or malformed records are never restored.
 
 The browser stores unsaved title, introduction, Markdown and category fields in IndexedDB, together with a format version, user ID, article or new-draft identity, original saved fields/version, and timestamps. Copies expire after seven days. Writes are throttled to at most one per second during continuous input, with a best-effort flush on visibility loss, navigation and unload. The store permits at most 20 copies and 4 MiB of encoded copy data per origin. It rejects a write that would exceed these bounds rather than evicting another tab's unsaved work. Expired or malformed copies are removed during discovery; the editor reports skipped copies and storage failures. Storage failure never prevents manual server saving.
 
@@ -73,9 +75,7 @@ The desktop editor detail frame uses a viewport-based width budget calculated fr
 
 Refresh, tab closure and departures to another document use the browser's native unsaved-changes prompt. Websites cannot theme this browser UI or replace it with an asynchronous app dialog. Its wording and availability are browser-controlled and normally require prior interaction. Browsers can suppress prompts, especially on mobile or forced termination; asynchronous storage work is not guaranteed to finish during unload. Regular throttled copies reduce this risk but are not a zero-loss backup guarantee. Application program navigation must use `useEditorRouter` or pass the intended continuation to `requestEditorNavigation`; external scripts that bypass these entry points are outside the application contract.
 
-## Frontend deployment
-
-The existing frontend build includes `instrumentation-client.ts`; deploy the rebuilt frontend and reload older open clients to activate recovery and navigation protection. Existing server version checks remain required. IndexedDB's schema version and each record's format version are independent of article versions. Unsupported or malformed records are never restored.
+## Rendering and navigation
 
 List return snapshots are optional browser-memory optimizations, isolated by user for protected data and bounded to 20 entries and five minutes. Logout and session expiry clear them. They contain no unsaved article text. Matching server-rendered data or a target-page loading area works without a snapshot. Client route entry revalidates even when its server snapshot already matches the URL; errors remain visible and retryable.
 
@@ -85,7 +85,7 @@ Content Editor no longer measures or stores list dimensions. The obsolete sessio
 
 The content scroller saves offsets before departures and restores them after the target layout commits. Delayed content can be retried for at most two seconds, after which browser clamping determines the reachable offset. Wheel, touch, pointer and scroll-key input cancel restoration; navigation and unmount clean up pending callbacks. Input before hydration also cancels the later takeover. Changed server content may shorten a public list or remove an item, so restoration does not promise an unchanged historical content snapshot.
 
-Deploy the rebuilt frontend and refresh existing clients. Old URL-keyed scroll records are no longer read; an older history entry without the new metadata starts without a saved offset. Browser history loss still loses its source and position. Recovery copies, preference Cookies, article widths and editor version checks remain independent of these list changes.
+Older history entries without per-entry metadata start without a saved offset. Browser history loss loses both the source and position.
 
 Posts/Files tabs share a sliding selection background. Explicit tab, category and search changes retain the previous results until the requested response is available, then run the existing scope exit/entrance transition. Empty results participate in the same transition. Response criteria stay paired with their rows, including inactive tabs' server snapshots; an older response cannot label rows with a newer query. Pagination keeps its separate motion, and scope changes do not replay a page animation. Narrow toolbars wrap complete controls rather than splitting tab labels. Reduced motion commits the result without animation.
 
@@ -110,7 +110,7 @@ The collection is limited to 100 links, including hidden ones, to keep a single 
 
 Link cards reserve two lines each for titles and descriptions; management cards also reserve two lines for the destination and align their action row at the bottom. Empty descriptions display `No introduction provided.` in muted text. Long text wraps within its region and is clamped with an ellipsis instead of increasing card height or width. The homepage and live preview share the title/description treatment. Cards do not open hover/focus tooltips, so reading or moving the pointer never covers adjacent content. Use Edit in Content Editor to read the complete title, description and destination. Full text remains in the document for assistive technology.
 
-On wide screens the homepage shows four cards in one row. Smaller screens show two or one. Native horizontal scrolling and scroll snapping support touch, trackpads and keyboard focus. Mouse dragging scrolls the row and snaps to a nearby card on release; crossing the drag threshold suppresses the associated click so a drag does not open an external tab. Ordinary clicks and keyboard activation still open links. There are no previous/next buttons or reserved side gutters. The final viewport can overlap preceding cards to avoid empty fillers. There is no autoplay, cloned slide loop, per-slide fetch or third-party carousel dependency. Collections that fit do not enable mouse dragging. Reduced motion uses immediate positioning.
+On wide screens the homepage shows four cards in one row. Smaller screens show two or one. Native horizontal scrolling and scroll snapping support touch, trackpads and keyboard focus. Mouse dragging scrolls the row and snaps to a nearby card on release; crossing the drag threshold suppresses the associated click so a drag does not open an external tab. Ordinary clicks and keyboard activation still open links. There are no previous/next buttons or reserved side gutters. The final viewport can overlap preceding cards to avoid empty fillers. Collections that fit do not enable mouse dragging. Reduced motion uses immediate positioning.
 
 The color picker retains four theme-aware presets. Clicking Custom opens a compact, themed floating panel beside the button with a draggable saturation/brightness plane, hue/saturation/brightness sliders and a HEX input. The panel stays within viewport edges without resizing the edit dialog, uses subtle entrance and exit transitions, and respects reduced motion. All changes preview immediately; Escape or the close button dismisses only the color panel and restores focus to Custom. Clicking or focusing outside dismisses it without moving focus. Incomplete HEX input is not applied and resets to the last valid color on blur. Custom colors persist as six-digit HEX values and remain exact in both themes; preset colors continue to adapt to the theme. Preview, management cards and homepage cards share this behavior.
 
@@ -118,6 +118,8 @@ Migration `2026092201` preserves the four former static card descriptions as hid
 
 API: `GET /api/links`; administrator-only `GET/POST /api/admin/links`, `PUT/DELETE /api/admin/links/:id`, and `POST /api/admin/links/:id/move`. All mutations require CSRF protection. Update/delete require the current version; moves require both adjacent records' IDs and versions and commit atomically. Admin writes serialize briefly on the links table to keep ordering, collection limits and create replay checks consistent. Successful and failed reads inherit the application's no-store cache policy.
 
+
+## Dialogs and controls
 
 Content Editor deletion dialogs share an entrance and exit transition across posts, files, links and categories. Cancel, Escape, backdrop dismissal and successful deletion keep the dialog mounted until exit finishes; background isolation and focus containment remain active during that interval. Closing preserves the displayed resource and message even when the parent clears its selection. Reopening cancels an obsolete exit, and reduced motion closes immediately. Failed or blocked deletions remain open. Focus returns to the invoking control, or to the resource panel when that control was deleted.
 
@@ -127,6 +129,6 @@ Category management always targets the selected category. Pointer hover and keyb
 
 Links and Files dialogs share a modal surface. Their panels and backdrops enter and exit together; Cancel, the close button, Escape, backdrop clicks and successful saves use the same exit lifecycle. Focus and background isolation remain within the dialog until exit completes. Successful saves keep controls locked and retain the saving label throughout exit, while failures preserve entered values and allow retry. Backdrop dismissal requires a pointer press and click both on the backdrop, so dragging out of a field does not close the dialog. Dismissal discards unsaved edits without an article recovery confirmation. Reduced motion skips animation. File upload and preview dialogs also use this surface for consistent dismissal.
 
-Category Create and Cancel use equal 84×40px buttons. Selecting an option closes the dropdown with a 220ms transition while immediately removing it from interaction; reduced motion closes without transition. Content Editor primary list actions follow the compact Save button treatment: neutral light fill in dark mode and blue with white text in light mode. The light editor header uses white secondary controls and a restrained green Published badge; dark header colors remain unchanged.
+Selecting a category closes the dropdown with a transition while immediately removing it from interaction; reduced motion closes without transition.
 
 Link save failures retain the draft and previous error during retries. A reserved feedback area prevents ordinary validation errors from resizing the centered dialog; Save keeps its label and appearance while disabled, with progress announced separately.

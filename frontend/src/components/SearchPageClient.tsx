@@ -86,7 +86,6 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
         Search across all posts and cloud drive files.
       </p>
 
-      {/* 搜索输入框 */}
       <div
         style={{
           display: "flex",
@@ -187,7 +186,6 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
               Updating search results…
             </span>
           )}
-          {/* 文章结果 */}
           {displayed.scope !== "files" && <section aria-label="Post results" style={{ marginBottom: "2rem" }}>
             <div
               style={{
@@ -277,7 +275,6 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
             </PaginatedResults>
           </section>}
 
-          {/* 文件结果 */}
           {displayed.scope !== "posts" && <section aria-label="File results">
             <div
               style={{

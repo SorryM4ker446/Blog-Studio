@@ -61,12 +61,11 @@ $env:UPLOAD_DIR = "uploads"
 $env:MAX_UPLOAD_BYTES = "10485760"
 
 go run ./cmd/migrate up
-go run ./cmd/server
 ```
 
 Run the migration command explicitly whenever a new database migration is required. The API checks the migration version at startup and does not modify the schema automatically.
 
-To create the first administrator in an empty database, set a strong password of at least 12 characters and run the seed command once:
+Before starting the API for the first time, create the administrator in the same terminal:
 
 ```powershell
 $env:ADMIN_USER = "admin"
@@ -74,7 +73,13 @@ $env:ADMIN_PASS = "replace_with_a_strong_password_at_least_12_characters"
 go run ./cmd/seed
 ```
 
-The seed command does not replace an existing account. Passwords are limited to 12–128 characters and 72 UTF-8 bytes, cannot be common weak passwords, and cannot contain the username.
+The seed command refuses to overwrite an existing account with the same username. Use a password that meets the [password policy](docs/security.md#login-and-password-controls).
+
+Start the API in that terminal:
+
+```powershell
+go run ./cmd/server
+```
 
 ### Start the frontend
 
@@ -82,15 +87,11 @@ Open a second terminal in `frontend/`:
 
 ```powershell
 npm ci
+if (-not (Test-Path .env.local)) { Copy-Item .env.example .env.local }
 npm run dev
 ```
 
-Open <http://localhost:3000>. Browser requests use `NEXT_PUBLIC_API_BASE_URL`; server-rendered requests use `API_INTERNAL_BASE_URL`. For native development, both normally point to `http://localhost:8080/api`:
-
-```powershell
-$env:NEXT_PUBLIC_API_BASE_URL = "http://localhost:8080/api"
-$env:API_INTERNAL_BASE_URL = "http://localhost:8080/api"
-```
+The setup preserves an existing `.env.local`. Both API addresses default to `http://localhost:8080/api`. If needed, edit `.env.local` before starting the frontend: `NEXT_PUBLIC_API_BASE_URL` is used by browser requests and `API_INTERNAL_BASE_URL` by server-rendered requests. Open <http://localhost:3000>.
 
 In a container deployment, `API_INTERNAL_BASE_URL` must use the private backend service address and must never contain credentials. The Compose configuration provides the container value automatically.
 
@@ -116,7 +117,7 @@ go vet ./...
 go build ./...
 ```
 
-The backend integration suites require PostgreSQL and use a disposable test database. Do not run Docker Compose as a substitute for the native checks above during local development. Container topology and deployment checks run in GitHub Actions.
+Backend integration tests require `TEST_DB_DSN` pointing to a disposable database whose name ends in `_test`; they are skipped when it is unset. Playwright also requires this isolated database. Configure it using [the test database instructions](docs/testing.md#test-database) before running these suites. Container topology and deployment checks run in GitHub Actions.
 
 See [`docs/testing.md`](docs/testing.md) for test boundaries, database setup, browser coverage, failure artifacts, and the current quality gates. Coverage reports are generated locally and are not a substitute for the CI result.
 
@@ -132,7 +133,7 @@ Read the following documents for behavior that is easy to miss during developmen
 - [`docs/accessibility.md`](docs/accessibility.md) — keyboard behavior, responsive navigation, reduced motion, and image loading.
 - [`docs/search-contract.md`](docs/search-contract.md) — list, detail, search, pagination, and URL contracts.
 - [`docs/file-storage.md`](docs/file-storage.md) — upload, storage, preview, and download rules.
-- [`docs/security.md`](docs/security.md) — production security configuration.
+- [`docs/security.md`](docs/security.md) — sessions, access controls, recovery privacy, and security configuration.
 - [`docs/backup-restore.md`](docs/backup-restore.md) — matched database and upload backups and isolated restore verification.
 
 ## Production deployment
@@ -143,4 +144,8 @@ Follow [`docs/deployment.md`](docs/deployment.md) for host prerequisites, secret
 
 ## Styling
 
-Global styles are in `frontend/src/app/globals.css`. The `--bg-sidebar`, `--nav-active`, and `--accent-*` variables control the main sidebar and accent colors. Preserve the existing keyboard, reduced-motion, responsive, and server-rendering behavior when changing styles.
+Global styles and theme variables are defined in `frontend/src/app/globals.css`: `:root` provides the dark theme and `.theme-light` overrides it. `--bg-sidebar` controls the sidebar background, `--nav-active` the active navigation background, and `--accent-*` the accent colors. See [accessibility](docs/accessibility.md) for keyboard and reduced-motion behavior.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

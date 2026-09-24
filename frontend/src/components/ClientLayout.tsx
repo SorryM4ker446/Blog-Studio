@@ -185,11 +185,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   return (
     <div className="app-container" onClickCapture={rememberContentScroll}>
       <a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); mainRef.current?.focus({ preventScroll: true }); }}>Skip to main content</a>
-      {/* 左侧导航栏 */}
       <aside className={`sidebar ${isCollapsed ? "collapsed" : ""}`}>
-        {/* Header: logo text animates out via CSS, toggle always visible */}
         <div className="sidebar-header">
-          {/* Logo container handles logo shrinking via max-width / opacity in CSS */}
           <div className="sidebar-logo-container">
             <StudioLogo className="sidebar-logo-icon" size={24} />
             <span className="sidebar-logo-text">Blog Studio</span>
@@ -209,7 +206,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <SidebarFooter />
       </aside>
 
-      {/* 右侧主内容区 */}
       <main ref={mainRef} id="main-content" tabIndex={-1} className="main-content">
         <TopBar navigation={<MobileNavigation />} />
         <div className="content-scroll" ref={contentScrollRef} onScroll={handleContentScroll}>

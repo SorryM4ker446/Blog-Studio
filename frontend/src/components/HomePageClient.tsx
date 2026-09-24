@@ -39,7 +39,6 @@ export default function HomePageClient({
     setPostsLoading(true);
     setPostsError("");
     try {
-      // Only load the first 5 posts directly from the backend for the recent list.
       const result = await getPosts(1, 5);
       if (requestId !== loadRequestIdRef.current) return;
       setPosts(result.data);
@@ -64,7 +63,6 @@ export default function HomePageClient({
 
       <HomeLinks initialLinks={initialLinks} initialError={initialLinksError} />
 
-      {/* 博客文章列表 */}
       <div style={{ marginTop: "3.5rem" }}>
         <p
           style={{
@@ -132,7 +130,6 @@ export default function HomePageClient({
         </div>
       </div>
 
-      {/* 底部搜索栏 - 真实搜索功能 */}
       <div
         style={{
           marginTop: "6rem",

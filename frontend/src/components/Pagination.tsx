@@ -12,7 +12,6 @@ interface PaginationProps {
 export default function Pagination({ currentPage, totalPages, onPageChange, pending = false, edgeArrows = false }: PaginationProps) {
   if (totalPages <= 1) return null;
 
-  // Generate pagination array with ellipsis
   const getPages = () => {
     const pages: (number | string)[] = [];
     
@@ -36,7 +35,6 @@ export default function Pagination({ currentPage, totalPages, onPageChange, pend
 
   return (
     <nav className={edgeArrows ? styles.edges : undefined} aria-busy={pending} aria-label="Pagination" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.4rem", marginTop: "2rem" }}>
-      {/* Prev Button */}
       <button
         type="button"
         onClick={() => { if (!pending) onPageChange(currentPage - 1); }}
@@ -64,7 +62,6 @@ export default function Pagination({ currentPage, totalPages, onPageChange, pend
         </svg>
       </button>
 
-      {/* Page Numbers */}
       <div style={{ display: "flex", gap: "0.2rem", margin: "0 0.5rem" }}>
         {pages.map((p, idx) => {
           if (p === "...") {
@@ -126,7 +123,6 @@ export default function Pagination({ currentPage, totalPages, onPageChange, pend
         })}
       </div>
 
-      {/* Next Button */}
       <button
         type="button"
         onClick={() => { if (!pending) onPageChange(currentPage + 1); }}

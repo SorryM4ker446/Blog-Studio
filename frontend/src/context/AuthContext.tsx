@@ -91,7 +91,6 @@ export function AuthProvider({
     await verifyAuth();
   }
 
-  // Load auth state and the public profile on mount.
   useEffect(() => {
     const initialSnapshot = initialStateRef.current;
     isMountedRef.current = true;
@@ -192,7 +191,7 @@ export function AuthProvider({
     setIsLoading(false);
     setAuthStatus("authenticated");
     setAuthError(null);
-    fetchProfile(); // Fetch profile immediately after login
+    fetchProfile();
   };
 
   const completeLogout = async () => {

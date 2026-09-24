@@ -55,7 +55,6 @@ func setupRouter(
 
 	api := r.Group("/api")
 	{
-		// 公开接口
 		public := api.Group("/")
 		{
 			public.GET("/links", handlers.GetLinks)
@@ -70,7 +69,6 @@ func setupRouter(
 			public.HEAD("/files/:id/download", handlers.DownloadFile)
 		}
 
-		// Auth & Settings (Public reading)
 		api.GET("/csrf", handlers.CSRFToken)
 		api.POST("/login", middleware.CSRFMiddleware(), handlers.Login)
 		api.GET("/settings", handlers.GetSettings)

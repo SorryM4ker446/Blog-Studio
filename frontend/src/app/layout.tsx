@@ -8,7 +8,7 @@ import { initialViewScript } from "@/lib/initial-view";
 
 export const metadata = {
   title: "Blog Studio",
-  description: "A functional, studio-inspired developer blog for sharing growth.",
+  description: "to ALTER the world.",
 };
 
 export default async function RootLayout({

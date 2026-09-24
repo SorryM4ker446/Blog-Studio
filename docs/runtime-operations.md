@@ -59,7 +59,7 @@ Go duration syntax is used, for example `1500ms`, `20s`, or `5m`. The HTTP read 
 
 The backend handles interrupt and termination signals by immediately making readiness fail, stopping new traffic, and waiting up to `HTTP_SHUTDOWN_TIMEOUT` for active requests. If the deadline expires, remaining connections are closed. The database connection pool closes after the HTTP server has stopped.
 
-The API only verifies migration history while opening the database and never changes the schema. Run `go run ./cmd/migrate up` before starting a backend release. The indexed-search migration requires an operator-prepared `pg_trgm` in schema `public`; [deployment.md](deployment.md) covers existing volumes, native databases and rollback. Search has exact totals and a combined default limit of ten, with unchanged public caching and throttling. Short or very common body terms can still scan many rows; pagination bounds response size rather than guaranteeing cheap counts. Versioning, advisory locking, matched backups, and isolated restore drills are documented in [`backup-restore.md`](backup-restore.md).
+The API only verifies migration history while opening the database and never changes the schema. Run `go run ./cmd/migrate up` before starting a backend release. The indexed-search migration requires an operator-prepared `pg_trgm` in schema `public`; [deployment.md](deployment.md) covers existing volumes, native databases and rollback. Short or very common body terms can still scan many rows; pagination bounds response size rather than guaranteeing cheap counts. Versioning, advisory locking, matched backups, and isolated restore drills are documented in [`backup-restore.md`](backup-restore.md).
 
 ## Metrics and alerting
 

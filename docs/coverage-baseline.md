@@ -10,7 +10,7 @@ Measured on 2026-09-06 before changing application behavior, from revision `2ece
 | Vitest lines | 1,083 / 1,999 | 54.17% | 52% |
 | Go statements | 1,657 / 2,466 | 67.2% | 65% |
 
-These are historical baseline measurements and the original proposed floors. Current enforced floors and their measurement rationale are documented in [quality-gates.md](quality-gates.md); earlier sections retain their original delivery status. Do not lower a floor or exclude a difficult file to hide a regression. Time-based benchmark thresholds are independent of coverage and remain disabled.
+These are historical baseline measurements and the original proposed floors. Current enforced floors and their measurement rationale are documented in [quality-gates.md](quality-gates.md); each dated section describes that historical measurement, not current gate status. Do not lower a floor or exclude a difficult file to hide a regression. Time-based benchmark thresholds are independent of coverage and remain disabled.
 
 ## Article read regression measurement
 
