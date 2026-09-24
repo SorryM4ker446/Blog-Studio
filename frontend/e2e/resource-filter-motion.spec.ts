@@ -19,7 +19,8 @@ async function monitor(page: Page) {
       if ((event as TransitionEvent).propertyName === "transform") state.tabTransitions++;
     });
     Element.prototype.animate = function (frames, options) {
-      const tracked = this.id === "editor-resource-panel" || this.hasAttribute("data-result-page");
+      const scopeRegion = this.getAttribute("aria-label") === "Posts" || this.getAttribute("aria-label") === "Files";
+      const tracked = this.id === "editor-resource-panel" || scopeRegion || this.hasAttribute("data-result-page");
       if (tracked) state.frames.push(frames as Keyframe[]);
       const animation = original.call(this, frames, options);
       if (tracked && state.pause && (frames as Keyframe[]).at(-1)?.opacity === 0) animation.pause();
