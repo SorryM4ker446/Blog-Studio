@@ -1,4 +1,3 @@
-// lib/api.ts
 import {
   API_BASE,
   ApiError,
@@ -184,8 +183,6 @@ export async function logoutUser(): Promise<void> {
   }
 }
 
-// ==================== Post API ====================
-
 export async function getPosts(page = 1, limit = 10, categoryId = ""): Promise<PaginatedResponse<PostSummary>> {
   const query = new URLSearchParams({
     page: page.toString(),
@@ -288,8 +285,6 @@ export async function deletePost(id: number): Promise<boolean> {
   return true;
 }
 
-// ==================== Category API ====================
-
 export async function getCategories(options: { fresh?: boolean } = {}): Promise<Category[]> {
   return publicApiRequest<Category[]>("/categories", {
     cache: options.fresh ? "no-store" : "default",
@@ -335,8 +330,6 @@ export async function deleteCategory(id: number): Promise<boolean> {
   });
   return true;
 }
-
-// ==================== File API（云盘） ====================
 
 export async function getFiles(page = 1, limit = 10): Promise<PaginatedResponse<FileRecord>> {
   const query = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
@@ -439,8 +432,6 @@ export async function deleteFile(id: number): Promise<FileMutationResult> {
   }
 }
 
-// ==================== 搜索 API ====================
-
 export async function searchResources(query: ResourceQuery, limit = 10): Promise<SearchResult> {
   return publicApiRequest<SearchResult>(`/search?${searchAPIParams(query, limit).toString()}`);
 }
@@ -450,8 +441,6 @@ export async function searchAdminResources(query: ResourceQuery, includeSystem =
   params.set("include_system", String(includeSystem));
   return apiRequest<SearchResult>(`/admin/search?${params.toString()}`, { cache: "no-store", auth: true });
 }
-
-// ==================== Settings API ====================
 
 export async function getSettings(options: { fresh?: boolean } = {}): Promise<Record<string, string>> {
   return publicApiRequest<Record<string, string>>("/settings", {

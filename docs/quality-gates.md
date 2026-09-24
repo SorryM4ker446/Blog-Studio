@@ -12,9 +12,9 @@ Coverage gates prevent regression within a fixed measurement scope. They supplem
 | Go statements | 68% | Atomic `-coverpkg=./...` profile across the complete module |
 | Focused Go statements | 90% for each function | Search `Query`/`Read`, text `Extract`, `mutatePost`, and `addPostVersions` |
 
-The global floors were raised from the original proposals using the completed implementation's pre-gate measurement: frontend 63.66/61.36/62.94/64.25% and Go 70.68%. They leave approximately two percentage points of margin without weakening the original proposals. Local measurement uses Windows; the first Linux CI result after publication remains a separate acceptance check, and failures must be investigated rather than automatically lowering a floor.
+The floors use the pre-gate measurement of frontend 63.66/61.36/62.94/64.25% and Go 70.68%, leaving approximately two percentage points of margin. These measurements were taken on Windows; investigate platform differences rather than automatically lowering a floor.
 
-Vitest enforces the global floors. `tools/quality/coverage.mjs` requires every named focused source/function to exist in the full report and checks each separately. A renamed or missing source fails. Function coverage includes every reported decision inside its source range; it does not imply that the entire editor page has 90% branch coverage. The editor page and all other production code remain in the global denominator. No code was excluded or moved to inflate coverage.
+Vitest enforces the global floors. `tools/quality/coverage.mjs` requires every named focused source/function to exist in the full report and checks each separately. A renamed or missing source fails. Function coverage includes every reported decision inside its source range; it does not imply that the entire editor page has 90% branch coverage. The editor page and all other production code remain in the global denominator.
 
 Frontend reports include text, HTML, LCOV, JSON summary and full Istanbul JSON. The latter supports the function-level check; browser execution is not merged into it. Go duplicate profile blocks from different package test binaries are merged before computing the global statement ratio. Function floors use `go tool cover`'s reported statement percentages. Empty/malformed reports, missing functions, mismatched duplicate blocks and insufficient coverage fail the command.
 
@@ -53,4 +53,4 @@ Save JSON test events to `test-results.json` and the function report to `coverag
 
 CI retains coverage/test reports even on failure and retains available query plans and benchmark reports when their steps fail. Gate helper tests prove negative paths, including duplicate Go blocks and npm's distinct outdated-versus-error exit behavior. Workflow syntax and semantics are checked with pinned actionlint. No timing-based performance floor is inferred from local benchmarks.
 
-Coverage output remains excluded from Git and Docker contexts. Gate scripts live outside the application build contexts; they are not required by production runtime images. Full Chromium, migration/recovery, anonymous benchmarks and container tasks remain enabled. The container task runs only in GitHub Actions, not as local Compose validation.
+Coverage output remains excluded from Git and Docker contexts. Gate scripts live outside the application build contexts; they are not required by production runtime images. Container topology is validated in GitHub Actions; see [testing](testing.md#continuous-integration).

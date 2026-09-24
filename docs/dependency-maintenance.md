@@ -1,6 +1,6 @@
 # Dependency maintenance
 
-The `Dependency health` workflow supports `workflow_dispatch` and runs Mondays at 03:31 UTC. GitHub schedules use the default branch, so scheduled execution starts after that workflow is merged there. `CI` also supports manual dispatch. Both workflows have read-only repository permissions and contain no task to commit, publish, upgrade packages or open pull requests.
+The `Dependency health` workflow supports `workflow_dispatch` and runs Mondays at 03:31 UTC. GitHub schedules use the default branch, so scheduled execution starts after that workflow is merged there. The dependency workflow uses read-only repository permissions and reports findings without changing dependencies or publishing artifacts to a package registry. CI separately publishes deployment images for eligible production runs; see [automatic deployment](automatic-deployment.md).
 
 ## Checks and reports
 

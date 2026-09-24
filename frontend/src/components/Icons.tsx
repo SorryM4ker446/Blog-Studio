@@ -70,10 +70,8 @@ export const ChevronDownIcon = ({ size = 16, className = "", style = {} }) => (
 
 export const StudioLogo = ({ size = 24, className = "", style = {} }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} style={style}>
-    {/* Abstract geometric Studio logo */}
     <rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
     <rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
-    {/* Minimal highlight point */}
     <circle cx="9" cy="9" r="1.5" fill="var(--accent-blue, #6ea8fe)" />
   </svg>
 );

@@ -1,28 +1,19 @@
-/* d:\blog\frontend\src\app\globals.css */
 :root {
   color-scheme: dark;
 
-  /* Google AI Studio 经典暗色色调 */
   --bg-sidebar: #000000;
-  /* 增强左侧栏对比度的纯黑色 */
   --bg-base: #131314;
-  /* 主内容区背景 */
   --bg-surface: #1e1f20;
-  /* 卡片前景色 */
   --bg-hover: #282a2c;
   --post-frame-bg: #03000085;
-  /* 卡片 hover */
   --nav-active: #313336;
-  /* 显著的高对比灰色激活项目 */
 
   --text-primary: #e3e3e3;
   --text-secondary: #c4c7c5;
   --text-muted: #a0a4a1;
 
-  /* 分割线颜色 */
   --border-color: #313335;
 
-  /* 品牌或点缀色 (取自参考图的 icon 颜色) */
   --accent-blue: #a8c7fa;
   --accent-green: #6dd68c;
   --accent-yellow: #fbd284;
@@ -62,7 +53,6 @@
 .theme-light {
   color-scheme: light;
 
-  /* Light mode colors */
   --bg-sidebar: #f8f9fa;
   --bg-base: #ffffff;
   --bg-surface: #f1f3f4;
@@ -109,7 +99,7 @@ body {
   line-height: 1.5;
   height: 100vh;
   overflow: hidden;
-  /* 防止原生滚动条毁坏布局，采用内层滚动 */
+  /* The app shell owns scrolling inside the viewport. */
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
@@ -177,7 +167,6 @@ a {
   text-decoration: none;
 }
 
-/* Accessible editor controls shared by the post form. */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -731,14 +720,12 @@ button:focus-visible,
   outline-offset: 3px;
 }
 
-/* 整站横向排布架构：左侧栏 + 右边主内容区 */
 .app-container {
   display: flex;
   height: 100vh;
   width: 100vw;
 }
 
-/* --- 左侧边栏 --- */
 .sidebar {
   width: var(--sidebar-width);
   height: 100%;
@@ -756,7 +743,6 @@ html[data-sidebar-state="collapsed"] .sidebar {
   width: var(--sidebar-width-collapsed);
 }
 
-/* --- Header --- */
 .sidebar-header {
   height: 56px;
   padding: 0 0.5rem 0 0.85rem;
@@ -774,7 +760,6 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-header {
   gap: 0;
 }
 
-/* Logo container for flex shrinking */
 .sidebar-logo-container {
   display: flex;
   align-items: center;
@@ -798,7 +783,6 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-container {
   color: var(--text-primary);
 }
 
-/* Logo text: smooth max-width + opacity animation */
 .sidebar-logo-text {
   font-weight: 600;
   font-size: 1.15rem;
@@ -819,7 +803,6 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-text {
   max-width: 0;
 }
 
-/* Toggle button: always visible, rotates when collapsed */
 .sidebar-toggle {
   width: 32px;
   height: 32px;
@@ -848,7 +831,6 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-toggle {
   transform: rotate(180deg);
 }
 
-/* --- Nav Menu --- */
 .nav-menu {
   flex: 1;
   padding: 0.25rem 0.6rem;
@@ -856,7 +838,6 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-toggle {
   flex-direction: column;
   gap: 0.1rem;
   min-height: 0;
-  /* allow shrinking */
   overflow: hidden;
   transition: padding var(--sidebar-motion-duration) var(--sidebar-motion-easing);
 }
@@ -866,7 +847,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-menu {
   padding: 0.25rem 0;
 }
 
-/* Standard nav item */
 .nav-item {
   display: flex;
   align-items: center;
@@ -897,7 +877,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-menu {
   color: var(--text-primary);
 }
 
-/* Nav icon — consistent 20px box in all states */
 .nav-icon {
   flex-shrink: 0;
   width: 20px;
@@ -907,7 +886,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-menu {
   justify-content: center;
 }
 
-/* Active Icon Blue tint */
 .nav-icon.active-icon-blue {
   color: var(--accent-blue);
 }
@@ -920,7 +898,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-item {
   position: relative;
 }
 
-/* 收起模式下取消 Settings 的 hover 效果 */
 .sidebar.collapsed .sidebar-footer a[href="/settings"]:hover,
 html[data-sidebar-state="collapsed"] .sidebar .sidebar-footer a[href="/settings"]:hover {
   background-color: transparent !important;
@@ -946,7 +923,6 @@ html[data-sidebar-state="collapsed"] .sidebar .hide-on-collapse {
   pointer-events: none;
 }
 
-/* --- Tooltip (CSS-only, no JS) --- */
 .sidebar.collapsed [data-tooltip],
 html[data-sidebar-state="collapsed"] .sidebar [data-tooltip] {
   position: relative;
@@ -980,7 +956,6 @@ html[data-sidebar-state="collapsed"] .sidebar [data-tooltip]:hover::after {
   transform: translateY(-50%) translateX(0);
 }
 
-/* --- Section title --- */
 .nav-group-title {
   margin: 0.6rem 0 0.15rem 0.85rem;
   font-size: 0.73rem;
@@ -991,7 +966,6 @@ html[data-sidebar-state="collapsed"] .sidebar [data-tooltip]:hover::after {
   max-width: 200px;
   max-height: 24px;
   opacity: 1;
-  /* CSS animated: title shrinks and fades when sidebar collapses */
   transition:
     opacity 0.12s ease,
     max-height var(--sidebar-motion-duration) var(--sidebar-motion-easing),
@@ -1008,7 +982,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-group-title {
   margin-bottom: 0;
 }
 
-/* --- Nav item labels (CSS animated, always rendered) --- */
 .nav-item-label {
   flex: 1;
   white-space: nowrap;
@@ -1026,7 +999,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-item-label {
   max-width: 0;
 }
 
-/* --- Sidebar footer (flex-shrink:0 so it's never cut off) --- */
 .sidebar-footer {
   padding: 0.5rem 0.6rem;
   display: flex;
@@ -1041,9 +1013,6 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-footer {
   padding: 0.5rem 0;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   All Posts Row — split link + chevron so chevron doesn't navigate
-═══════════════════════════════════════════════════════════════════ */
 .nav-posts-row {
   display: flex;
   align-items: center;
@@ -1248,7 +1217,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-posts-chevron {
   margin-top: 0.25rem;
 }
 
-/* --- 右侧主要内容区 --- */
 .main-content {
   flex: 1;
   display: flex;
@@ -1311,10 +1279,8 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-posts-chevron {
   flex: 1;
   overflow-y: auto;
   padding: 3rem 18% 4rem 18%;
-  /* 两侧流白以贴近 Studio 中间展示区风格 */
 }
 
-/* --- UI 组件集 --- */
 .page-title {
   font-size: 2rem;
   font-weight: 400;
@@ -1333,7 +1299,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-posts-chevron {
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   border: 1px solid var(--border-color);
-  /* 统一增加细边框 */
   transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
   display: flex;
@@ -1344,7 +1309,6 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-posts-chevron {
 body.theme-light .ai-card {
   background-color: #ffffff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  /* 浅色模式增加极细投影 */
 }
 
 
@@ -1394,7 +1358,6 @@ body.theme-light .ai-card {
   color: var(--text-primary);
 }
 
-/* --- 文章详情页 --- */
 .post-detail {
   max-width: 720px;
 }
@@ -1419,7 +1382,6 @@ body.theme-light .ai-card {
 
 body.theme-light .post-category {
   background: rgba(26, 115, 232, 0.08);
-  /* 浅色模式下色值微调 */
   color: #1a73e8;
 }
 
@@ -1459,7 +1421,6 @@ body.theme-light .post-category {
   margin-bottom: 1.2rem;
 }
 
-/* --- Smooth Transitions --- */
 .route-transition-frame {
   width: 100%;
   min-height: 100%;
@@ -1497,7 +1458,6 @@ body.theme-light .post-category {
   }
 }
 
-/* Skeleton loading pulse */
 .skeleton-pulse {
   background: linear-gradient(90deg,
       var(--bg-surface) 25%,
@@ -1518,7 +1478,6 @@ body.theme-light .post-category {
   }
 }
 
-/* --- Top Bar Profile --- */
 .top-bar-profile {
   display: flex;
   align-items: center;
@@ -1560,7 +1519,6 @@ body.theme-light .post-category {
   line-height: 1.2;
 }
 
-/* Premium Select Styling */
 .search-filters {
   display: flex;
   align-items: flex-end;
@@ -1615,7 +1573,6 @@ body.theme-light .post-category {
   background-color: rgba(255, 255, 255, 0.02) !important;
 }
 
-/* Markdown Editor Universal Overrides (Theme Aware) */
 .custom-editor-wrapper .rc-md-editor {
   background-color: var(--bg-sidebar) !important;
   border: 1px solid var(--border-color) !important;
@@ -1666,7 +1623,6 @@ body.theme-light .post-category {
 }
 
 
-/* Custom Select Component Styles */
 .custom-select-container {
   position: relative;
   width: 100%;
@@ -1914,14 +1870,11 @@ body.theme-light .custom-select-options {
   }
 }
 
-/* Post Body & Markdown Content Styling */
-/* Handled above to prevent duplication */
 
 .post-body p {
   margin-bottom: 1.5rem;
 }
 
-/* Responsive Images in Markdown */
 .post-body img,
 .custom-html-style img {
   max-width: 100%;
@@ -1960,7 +1913,6 @@ body.theme-light .custom-select-options {
   color: var(--text-muted);
 }
 
-/* Vercel-like Post Detail */
 .post-frame {
   position: relative;
   max-width: 980px;
@@ -2500,7 +2452,6 @@ body.theme-light .custom-select-options {
   }
 }
 
-/* Responsive shell and keyboard access */
 html, body, .app-container, .main-content { height: 100dvh; }
 .main-content, .content-scroll, .route-transition-frame { min-width: 0; }
 .main-content:focus { outline: none; }

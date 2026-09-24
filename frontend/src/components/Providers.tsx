@@ -21,7 +21,6 @@ import {
   ChevronDownIcon
 } from "./Icons";
 
-// ─── Sidebar Context ──────────────────────────────────────────────────────────
 interface SidebarContextType {
   isCollapsed: boolean;
   toggleSidebar: () => void;
@@ -40,7 +39,6 @@ export function useSidebar() {
   return context;
 }
 
-// ─── Root Provider ────────────────────────────────────────────────────────────
 export function Providers({
   children,
   initialSidebarCollapsed = false,
@@ -93,7 +91,6 @@ export function Providers({
   );
 }
 
-// ─── Sidebar Nav ──────────────────────────────────────────────────────────────
 function SidebarPageLink({ href, className = "", ...props }: ComponentProps<typeof Link> & { href: string }) {
   const pathname = usePathname();
   const selection = useContext(SidebarSelectionContext) ?? pathname;
@@ -182,7 +179,6 @@ export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}
 
   return (
     <nav className="nav-menu" aria-label="Primary navigation">
-      {/* Posts Playground */}
       <SidebarPageLink href="/" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
         <GridIcon className="nav-icon" style={{ color: "var(--accent-yellow)" }} />
         <span className="nav-item-label">Posts Playground</span>
@@ -190,7 +186,6 @@ export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}
 
       <div className="nav-group-title">Features</div>
 
-      {/* ── All Posts row ──────────────────────────────────────────────────── */}
       <div data-sidebar-section="/posts" className={`nav-posts-row${isAllPostsActive ? " active" : ""}`}>
         <Link href="/posts" className="nav-posts-link" aria-label="All Posts" data-tooltip={isCollapsed ? "All Posts" : undefined} aria-current={isAllPostsActive ? "page" : undefined}>
           <ListIcon className="nav-icon active-icon-blue" />
@@ -218,7 +213,6 @@ export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}
         </button>
       </div>
 
-      {/* Categories sub-menu */}
       {categories.length > 0 && (
         <div
           className={`sidebar-categories${!isCollapsed && isPostsExpanded ? " expanded" : ""}`}
@@ -255,13 +249,11 @@ export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}
         </div>
       )}
 
-      {/* Cloud Drive */}
       <SidebarPageLink href="/drive" inert={isCollapsed} aria-hidden={isCollapsed} className={`nav-item hide-on-collapse nav-cloud-drive${!isCollapsed && isPostsExpanded ? " categories-expanded" : ""}`}>
         <CloudIcon className="nav-icon" style={{ color: "var(--accent-green)" }} />
         <span className="nav-item-label">Cloud Drive</span>
       </SidebarPageLink>
 
-      {/* Content Editor */}
       {user?.role === "admin" && (
         <SidebarPageLink href="/editor" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
           <EditIcon className="nav-icon" style={{ color: "var(--accent-red)" }} />
@@ -272,7 +264,6 @@ export function SidebarContent({ expanded = false }: { expanded?: boolean } = {}
   );
 }
 
-// ─── Sidebar Footer ───────────────────────────────────────────────────────────
 export function SidebarFooter({ expanded = false }: { expanded?: boolean } = {}) {
   const { user, authStatus } = useAuth();
   const { isCollapsed: desktopCollapsed } = useSidebar();
@@ -280,13 +271,11 @@ export function SidebarFooter({ expanded = false }: { expanded?: boolean } = {})
 
   return (
     <div className="sidebar-footer">
-      {/* Advanced Search */}
       <SidebarPageLink href="/search" className="nav-item hide-on-collapse" inert={isCollapsed} aria-hidden={isCollapsed}>
         <SearchIcon className="nav-icon" />
         <span className="nav-item-label">Advanced Search</span>
       </SidebarPageLink>
 
-      {/* Login — above Settings, guest only */}
       {authStatus === "anonymous" && !user && (
         <SidebarPageLink href="/login" aria-label="Login" className="nav-item" data-tooltip={isCollapsed ? "Login" : undefined}>
           <LoginIcon className="nav-icon" />

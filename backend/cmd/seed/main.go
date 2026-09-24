@@ -22,7 +22,6 @@ func main() {
 		log.Fatalf("Invalid application configuration: %v", err)
 	}
 
-	// Initialize database
 	if err := config.InitDB(context.Background()); err != nil {
 		log.Fatalf("Initialize database: %v", err)
 	}

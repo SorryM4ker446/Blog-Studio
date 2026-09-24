@@ -17,7 +17,7 @@ Storage exceptions cannot interrupt appearance controls. If cookie writes are re
 
 Old `blog_theme` and `sidebar_collapsed` localStorage entries are left untouched and ignored. Authentication still attempts to remove obsolete `blog_token` and `blog_user` entries while containing storage errors. Unrelated storage is not cleared. Scroll restoration uses per-entry browser history metadata, and [article recovery](editor.md#browser-recovery-copies) continues using IndexedDB with its own retention and logout rules. Appearance changes never clear recovery copies.
 
-Deploy the rebuilt frontend and reload existing pages to activate this behavior. See [testing](testing.md#appearance-preferences) for the regression scope.
+See [testing](testing.md#appearance-preferences) for the regression scope.
 
 ## Date display
 

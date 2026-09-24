@@ -18,7 +18,7 @@ type schemaCategory struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Name        string    `gorm:"unique;not null;size:50" json:"name"`
 	Description string    `gorm:"type:text" json:"description"`
-	PostCount   int64     `gorm:"->;-:migration" json:"post_count"` // Only used for response
+	PostCount   int64     `gorm:"->;-:migration" json:"post_count"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 

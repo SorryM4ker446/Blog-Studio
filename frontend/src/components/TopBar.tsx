@@ -12,8 +12,6 @@ export default function TopBar({ navigation }: { navigation?: React.ReactNode })
   const avatarFailed = !!profile?.avatar && failedAvatarUrl === profile.avatar;
   const targetTheme = theme === "dark" ? "Light" : "Dark";
 
-  // If globally loading for the first time, we can show a minimal placeholder
-  // but once loaded, it stays in sync without flickering on navigation.
   return (
     <header className="top-bar">
       {navigation}
@@ -47,13 +45,11 @@ export default function TopBar({ navigation }: { navigation?: React.ReactNode })
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-          {/* Only render if name exists and is not empty */}
           {profile?.name && (
             <div className="top-bar-name" style={{ marginBottom: profile.description ? "0" : "0" }}>
               {profile.name}
             </div>
           )}
-          {/* Only render if description exists and is not empty */}
           {profile?.description && (
             <div className="top-bar-desc">{profile.description}</div>
           )}
