@@ -121,6 +121,15 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse((self.state / "attention.json").exists())
         self.assertEqual((self.root / "deploy/.env").read_text(), "APP_IMAGE_TAG=old\n")
 
+    def test_public_health_checks_retry_transient_failures(self):
+        fake = FakeDocker()
+        release.Deployer(self.root, self.bundle, run=fake).health(fake.config)
+        self.assertEqual(fake.calls, [
+            ["curl", "--fail", "--silent", "--show-error", "--retry", "10", "--retry-all-errors", "--max-time", "30", "https://example.test/health/ready"],
+            ["curl", "--fail", "--silent", "--show-error", "--retry", "10", "--retry-all-errors", "--max-time", "30", "https://example.test/api/settings"],
+            ["curl", "--fail", "--silent", "--show-error", "--retry", "10", "--retry-all-errors", "--max-time", "30", "https://example.test/api/links"],
+        ])
+        
     def test_pull_failure_keeps_application_running(self):
         fake = FakeDocker(lambda args: args[:2] == ["docker", "pull"])
         with self.assertRaises(subprocess.CalledProcessError):

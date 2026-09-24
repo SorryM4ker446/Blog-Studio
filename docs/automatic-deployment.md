@@ -148,7 +148,7 @@ The site URL is read from the existing VPS configuration. No duplicate `SITE_URL
 
 To retry a transport or cleanup problem, first inspect server state and resolve any deployment guard, then use **Re-run failed jobs** (or **Re-run all jobs** for a successful run with a cleanup warning) on the corresponding CD run. The same source artifacts are retained for 14 days. Expired artifacts require a new CI run on the intended production revision; do not substitute artifacts from another run. Do not retry pre-split CI releases through CD: start a new CI run containing both workflow changes and the updated dispatcher. A newer successful deployment still prevents an older run from replacing it.
 
-The server process is detached from SSH. Losing the runner connection or cancelling polling does not terminate migrations. GitHub concurrency and the server lock prevent simultaneous deployments. Commands have deadlines (backup 35 minutes, others 30 minutes; health requests 30 seconds). Polling lasts up to 90 minutes. If it fails, inspect the running job before retrying. Pending GitHub runs can be superseded; active deployments are not automatically cancelled.
+The server process is detached from SSH. Losing the runner connection or cancelling polling does not terminate migrations. GitHub concurrency and the server lock prevent simultaneous deployments. Commands have deadlines (backup 35 minutes, others 30 minutes); public health requests allow up to 30 seconds per attempt and retry transient failures up to 10 times. Polling lasts up to 90 minutes. If it fails, inspect the running job before retrying. Pending GitHub runs can be superseded; active deployments are not automatically cancelled.
 
 Private, Git-ignored runtime state:
 
