@@ -235,15 +235,13 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
                       }}
                     >
                       <div
-                        className="card-icon"
+                        className="card-icon post-list-icon"
                         style={{
-                          backgroundColor: "rgba(168, 199, 250, 0.12)",
-                          color: "var(--accent-blue)",
                           marginRight: "1rem",
                           flexShrink: 0,
                         }}
                       >
-                        <FileTextIcon size={16} />
+                        <FileTextIcon size={14} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <h4

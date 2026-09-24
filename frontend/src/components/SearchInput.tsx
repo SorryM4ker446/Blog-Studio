@@ -35,12 +35,6 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
     }
   }
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!e.currentTarget.value.trim()) {
-      onSearch("");
-    }
-  }
-
   return (
     <div className={variant === "editor" ? "editor-search-control" : undefined} style={{ position: "relative", ...style }}>
       {variant === "editor" ? <button type="button" className="editor-search-submit" aria-label="Submit search" onClick={() => void onSearch(inputRef.current?.value ?? "")}>
@@ -54,7 +48,6 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
         aria-label={focusKey}
         enterKeyHint="search"
         defaultValue={value || ""}
-        onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         style={variant === "editor" ? undefined : {

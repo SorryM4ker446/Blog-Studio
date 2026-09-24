@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { FileRecord } from "@/lib/api";
 import { getFiles, searchResources } from "@/lib/api";
 import { readResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib/resource-query";
+import { useScopeTransition } from "@/lib/use-scope-transition";
 import { useResourcePage } from "@/lib/use-resource-page";
 import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
@@ -36,7 +37,9 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
   const { state, loading, restoring, run, retry: retryLastRequest } = useResourcePage(
     initialState, { query: initialState.query, categoryId: "", scope: "files", page: initialState.page }, query, load, "/drive", "page", true, "public",
   );
-  const { files, error, page, totalPages } = state;
+  const transitionState = useMemo(() => ({ ...state, scope: "files" }), [state]);
+  const { displayed, ref: resultsRef, changing } = useScopeTransition(transitionState, "files", loading, transitionState, animatePages && !restoring);
+  const { files, error, page, totalPages } = displayed;
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   function handleSearch(value: string) {
     setAnimatePages(true);
@@ -63,6 +66,7 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
           </p>
         </div>
         <SearchInput
+          variant="editor"
           placeholder="Search files..."
           onSearch={handleSearch}
           style={{ width: "250px" }}
@@ -70,7 +74,7 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
         />
       </div>
 
-      <section aria-label="Files" aria-busy={loading}>
+      <section ref={resultsRef} aria-label="Files" aria-busy={loading || changing} inert={changing}>
       {error ? (
         <ErrorState message={error} onRetry={retryLastRequest} retrying={loading} />
       ) : restoring ? (
@@ -79,13 +83,14 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
           <ListPending label="Loading files…" />
         </PaginatedResults>
       ) : (
-        <PaginatedResults page={page} totalPages={totalPages} pending={loading} animateChanges={animatePages}
-          resultKey={JSON.stringify([state.query, page])} onPageChange={handlePageChange}>
+        <PaginatedResults page={page} totalPages={totalPages} pending={loading || changing} animateChanges={animatePages}
+          transitionGroup={displayed.query}
+          resultKey={JSON.stringify([displayed.query, page])} onPageChange={handlePageChange}>
         {files.length === 0 ? (
         <EmptyState
-          title={state.query ? "No matching files" : "No files yet"}
-          message={state.query
-            ? `No files match “${state.query}”. Try another file name.`
+          title={displayed.query ? "No matching files" : "No files yet"}
+          message={displayed.query
+            ? `No files match “${displayed.query}”. Try another file name.`
             : "No public files have been uploaded yet."}
           icon={<FolderIcon size={48} />}
         />

@@ -35,6 +35,8 @@ for (const theme of ["dark", "light"]) {
       await page.getByRole("button", { name: "Submit search", exact: true }).click();
       await expect(page.getByRole("heading", { name: "No matching links", exact: true })).toBeVisible();
       await page.getByPlaceholder("Search links...").clear();
+      await expect(page.getByRole("heading", { name: "No matching links", exact: true })).toBeVisible();
+      await page.getByPlaceholder("Search links...").press("Enter");
       await expect(page.getByPlaceholder("Search links...")).toHaveCSS("box-shadow", "none");
       await expect(page.getByPlaceholder("Search links...")).toHaveCSS("outline-style", "none");
       await expect(page.locator(".editor-search-control")).not.toHaveCSS("box-shadow", "none");

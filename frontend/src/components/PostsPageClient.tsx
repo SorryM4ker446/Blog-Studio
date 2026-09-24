@@ -8,6 +8,7 @@ import { getPostTimeline, getPosts, searchResources, getCategories } from "@/lib
 import type { PostSummary } from "@/lib/api";
 import Link from "next/link";
 import { readResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib/resource-query";
+import { useScopeTransition } from "@/lib/use-scope-transition";
 import { useResourcePage } from "@/lib/use-resource-page";
 import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
@@ -43,7 +44,9 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
   const { state, loading, restoring, run, retry: retryLastRequest } = useResourcePage(
     initialState, { query: initialState.query, categoryId: initialState.categoryId, scope: "posts", page: initialState.page }, query, load, "/posts", "page", true, "public",
   );
-  const { posts, error, page, totalPages, currentCategoryName } = state;
+  const transitionState = useMemo(() => ({ ...state, scope: "posts" }), [state]);
+  const { displayed, ref: resultsRef, changing } = useScopeTransition(transitionState, "posts", loading, transitionState, animateChanges && !restoring);
+  const { posts, error, page, totalPages, currentCategoryName } = displayed;
 
   function handleSearch(value: string) {
     setAnimateChanges(true);
@@ -83,6 +86,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
           </p>
         </div>
         <SearchInput
+          variant="editor"
           placeholder="Search posts..."
           onSearch={handleSearch}
           style={{ width: "250px" }}
@@ -90,7 +94,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
         />
       </div>
 
-      <section aria-label="Posts" aria-busy={loading}>
+      <section ref={resultsRef} aria-label="Posts" aria-busy={loading || changing} inert={changing}>
       {error ? (
         <ErrorState message={error} onRetry={retryLastRequest} retrying={loading} />
       ) : restoring ? (
@@ -99,13 +103,14 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
           <ListPending label="Loading posts…" />
         </PaginatedResults>
       ) : (
-        <PaginatedResults page={page} totalPages={totalPages} pending={loading} animateChanges={animateChanges}
-          resultKey={JSON.stringify([state.query, state.categoryId, page])} onPageChange={handlePageChange}>
+        <PaginatedResults page={page} totalPages={totalPages} pending={loading || changing} animateChanges={animateChanges}
+          transitionGroup={JSON.stringify([displayed.query, displayed.categoryId])}
+          resultKey={JSON.stringify([displayed.query, displayed.categoryId, page])} onPageChange={handlePageChange}>
         {posts.length === 0 ? (
         <EmptyState
-          title={state.query ? "No matching posts" : "No posts yet"}
-          message={state.query
-            ? `No posts match “${state.query}”. Try another keyword.`
+          title={displayed.query ? "No matching posts" : "No posts yet"}
+          message={displayed.query
+            ? `No posts match “${displayed.query}”. Try another keyword.`
             : currentCategoryName
               ? `There are no published posts in ${currentCategoryName}.`
               : "No published posts are available yet."}
@@ -127,10 +132,8 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
                 }}
               >
                 <div
-                  className="card-icon"
+                  className="card-icon post-list-icon"
                   style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    color: "var(--text-secondary)",
                     marginRight: "1.2rem",
                     flexShrink: 0,
                   }}

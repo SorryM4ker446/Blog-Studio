@@ -269,6 +269,8 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   await postsSearch.press("Enter");
   await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(postTitle);
   await postsSearch.fill("");
+  expect(new URL(page.url()).searchParams.get("q")).toBe(postTitle);
+  await postsSearch.press("Enter");
   await expect.poll(() => new URL(page.url()).searchParams.has("q")).toBe(false);
   await expect.poll(() => postsSearch.evaluate((element: HTMLInputElement) => ({
     focused: document.activeElement === element,

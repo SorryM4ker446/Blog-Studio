@@ -65,7 +65,7 @@ for (const scenario of cases) {
     await input.fill("list-motion");
     await input.press("Enter");
     const region = editor ? page.getByRole("tabpanel") : page.getByRole("region", { name: scenario.region, exact: true });
-    const rows = region.locator(scenario.kind === "posts" ? (editor ? ".editor-post-card" : 'a[href^="/posts/"]') : "[data-file-id]");
+    const rows = region.locator("[data-result-page]").locator(scenario.kind === "posts" ? (editor ? ".editor-post-card" : 'a[href^="/posts/"]') : "[data-file-id]");
     const next = region.getByRole("button", { name: "Next page" });
     const previous = region.getByRole("button", { name: "Previous page" });
     await expect(rows).toHaveCount(10);
@@ -174,6 +174,12 @@ for (const scenario of cases) {
     expect(paginationGaps).toHaveLength(2);
     for (const gap of paginationGaps) expect(gap).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const searchedUrl = page.url();
+    await input.fill("");
+    await expect(page).toHaveURL(searchedUrl);
+    await expect(rows).toHaveCount(1);
+    await input.press("Enter");
+    await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBeNull();
     } finally {
       if (returnPost) await page.request.delete(`${E2E_API_URL}/admin/posts/${returnPost.id}`, { headers });
     }

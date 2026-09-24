@@ -98,7 +98,14 @@ func UpdateSettings(c *gin.Context) {
 			return
 		}
 		value := input[rawKey]
-		if err := validateOptionalLength(value, "setting value", 100_000); err != nil {
+		limit := 100_000
+		switch key {
+		case "profile_name":
+			limit = 20
+		case "profile_description":
+			limit = 100
+		}
+		if err := validateOptionalLength(value, "setting value", limit); err != nil {
 			apiresponse.Error(c, http.StatusBadRequest, "invalid_setting_value", err.Error())
 			return
 		}

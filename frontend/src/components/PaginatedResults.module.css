@@ -1,2 +1,2 @@
-.frame { position: relative; container-type: inline-size; container-name: list-results; }
+.frame { position: relative; container-type: inline-size; container-name: list-results; overflow-anchor: none; }
 .viewport { overflow: clip; overflow-clip-margin: 6px; }

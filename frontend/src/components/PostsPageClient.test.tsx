@@ -110,6 +110,8 @@ describe("category post search", () => {
     fireEvent.change(input, { target: { value: "slow" } });
     fireEvent.keyDown(input, { key: "Enter" });
     fireEvent.change(input, { target: { value: "" } });
+    expect(new URLSearchParams(window.location.search).get("q")).toBe("slow");
+    fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => expect(getPostsMock).toHaveBeenCalled());
     resolveSearch?.({ posts: [slowResult], files: [] });

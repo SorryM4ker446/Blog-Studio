@@ -41,7 +41,7 @@ Repeated execution is idempotent. Concurrent commands serialize on the database 
 
 ### Settings and files
 
-- A settings update validates the complete request before writing and upserts all entries atomically.
+- A settings update validates the complete request before writing and upserts all entries atomically. Profile names allow up to 20 Unicode characters and descriptions up to 100; existing longer values remain readable but must be shortened before resaving those fields.
 - An upload removes the newly written disk file if its database record cannot be created.
 - File deletion first moves disk content to a quarantine name. A failed database delete restores it; a successful delete removes the quarantined content.
 
