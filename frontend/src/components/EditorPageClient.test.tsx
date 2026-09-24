@@ -411,6 +411,7 @@ describe("Editor article detail loading", () => {
     expect(oldSignal.aborted).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Another article" }));
     await act(async () => current.resolve({ ...fullPost, id: 8, title: "Current article", content: "Current body" }));
+    expect(await screen.findByTestId("editing-title")).toHaveTextContent("Current article");
     await act(async () => old.resolve(fullPost));
     expect(screen.getByTestId("editing-title")).toHaveTextContent("Current article");
     expect(screen.getByRole("textbox", { name: "Loaded article body" })).toHaveValue("Current body");
