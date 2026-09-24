@@ -7,7 +7,7 @@ Blog Studio is a full-stack blog and content management application. The reposit
 - Public article and file browsing with category filters, search, pagination, and responsive navigation.
 - An authenticated editor for posts and cloud-drive files.
 - Version-checked saves, explicit publication actions, recovery copies, and unsaved-change protection.
-- Server-rendered initial pages with stable refresh, navigation, and layout behavior.
+- Server-rendered public pages and editor views.
 - PostgreSQL-backed search with exact result counts and bounded pagination.
 - Health endpoints, structured operational checks, Prometheus metrics, backup and restore tools, and CI validation.
 
@@ -119,15 +119,15 @@ go build ./...
 
 Backend integration tests require `TEST_DB_DSN` pointing to a disposable database whose name ends in `_test`; they are skipped when it is unset. Playwright also requires this isolated database. Configure it using [the test database instructions](docs/testing.md#test-database) before running these suites. Container topology and deployment checks run in GitHub Actions.
 
-See [`docs/testing.md`](docs/testing.md) for test boundaries, database setup, browser coverage, failure artifacts, and the current quality gates. Coverage reports are generated locally and are not a substitute for the CI result.
+See [`docs/testing.md`](docs/testing.md) for coverage, failure artifacts, and quality gates.
 
 ## Configuration and security
 
 `backend/.env.example` lists the supported backend variables and safe placeholders. Container deployments use the non-secret template in `deploy/.env.example` and secret files described in [`deploy/secrets/README.md`](deploy/secrets/README.md). Do not place passwords, JWT values, database DSNs, or restored data in committed configuration.
 
-Sessions use site-level HttpOnly cookies and are not stored in `localStorage`. Sign-out and password changes invalidate old sessions. Theme and sidebar preferences use cookies so the server-rendered page and the browser start with the same values. Runtime health checks, public caching, rate limits, metrics, request logging, and shutdown behavior are documented in [`docs/runtime-operations.md`](docs/runtime-operations.md).
+Sessions use site-level HttpOnly cookies and are not stored in `localStorage`. Sign-out and password changes invalidate old sessions. Runtime health checks, public caching, rate limits, metrics, request logging, and shutdown behavior are documented in [`docs/runtime-operations.md`](docs/runtime-operations.md).
 
-Read the following documents for behavior that is easy to miss during development:
+## Documentation
 
 - [`docs/editor.md`](docs/editor.md) — editor behavior, save and publish compatibility, recovery, and leave protection.
 - [`docs/accessibility.md`](docs/accessibility.md) — keyboard behavior, responsive navigation, reduced motion, and image loading.
@@ -140,11 +140,11 @@ Read the following documents for behavior that is easy to miss during developmen
 
 The supported deployment baseline is one Linux host running Docker Compose, with Caddy as the public HTTPS entry point, private Next.js and Go services, PostgreSQL, and persistent upload and certificate volumes. The deployment workflow runs migrations before the API, uses secret files for sensitive values, and exposes only Caddy to the public network.
 
-Follow [`docs/deployment.md`](docs/deployment.md) for host prerequisites, secret preparation, the `pg_trgm` prerequisite, first deployment, upgrades, rollback, and troubleshooting. The committed CI workflow validates the container topology; a successful native run does not prove that the remote container job or a production deployment has passed.
+Follow [`docs/deployment.md`](docs/deployment.md) for setup, upgrades, rollback, and troubleshooting. The committed CI workflow validates the container topology; a successful native run does not prove that the remote container job or a production deployment has passed.
 
 ## Styling
 
-Global styles and theme variables are defined in `frontend/src/app/globals.css`: `:root` provides the dark theme and `.theme-light` overrides it. `--bg-sidebar` controls the sidebar background, `--nav-active` the active navigation background, and `--accent-*` the accent colors. See [accessibility](docs/accessibility.md) for keyboard and reduced-motion behavior.
+Global styles and theme variables are defined in `frontend/src/app/globals.css`. Dark theme defaults are overridden by `.theme-light`. See [accessibility](docs/accessibility.md) for keyboard and reduced-motion behavior.
 
 ## License
 
