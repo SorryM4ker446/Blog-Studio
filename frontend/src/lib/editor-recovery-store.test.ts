@@ -3,6 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RECOVERY_DATABASE, RECOVERY_MAX_BYTES, RECOVERY_MAX_COPIES, RECOVERY_TTL, RecoveryWriter, recoveryStorage, validRecovery, openRecoveryChannel, type RecoveryCopy, type RecoveryStorage } from "./editor-recovery-store";
 
 const fields = { title: "Local", summary: "", content: "Unsaved body", category_id: 0 };
+function persistedCopy(id: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(RECOVERY_DATABASE, 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction("copies", "readonly");
+      const row = tx.objectStore("copies").get(id);
+      tx.oncomplete = () => { db.close(); resolve(row.result); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  });
+}
 function copy(patch: Partial<RecoveryCopy> = {}): RecoveryCopy {
   const now = Date.now();
   return { id: crypto.randomUUID(), format: 1, userId: 1, target: "post:7", tab: "tab-a", updatedAt: now, expiresAt: now + RECOVERY_TTL,
@@ -34,8 +47,10 @@ describe("Browser recovery storage", () => {
     const session = await recoveryStorage.start(1);
     await expect(recoveryStorage.put(session, copy({ fields: { ...fields, content: "x".repeat(RECOVERY_MAX_BYTES) } }))).rejects.toThrow();
     const row = copy(); await recoveryStorage.put(session, row);
+    expect(await persistedCopy(row.id)).toEqual(row);
     vi.spyOn(Date, "now").mockReturnValue(row.expiresAt);
     expect(await recoveryStorage.list(1, row.target)).toEqual([]);
+    expect(await persistedCopy(row.id)).toBeUndefined();
   });
   it("refuses capacity overflow without evicting existing unsaved copies", async () => {
     const session = await recoveryStorage.start(1);
@@ -68,7 +83,9 @@ describe("Browser recovery storage", () => {
         tx.oncomplete = () => { db.close(); resolve(); };
       };
     });
+    expect(await persistedCopy("corrupt")).toEqual({ id: "corrupt", userId: 1 });
     expect(await recoveryStorage.list(1, "post:7")).toEqual([]);
+    expect(await persistedCopy("corrupt")).toBeUndefined();
   });
 });
 

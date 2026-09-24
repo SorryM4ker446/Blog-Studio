@@ -148,6 +148,7 @@ axe scans public/admin pages and dialogs; serious or critical violations fail th
 From the repository root:
 
 ```powershell
+python -m pip install -r deploy/tests/requirements.txt
 python -m unittest discover -s deploy/tests -v
 ```
 

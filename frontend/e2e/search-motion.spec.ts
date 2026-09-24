@@ -89,8 +89,13 @@ for (const theme of ["dark", "light"]) {
     await expect(page.locator('section[aria-label="Search results"]')).not.toHaveAttribute("inert");
     expect(await page.evaluate(() => (window as unknown as { searchMotionRecords: unknown[] }).searchMotionRecords.length)).toBe(count);
     await page.setViewportSize({ width: 760, height: 1000 });
-    const list = await posts.locator("[data-result-page]").boundingBox();
-    expect((await previous.boundingBox())!.y).toBeGreaterThan(list!.y + list!.height);
+    // Read both rectangles in one frame because resize can change scroll anchoring.
+    const paginationGap = await posts.evaluate(section => {
+      const list = section.querySelector("[data-result-page]")!.getBoundingClientRect();
+      const previous = section.querySelector('button[aria-label="Previous page"]')!.getBoundingClientRect();
+      return previous.top - list.bottom;
+    });
+    expect(paginationGap).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }

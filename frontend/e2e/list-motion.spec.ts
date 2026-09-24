@@ -158,7 +158,6 @@ for (const scenario of cases) {
       expect(await content.evaluate(node => node.parentElement!.getBoundingClientRect().height)).toBeCloseTo(initialFrameHeight, 0);
     }
     await page.setViewportSize({ width: 760, height: 1000 });
-    const narrowContent = await content.boundingBox();
     if (editor) {
       await expect.poll(() => content.evaluate(node => {
         const grid = node.querySelector(".editor-resource-grid")!;
@@ -166,8 +165,14 @@ for (const scenario of cases) {
         return Math.abs(node.parentElement!.getBoundingClientRect().height - (row * 10 + 9 * 16));
       })).toBeLessThan(1);
     }
-    expect((await previous.boundingBox())!.y).toBeGreaterThan(narrowContent!.y + narrowContent!.height);
-    expect((await next.boundingBox())!.y).toBeGreaterThan(narrowContent!.y + narrowContent!.height);
+    const paginationGaps = await region.evaluate((node) => {
+      const bottom = node.querySelector('[data-result-page]')!.getBoundingClientRect().bottom;
+      const buttons = node.querySelectorAll('button[aria-label="Previous page"], button[aria-label="Next page"]');
+      return [...buttons]
+        .map(button => button.getBoundingClientRect().top - bottom);
+    });
+    expect(paginationGaps).toHaveLength(2);
+    for (const gap of paginationGaps) expect(gap).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     } finally {
       if (returnPost) await page.request.delete(`${E2E_API_URL}/admin/posts/${returnPost.id}`, { headers });

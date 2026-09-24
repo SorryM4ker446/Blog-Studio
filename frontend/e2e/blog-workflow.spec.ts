@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page, Request } from "@playwright/test";
+import { createArticle } from "./support/articles";
 import {
   E2E_ADMIN_PASS,
   E2E_ADMIN_USER,
@@ -342,6 +343,17 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page).toHaveURL("/");
 
+  const headers = { "X-CSRF-Token": (await (await page.request.get(`${E2E_API_URL}/csrf`)).json()).csrf_token };
+  const categoriesResponse = await page.request.get(`${E2E_API_URL}/admin/categories`);
+  expect(categoriesResponse.ok()).toBeTruthy();
+  const categories: { id: number; name: string }[] = await categoriesResponse.json();
+  const general = categories.find(category => category.name === "General");
+  expect(general).toBeDefined();
+  const categoryPostTitle = `E2E category search ${unique}`;
+  const categoryPost = await (await createArticle(page.request, { headers, data: {
+    title: categoryPostTitle, content: "Category search fixture", category_id: general!.id, status: "published",
+  } })).json();
+  try {
   await page.goto("/editor");
   await expect(page.locator(".content-scroll")).toHaveCSS(
     "scrollbar-color",
@@ -759,6 +771,10 @@ test("administrator can publish an uploaded image and safely remove it after ref
     const url = new URL(page.url());
     return { category: url.searchParams.get("category"), query: url.searchParams.get("q") };
   }).toEqual({ category: generalCategoryId, query: "E2E" });
-  await expect(page.getByText(/^E2E workflow /)).toBeVisible();
+  await expect(page.getByText(categoryPostTitle, { exact: true })).toBeVisible();
   await expect(page.getByText(postTitle, { exact: true })).toHaveCount(0);
+  } finally {
+    const deleted = await page.request.delete(`${E2E_API_URL}/admin/posts/${categoryPost.id}`, { headers });
+    expect(deleted.ok()).toBeTruthy();
+  }
 });

@@ -3,16 +3,40 @@ package routes
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 )
 
 func TestLoginRateLimitUsesTrustedClientAddress(t *testing.T) {
-	t.Setenv("TRUSTED_PROXIES", "172.30.0.2,fd00::2")
+	sequence := loginRateLimitTestSequence.Add(1)
+	addresses := map[string]string{}
+	// Preserve address families and identity relationships without reusing limiter keys.
+	isolate := func(value string) string {
+		parts := strings.Split(value, ",")
+		for i, part := range parts {
+			original := strings.TrimSpace(part)
+			ip := net.ParseIP(original)
+			if ip == nil {
+				continue
+			}
+			if _, exists := addresses[original]; !exists {
+				if ip.To4() != nil {
+					addresses[original] = fmt.Sprintf("198.18.%d.%d", sequence, len(addresses)+1)
+				} else {
+					addresses[original] = fmt.Sprintf("2001:db8:%x::%x", sequence, len(addresses)+1)
+				}
+			}
+			parts[i] = addresses[original]
+		}
+		return strings.Join(parts, ", ")
+	}
+	t.Setenv("TRUSTED_PROXIES", isolate("172.30.0.2,fd00::2"))
 	db := requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)
 	createTestUser(t, db, "proxy-admin", "correct-password", "admin")
@@ -25,11 +49,11 @@ func TestLoginRateLimitUsesTrustedClientAddress(t *testing.T) {
 			t.Fatal(err)
 		}
 		req := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewReader(body))
-		req.RemoteAddr = net.JoinHostPort(peer, "1234")
+		req.RemoteAddr = net.JoinHostPort(isolate(peer), "1234")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-CSRF-Token", auth.csrfToken)
-		req.Header.Set("X-Forwarded-For", forwarded)
-		req.Header.Set("X-Real-IP", realIP)
+		req.Header.Set("X-Forwarded-For", isolate(forwarded))
+		req.Header.Set("X-Real-IP", isolate(realIP))
 		for _, cookie := range auth.cookies {
 			req.AddCookie(cookie)
 		}

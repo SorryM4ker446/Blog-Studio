@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,14 +43,23 @@ func requireTestDatabase(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
-	if err := testutil.ResetDatabase(db); err != nil {
-		t.Fatalf("reset test database: %v", err)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get test connection pool: %v", err)
 	}
 	t.Cleanup(func() {
+		defer func() {
+			if err := sqlDB.Close(); err != nil {
+				t.Errorf("close test database: %v", err)
+			}
+		}()
 		if err := testutil.ResetDatabase(db); err != nil {
 			t.Errorf("cleanup test database: %v", err)
 		}
 	})
+	if err := testutil.ResetDatabase(db); err != nil {
+		t.Fatalf("reset test database: %v", err)
+	}
 	return db
 }
 
@@ -89,7 +100,7 @@ func performJSONRequest(t *testing.T, router http.Handler, method, path string, 
 			req.Header.Set("X-CSRF-Token", auth.csrfToken)
 		}
 		if auth.remoteIP != "" {
-			req.RemoteAddr = auth.remoteIP + ":1234"
+			req.RemoteAddr = net.JoinHostPort(auth.remoteIP, "1234")
 		}
 	}
 	recorder := httptest.NewRecorder()
@@ -300,16 +311,21 @@ func TestSessionCSRFAndPasswordSecurity(t *testing.T) {
 	})
 }
 
+var loginRateLimitTestSequence atomic.Uint64
+
 func TestLoginRateLimit(t *testing.T) {
 	db := requireTestDatabase(t)
 	gin.SetMode(gin.TestMode)
-	createTestUser(t, db, "rate-user", "correct-password", "admin")
+	// The process-wide limiter outlives each database fixture, including -count runs.
+	sequence := loginRateLimitTestSequence.Add(1)
+	username := fmt.Sprintf("rate-user-%d", sequence)
+	createTestUser(t, db, username, "correct-password", "admin")
 	router := SetupRouter()
-	auth := csrfAuth(t, router, "198.51.100.25")
+	auth := csrfAuth(t, router, fmt.Sprintf("2001:db8::%x", sequence))
 
 	for attempt := 1; attempt <= 5; attempt++ {
 		response := performJSONRequest(t, router, http.MethodPost, "/api/login", map[string]string{
-			"username": "rate-user",
+			"username": username,
 			"password": "wrong-password",
 		}, auth, true)
 		if response.Code != http.StatusUnauthorized {
@@ -317,7 +333,7 @@ func TestLoginRateLimit(t *testing.T) {
 		}
 	}
 	response := performJSONRequest(t, router, http.MethodPost, "/api/login", map[string]string{
-		"username": "rate-user",
+		"username": username,
 		"password": "correct-password",
 	}, auth, true)
 	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") == "" {

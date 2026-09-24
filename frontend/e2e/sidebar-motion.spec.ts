@@ -43,13 +43,23 @@ for (const theme of ["dark", "light"]) {
       while (performance.now() < end) { await new Promise(requestAnimationFrame); sample(); }
       const expanded = frames.at(-1)!;
       // Reverse twice before completion; the original link/logo must survive.
+      const reversals: { progress: number | null; before: number; after: number }[] = [];
       toggle.click();
-      await new Promise(resolve => setTimeout(resolve, 90));
-      toggle.click();
-      await new Promise(resolve => setTimeout(resolve, 70));
-      toggle.click();
+      for (let index = 0; index < 2; index++) {
+        await new Promise(requestAnimationFrame);
+        const animation = sidebar.getAnimations().find(animation =>
+          animation instanceof CSSTransition && animation.transitionProperty === "width");
+        if (!animation) throw new Error("Expected an active sidebar width transition");
+        animation.pause();
+        animation.currentTime = Number(animation.effect!.getTiming().duration) * 0.4;
+        const progress = animation.effect!.getComputedTiming().progress;
+        const before = sidebar.getBoundingClientRect().width;
+        toggle.click();
+        await Promise.resolve();
+        reversals.push({ progress, before, after: sidebar.getBoundingClientRect().width });
+      }
       await new Promise(resolve => setTimeout(resolve, 1100));
-      return { frames, expanded, collapsed: sidebar.getBoundingClientRect().width,
+      return { frames, expanded, reversals, collapsed: sidebar.getBoundingClientRect().width,
         sameNodes: postsLink === sidebar.querySelector('a[href="/posts"]') && logo === sidebar.querySelector(".sidebar-logo-container"),
         running: document.getAnimations().filter(animation => animation.playState === "running").length,
         translate: getComputedStyle(card).translate,
@@ -57,6 +67,13 @@ for (const theme of ["dark", "light"]) {
       };
     });
     expect(result.expanded.width).toBeCloseTo(240, 0);
+    for (const reversal of result.reversals) {
+      expect(reversal.progress).toBeGreaterThan(0);
+      expect(reversal.progress).toBeLessThan(1);
+      expect(reversal.before).toBeGreaterThan(52);
+      expect(reversal.before).toBeLessThan(240);
+      expect(Math.abs(reversal.after - reversal.before)).toBeLessThan(1);
+    }
     expect(result.collapsed).toBeCloseTo(52, 0);
     expect(result.sameNodes).toBe(true);
     expect(result.hiddenInert).toBe(true);
@@ -83,7 +100,15 @@ for (const theme of ["dark", "light"]) {
     // must not carry temporary positioning into the next page.
     await page.evaluate(async () => {
       document.querySelector<HTMLButtonElement>(".sidebar-toggle")!.click();
-      await new Promise(resolve => setTimeout(resolve, 90));
+      await new Promise(requestAnimationFrame);
+      const sidebar = document.querySelector<HTMLElement>(".sidebar")!;
+      const animation = sidebar.getAnimations().find(animation =>
+        animation instanceof CSSTransition && animation.transitionProperty === "width");
+      if (!animation) throw new Error("Expected sidebar motion before navigation");
+      animation.pause();
+      animation.currentTime = Number(animation.effect!.getTiming().duration) * 0.4;
+      const width = sidebar.getBoundingClientRect().width;
+      if (width <= 52 || width >= 240) throw new Error("Navigation must interrupt sidebar motion");
       document.querySelector<HTMLAnchorElement>('.nav-posts-link')!.click();
     });
     await expect(page).toHaveURL(/\/posts$/);
