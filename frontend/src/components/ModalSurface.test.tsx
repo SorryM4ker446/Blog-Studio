@@ -44,6 +44,19 @@ it("does not invoke a stale close callback after unmount", () => {
   expect(onClose).not.toHaveBeenCalled();
 });
 
+it("animates a requested close before notifying the owner", () => {
+  const { rerender, motions, onClose, container } = setup(true);
+  rerender(<ModalSurface onClose={onClose} closeRequested labelledBy="title" className="dialog">
+    {(_close, closing) => <><h2 id="title">Edit resource</h2><button disabled={closing}>Save</button></>}
+  </ModalSurface>);
+  expect(document.querySelector("[data-modal-overlay]")).toHaveAttribute("data-state", "closing");
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  expect(container).toHaveAttribute("inert");
+  expect(onClose).not.toHaveBeenCalled();
+  act(() => motions[3].onfinish?.());
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
 it("blocks Escape and backdrop dismissal while saving", () => {
   const { onClose } = setup(true);
   fireEvent.keyDown(document, { key: "Escape" });

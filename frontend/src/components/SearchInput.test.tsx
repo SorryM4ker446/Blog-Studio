@@ -18,12 +18,14 @@ describe("SearchInput", () => {
     expect(onSearch).toHaveBeenCalledWith("release notes");
   });
 
-  it("clears active search results as soon as the input becomes empty", async () => {
+  it("keeps results after clearing until the empty query is submitted", async () => {
     const user = userEvent.setup();
     const onSearch = vi.fn();
     render(<SearchInput value="existing query" onSearch={onSearch} />);
 
     await user.clear(screen.getByRole("textbox"));
+    expect(onSearch).not.toHaveBeenCalled();
+    await user.keyboard("{Enter}");
 
     expect(onSearch).toHaveBeenCalledOnce();
     expect(onSearch).toHaveBeenCalledWith("");

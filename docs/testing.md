@@ -121,13 +121,17 @@ Links tests cover migration replay, hidden templates, URL and color validation, 
 
 Dialog tests cover Cancel, Escape, backdrop dismissal, drag-out protection, busy blocking, failed-save retention and focus restoration. Actual exit animations are paused to inspect mounted-but-inactive states and background isolation. The color picker covers dragging, keyboard sliders, invalid HEX recovery, viewport positioning, interrupted dismissal and reduced motion.
 
+### Settings
+
+Settings tests cover draft discard, failed-save retention, blocked dismissal while saving, automatic close after success, password cleanup and inline validation. Browser coverage includes focus, both themes, narrow screens, reduced motion, accessibility and Unicode boundaries for profile limits.
+
 ### Search and navigation
 
-Unit tests cover URL normalization, independent search section pages, stale responses, cancellation, exhausted-page correction and history metadata. Browser checks exercise all list/search routes through back/forward/reload, delayed requests, empty results, failures and rapid scope changes.
+Unit tests cover URL normalization, independent search section pages, stale responses, cancellation, exhausted-page correction and history metadata. Browser checks exercise all list/search routes through back/forward/reload, delayed requests, empty results, failures and rapid scope changes. Clearing a list search retains its results and URL until an explicit empty submission.
 
 Initial search keeps its loading status visually hidden for screen readers; results enter without a preceding placeholder exit. Later searches retain resolved content while pending, then transition to the new result. Idle scope changes leave the keyword prompt stable. The Posts category field becomes inactive immediately on exit and hides after its transition; reversing an unfinished exit and reduced-motion behavior are checked.
 
-Pagination checks retain outgoing rows until exit completes and prevent nested page animations during scope changes. Content Editor reserves a complete page even on a short last page and recomputes it on resize. Navigation checks use 991 articles/files, deep pages and repeated detail round trips with storage blocked or snapshots expired. This is a functional navigation fixture, not a performance benchmark.
+Pagination tests check stable outgoing height, sequential result replacement and coordinated list/pagination transitions without duplicate layers or nested animations. Editor checks cover full-page spacing on short last pages, reloads and resizing, with spacing removed for single-page results. Links coverage includes filtered counts, tab resets, long content and cross-page reordering in both directions with reduced motion. Navigation checks use 991 articles/files, deep pages and repeated detail round trips with storage blocked or snapshots expired. This is a functional navigation fixture, not a performance benchmark.
 
 Frame assertions check DOM continuity, opacity, dimensions and scroll position during sidebar, save, refresh and navigation transitions. Sampling accounts for elapsed time and existing animations; screenshots are diagnostic attachments rather than byte-equality assertions. Script-blocked reloads distinguish server rendering from hydration.
 

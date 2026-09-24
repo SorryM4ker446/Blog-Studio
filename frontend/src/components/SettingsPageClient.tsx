@@ -13,6 +13,8 @@ import {
   updatePassword,
   uploadFile,
 } from "@/lib/api";
+import ModalSurface from "@/components/ModalSurface";
+import "./settings/settings.css";
 import ConfirmModal from "@/components/ConfirmModal";
 import { SettingsIcon } from "@/components/Icons";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
@@ -37,6 +39,18 @@ export default function SettingsPageClient({
   const [profileDesc, setProfileDesc] = useState(initialSettings.profile_description || "");
   const [profileTag, setProfileTag] = useState(initialSettings.profile_tag || "admin");
   const [profileAvatar, setProfileAvatar] = useState(normalizeFileViewUrl(initialSettings.profile_avatar || ""));
+  const [savedProfile, setSavedProfile] = useState({ name: initialSettings.profile_name || "", description: initialSettings.profile_description || "", tag: initialSettings.profile_tag || "admin" });
+  const [activePanel, setActivePanel] = useState<"profile" | "security" | null>(null);
+  const [profileSaved, setProfileSaved] = useState(false);
+  function openPanel(panel: "profile" | "security") {
+    setProfileSaved(false);
+    setProfileName(savedProfile.name); setProfileDesc(savedProfile.description); setProfileTag(savedProfile.tag);
+    setProfileSaveMsg(""); setAvatarMsg(""); setPassMsg("");
+    setCurrentPass(""); setNewPass(""); setPasswordErrors({}); setActivePanel(panel);
+  }
+  function closePanel() {
+    setCurrentPass(""); setNewPass(""); setActivePanel(null);
+  }
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState(initialSettingsError);
   const [saving, setSaving] = useState(false);
@@ -46,6 +60,7 @@ export default function SettingsPageClient({
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
+  const [passwordErrors, setPasswordErrors] = useState<{ current?: string; next?: string }>({});
   const [passMsg, setPassMsg] = useState("");
   const [passLoading, setPassLoading] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -76,6 +91,7 @@ export default function SettingsPageClient({
     try {
       const data = await getSettings({ fresh: true });
       if (!isMountedRef.current || requestId !== settingsRequestIdRef.current) return;
+      setSavedProfile({ name: data.profile_name || "", description: data.profile_description || "", tag: data.profile_tag || user?.role || "admin" });
       setProfileName(data.profile_name || "");
       setProfileDesc(data.profile_description || "");
       setProfileTag(data.profile_tag || user?.role || "admin");
@@ -93,6 +109,12 @@ export default function SettingsPageClient({
 
   async function handleSaveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
+    if ([...profileName].length > 20 || [...profileDesc].length > 100) {
+      setProfileSaveMsg("❌ Use at most 20 characters for the name and 100 for the description.");
+      event.currentTarget.querySelector<HTMLElement>([...profileName].length > 20 ? "#profile-name" : "#profile-description")?.focus();
+      return;
+    }
     setSaving(true);
     setProfileSaveMsg("");
     try {
@@ -102,8 +124,9 @@ export default function SettingsPageClient({
         profile_tag: profileTag,
       });
       if (!success) throw new Error("Failed to save settings.");
-      setProfileSaveMsg("✅ Settings saved successfully!");
+      setSavedProfile({ name: profileName, description: profileDesc, tag: profileTag });
       await refreshProfile();
+      setProfileSaved(true);
     } catch (error) {
       setProfileSaveMsg(`❌ ${getApiErrorMessage(error, "Failed to save settings.")}`);
     } finally {
@@ -135,8 +158,16 @@ export default function SettingsPageClient({
 
   async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!currentPass || !newPass) {
-      setPassMsg("❌ Both fields are required.");
+    if (passLoading) return;
+    const errors: { current?: string; next?: string } = {};
+    if (!currentPass) errors.current = "Enter your current password.";
+    if (!newPass) errors.next = "Enter a new password.";
+    else if ([...newPass].length < 12 || [...newPass].length > 128) errors.next = "Use 12–128 characters.";
+    else if (new TextEncoder().encode(newPass).length > 72) errors.next = "Use at most 72 UTF-8 bytes.";
+    setPasswordErrors(errors);
+    setPassMsg("");
+    if (errors.current || errors.next) {
+      event.currentTarget.querySelector<HTMLInputElement>(errors.current ? "#current-password" : "#new-password")?.focus();
       return;
     }
     setPassLoading(true);
@@ -222,44 +253,75 @@ export default function SettingsPageClient({
       ) : settingsError ? (
         <ErrorState title="Settings could not be loaded" message={settingsError} onRetry={() => void loadSettings()} />
       ) : (
-        <div style={{ display: "grid", gap: "2rem", maxWidth: "800px" }}>
-          <ProfileSummary
-            user={user}
-            profileName={profileName}
-            profileTag={profileTag}
-            profileAvatar={profileAvatar}
-            avatarFailed={Boolean(profileAvatar && failedAvatarUrl === profileAvatar)}
-            avatarUploading={avatarUploading}
-            message={avatarMsg}
-            onAvatarUpload={handleAvatarUpload}
-            onAvatarError={() => setFailedAvatarUrl(profileAvatar)}
-          />
-          <ProfileForm
-            profileName={profileName}
-            profileDescription={profileDesc}
-            profileTag={profileTag}
-            saving={saving}
-            message={profileSaveMsg}
-            onNameChange={setProfileName}
-            onDescriptionChange={setProfileDesc}
-            onTagChange={setProfileTag}
-            onSubmit={handleSaveSettings}
-          />
-          <SecurityForm
-            currentPassword={currentPass}
-            newPassword={newPass}
-            loading={passLoading}
-            message={passMsg}
-            onCurrentPasswordChange={setCurrentPass}
-            onNewPasswordChange={setNewPass}
-            onSubmit={handleChangePassword}
-          />
-          <SessionPanel
-            onLogout={() => setShowLogoutModal(true)}
-            loading={logoutLoading}
-            error={logoutError}
-          />
+        <div className="settings-panel">
+          <div className="settings-identity">
+            <span className="settings-avatar" aria-hidden="true">
+              {profileAvatar && failedAvatarUrl !== profileAvatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profileAvatar} alt="" onError={() => setFailedAvatarUrl(profileAvatar)} />
+              ) : (savedProfile.name.trim() || user.username).charAt(0).toUpperCase()}
+            </span>
+            <div><h2>{savedProfile.name.trim() || user.username}</h2><span className="settings-profile-tag">{savedProfile.tag || user.role}</span></div>
+          </div>
+          <div className="settings-row">
+            <div><h2>Profile</h2><p>Your avatar, display name and introduction.</p></div>
+            <button type="button" className="settings-action" onClick={() => openPanel("profile")}>Edit profile</button>
+          </div>
+          <div className="settings-row">
+            <div><h2>Security</h2><p>Update the password used to sign in.</p></div>
+            <button type="button" className="settings-action" onClick={() => openPanel("security")}>Change password</button>
+          </div>
+          <SessionPanel onLogout={() => setShowLogoutModal(true)} loading={logoutLoading} error={logoutError} />
         </div>
+      )}
+
+      {isAdmin && activePanel && (
+        <ModalSurface labelledBy="settings-dialog-title" className="settings-dialog" onClose={closePanel} closeRequested={profileSaved} busy={saving || passLoading || avatarUploading}>
+          {(close, closing) => <>
+            <header className="settings-dialog-header">
+              <h2 id="settings-dialog-title">{activePanel === "profile" ? "Edit profile" : "Change password"}</h2>
+              <button type="button" className="settings-close" aria-label="Close settings dialog" disabled={saving || passLoading || avatarUploading || closing} onClick={close}><span aria-hidden="true">×</span></button>
+            </header>
+            <fieldset className="settings-dialog-fields" disabled={saving || passLoading || avatarUploading || closing}>
+              {activePanel === "profile" ? <>
+                <ProfileSummary
+                  user={user}
+                  profileName={profileName}
+                  profileTag={profileTag}
+                  profileAvatar={profileAvatar}
+                  avatarFailed={Boolean(profileAvatar && failedAvatarUrl === profileAvatar)}
+                  avatarUploading={avatarUploading}
+                  message={avatarMsg}
+                  onAvatarUpload={handleAvatarUpload}
+                  onAvatarError={() => setFailedAvatarUrl(profileAvatar)}
+                />
+                <p className="settings-avatar-note">Avatar changes are saved immediately.</p>
+                <ProfileForm
+                  profileName={profileName}
+                  profileDescription={profileDesc}
+                  profileTag={profileTag}
+                  saving={saving}
+                  message={profileSaveMsg}
+                  onNameChange={setProfileName}
+                  onDescriptionChange={setProfileDesc}
+                  onTagChange={setProfileTag}
+                  onSubmit={handleSaveSettings}
+                />
+              </> : (
+                <SecurityForm
+                  currentPassword={currentPass}
+                  newPassword={newPass}
+                  loading={passLoading}
+                  message={passMsg}
+                  errors={passwordErrors}
+                  onCurrentPasswordChange={value => { setCurrentPass(value); setPasswordErrors(errors => ({ ...errors, current: undefined })); setPassMsg(""); }}
+                  onNewPasswordChange={value => { setNewPass(value); setPasswordErrors(errors => ({ ...errors, next: undefined })); setPassMsg(""); }}
+                  onSubmit={handleChangePassword}
+                />
+              )}
+            </fieldset>
+          </>}
+        </ModalSurface>
       )}
 
       <ConfirmModal

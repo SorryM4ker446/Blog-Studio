@@ -310,7 +310,9 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     params.delete("q");
     params.delete("category");
     params.delete("edit");
-    params.delete(tab === "posts" ? "post_page" : "file_page");
+    params.delete(tab === "posts" ? "post_page" : tab === "files" ? "file_page" : "link_page");
+    params.delete("link_q");
+    params.delete("link_page");
     const url = resourceURL("/editor", params);
     if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
     if (tab !== previousTab && previousTab !== "links" && hadFilter) {

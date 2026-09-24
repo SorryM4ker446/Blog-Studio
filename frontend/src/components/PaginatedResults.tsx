@@ -35,7 +35,10 @@ export default function PaginatedResults({ children, page, totalPages, resultKey
   useLayoutEffect(() => {
     const frame = viewport.current!;
     const body = content.current!;
-    if (previousGroup.current !== transitionGroup) entry.current = null;
+    if (previousGroup.current !== transitionGroup) {
+      entry.current = null;
+      frame.style.height = "";
+    }
     previousGroup.current = transitionGroup;
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const animated = animateChanges && typeof body.animate === "function" && !reduced;
@@ -45,6 +48,7 @@ export default function PaginatedResults({ children, page, totalPages, resultKey
       const height = frame.getBoundingClientRect().height;
       const commit = () => {
         if (cancelled) return;
+        if (animated && !stablePageHeight) frame.style.height = `${height}px`;
         entry.current = animated ? { direction, height } : null;
         setShown(incoming.current);
       };
@@ -69,10 +73,14 @@ export default function PaginatedResults({ children, page, totalPages, resultKey
             { duration: 280, easing: "cubic-bezier(.22, 1, .36, 1)" }));
         }
       }
-    }
+      frame.style.height = "";
+    } else frame.style.height = "";
     return () => {
       cancelled = true;
       visual.current = { opacity: getComputedStyle(body).opacity, transform: getComputedStyle(body).transform };
+      if (animations.some(animation => (animation.effect as KeyframeEffect | null)?.target === frame)) {
+        frame.style.height = `${frame.getBoundingClientRect().height}px`;
+      }
       animations.forEach(animation => animation.cancel());
     };
   }, [resultKey, direction, changing, stablePageHeight, transitionGroup, animateChanges]);

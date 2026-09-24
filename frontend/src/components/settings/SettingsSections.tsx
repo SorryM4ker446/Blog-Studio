@@ -5,7 +5,6 @@ import type { ChangeEvent, FormEvent } from "react";
 import type { AuthUser } from "@/lib/api";
 import { CameraIcon } from "@/components/Icons";
 
-const cardStyle = { padding: "2rem" } as const;
 const labelStyle = {
   display: "block",
   marginBottom: "0.5rem",
@@ -34,6 +33,16 @@ const actionButtonStyle = {
   cursor: "pointer",
 } as const;
 
+function SettingsFeedback({ message }: { message: string }) {
+  const failed = message.startsWith("❌");
+  return <span className="settings-feedback" data-tone={failed ? "error" : "success"} role={failed ? "alert" : "status"}>
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      {failed ? <><circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 3v1" /></> : <path d="m5 12 4 4L19 6" />}
+    </svg>
+    <span>{message.replace(/^[✅❌]\s*/, "")}</span>
+  </span>;
+}
+
 interface ProfileSummaryProps {
   user: AuthUser;
   profileName: string;
@@ -59,10 +68,8 @@ export function ProfileSummary({
 }: ProfileSummaryProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const displayName = profileName.trim() || user.username;
-  const failed = message.startsWith("❌");
-
   return (
-    <section className="ai-card" style={cardStyle} aria-labelledby="profile-summary-heading">
+    <section className="settings-form-section" aria-labelledby="profile-summary-heading">
       <h2 id="profile-summary-heading" style={{ margin: "0 0 1.5rem", fontSize: "1.2rem", fontWeight: 600 }}>
         Personal Profile
       </h2>
@@ -75,6 +82,7 @@ export function ProfileSummary({
           style={{
             cursor: avatarUploading ? "wait" : "pointer",
             position: "relative",
+            flexShrink: 0,
             padding: 0,
             border: 0,
             borderRadius: "50%",
@@ -139,31 +147,12 @@ export function ProfileSummary({
           disabled={avatarUploading}
           aria-label="Profile avatar file"
         />
-        <div>
+        <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
           <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.3rem" }}>{displayName}</h3>
-          <span
-            style={{
-              background: "rgba(168, 199, 250, 0.15)",
-              color: "var(--accent-blue)",
-              padding: "4px 10px",
-              borderRadius: "6px",
-              fontSize: "0.8rem",
-              fontWeight: 600,
-            }}
-          >
-            {(profileTag || user.role || "admin").trim()}
-          </span>
+          <span className="settings-profile-tag">{(profileTag || user.role || "admin").trim()}</span>
         </div>
       </div>
-      {message && (
-        <p
-          role={failed ? "alert" : "status"}
-          aria-live={failed ? "assertive" : "polite"}
-          style={{ margin: "1rem 0 0", fontSize: "0.85rem", color: failed ? "var(--accent-red)" : "var(--accent-green)" }}
-        >
-          {message}
-        </p>
-      )}
+      {message && <SettingsFeedback message={message} />}
     </section>
   );
 }
@@ -191,10 +180,8 @@ export function ProfileForm({
   onTagChange,
   onSubmit,
 }: ProfileFormProps) {
-  const failed = message.startsWith("❌");
-
   return (
-    <section className="ai-card" style={cardStyle} aria-labelledby="profile-form-heading">
+    <section className="settings-form-section" aria-labelledby="profile-form-heading">
       <h2 id="profile-form-heading" style={{ margin: "0 0 1.5rem", fontSize: "1.2rem", fontWeight: 600 }}>
         Profile Configuration
       </h2>
@@ -203,12 +190,14 @@ export function ProfileForm({
           <label htmlFor="profile-name" style={labelStyle}>Profile Name</label>
           <input
             id="profile-name"
+            data-autofocus
             value={profileName}
             onChange={(event) => onNameChange(event.target.value)}
-            maxLength={255}
+            aria-describedby="profile-name-limit"
             autoComplete="name"
             style={inputStyle}
           />
+          <p id="profile-name-limit" className="settings-field-hint">{[...profileName].length}/20 characters</p>
         </div>
         <div style={{ marginBottom: "1.5rem" }}>
           <label htmlFor="profile-description" style={labelStyle}>Profile Description</label>
@@ -216,10 +205,11 @@ export function ProfileForm({
             id="profile-description"
             value={profileDescription}
             onChange={(event) => onDescriptionChange(event.target.value)}
-            maxLength={500}
+            aria-describedby="profile-description-limit"
             rows={3}
             style={{ ...inputStyle, resize: "vertical" }}
           />
+          <p id="profile-description-limit" className="settings-field-hint">{[...profileDescription].length}/100 characters</p>
         </div>
         <div style={{ marginBottom: "1.5rem" }}>
           <label htmlFor="profile-tag" style={labelStyle}>Profile Tag</label>
@@ -241,21 +231,12 @@ export function ProfileForm({
               background: "var(--accent-blue)",
               color: "var(--accent-contrast-text)",
               borderColor: "transparent",
-              cursor: saving ? "wait" : "pointer",
-              opacity: saving ? 0.7 : 1,
+              cursor: "pointer",
             }}
           >
-            {saving ? "Saving..." : "Save Configuration"}
+            Save Configuration
           </button>
-          {message && (
-            <span
-              role={failed ? "alert" : "status"}
-              aria-live={failed ? "assertive" : "polite"}
-              style={{ fontSize: "0.9rem", color: failed ? "var(--accent-red)" : "var(--accent-green)" }}
-            >
-              {message}
-            </span>
-          )}
+          {message && <SettingsFeedback message={message} />}
         </div>
       </form>
     </section>
@@ -263,6 +244,7 @@ export function ProfileForm({
 }
 
 interface SecurityFormProps {
+  errors?: { current?: string; next?: string };
   currentPassword: string;
   newPassword: string;
   loading: boolean;
@@ -273,6 +255,7 @@ interface SecurityFormProps {
 }
 
 export function SecurityForm({
+  errors = {},
   currentPassword,
   newPassword,
   loading,
@@ -281,25 +264,26 @@ export function SecurityForm({
   onNewPasswordChange,
   onSubmit,
 }: SecurityFormProps) {
-  const failed = message.startsWith("❌");
-
   return (
-    <section className="ai-card" style={cardStyle} aria-labelledby="security-heading">
+    <section className="settings-form-section" aria-labelledby="security-heading">
       <h2 id="security-heading" style={{ margin: "0 0 1.5rem", fontSize: "1.2rem", fontWeight: 600 }}>Security</h2>
-      <form onSubmit={onSubmit} aria-busy={loading}>
+      <form onSubmit={onSubmit} aria-busy={loading} noValidate>
         <div className="settings-password-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
           <div>
             <label htmlFor="current-password" style={labelStyle}>Current Password</label>
             <input
               id="current-password"
+              data-autofocus
               type="password"
               value={currentPassword}
               onChange={(event) => onCurrentPasswordChange(event.target.value)}
               autoComplete="current-password"
               required
-              aria-describedby="password-requirements"
+              aria-invalid={Boolean(errors.current)}
+              aria-describedby={errors.current ? "current-password-error password-requirements" : "password-requirements"}
               style={inputStyle}
             />
+            {errors.current && <p id="current-password-error" className="settings-field-error" role="alert">{errors.current}</p>}
           </div>
           <div>
             <label htmlFor="new-password" style={labelStyle}>New Password</label>
@@ -312,9 +296,11 @@ export function SecurityForm({
               required
               minLength={12}
               maxLength={128}
-              aria-describedby="password-requirements"
+              aria-invalid={Boolean(errors.next)}
+              aria-describedby={errors.next ? "new-password-error password-requirements" : "password-requirements"}
               style={inputStyle}
             />
+            {errors.next && <p id="new-password-error" className="settings-field-error" role="alert">{errors.next}</p>}
           </div>
         </div>
         <p id="password-requirements" style={{ margin: "-0.75rem 0 1.5rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
@@ -328,15 +314,7 @@ export function SecurityForm({
           >
             {loading ? "Updating..." : "Update Password"}
           </button>
-          {message && (
-            <span
-              role={failed ? "alert" : "status"}
-              aria-live={failed ? "assertive" : "polite"}
-              style={{ fontSize: "0.85rem", color: failed ? "var(--accent-red)" : "var(--accent-green)" }}
-            >
-              {message}
-            </span>
-          )}
+          {message && <SettingsFeedback message={message} />}
         </div>
       </form>
     </section>
@@ -353,10 +331,10 @@ export function SessionPanel({
   error?: string;
 }) {
   return (
-    <section className="ai-card" style={{ ...cardStyle, border: "1px solid rgba(242, 139, 130, 0.3)" }} aria-labelledby="session-heading">
-      <h2 id="session-heading" style={{ margin: "0 0 1.5rem", fontSize: "1.2rem", fontWeight: 600, color: "var(--accent-red)" }}>Danger Zone</h2>
-      <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
-        Logging out invalidates your current server session. You will need to re-authenticate to access the editor.
+    <section className="settings-session" aria-labelledby="session-heading">
+      <h2 id="session-heading" style={{ margin: "0 0 6px", fontSize: "1rem", fontWeight: 600 }}>Session</h2>
+      <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+        Sign out of your current session.
       </p>
       <button
         type="button"

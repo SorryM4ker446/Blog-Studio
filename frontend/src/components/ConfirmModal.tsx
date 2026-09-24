@@ -1,8 +1,8 @@
 "use client";
 
-import { useModalIsolation } from "@/lib/use-modal-isolation";
-
-import React, { useEffect, useId, useRef } from "react";
+import { useEffect, useId } from "react";
+import ModalSurface from "./ModalSurface";
+import styles from "./ConfirmModal.module.css";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -15,106 +15,18 @@ interface ConfirmModalProps {
   type?: "danger" | "info";
 }
 
-export default function ConfirmModal({
-  isOpen,
-  onConfirm,
-  onCancel,
-  title,
-  message,
-  confirmText = "Confirm",
-  cancelText = "Cancel",
-  type = "info",
-}: ConfirmModalProps) {
+export default function ConfirmModal({ isOpen, onConfirm, onCancel, title, message, confirmText = "Confirm", cancelText = "Cancel", type = "info" }: ConfirmModalProps) {
   const titleId = useId();
   const descriptionId = useId();
-  const cancelRef = useRef(onCancel);
-  useEffect(() => { cancelRef.current = onCancel; }, [onCancel]);
-  const panelRef = useRef<HTMLDivElement>(null);
-  useModalIsolation(panelRef, isOpen);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = isOpen ? "hidden" : previousOverflow;
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
-
   useEffect(() => {
     if (!isOpen) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus());
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        cancelRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !panelRef.current) return;
-      const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>("button:not(:disabled)"));
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", handleKeyDown);
-      previousFocus?.focus({ preventScroll: true });
-    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
   }, [isOpen]);
-
   if (!isOpen) return null;
-
-  return (
-    <div
-      className={`modal-overlay ${isOpen ? "active" : ""}`}
-      onClick={onCancel}
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.4)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 2000,
-        transition: "opacity 0.3s ease",
-        opacity: 1,
-      }}
-    >
-      <div
-        ref={panelRef}
-        className={`modal-content ${isOpen ? "active" : ""}`}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        style={{
-          width: "90%",
-          maxWidth: "400px",
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border-color)",
-          borderRadius: "20px",
-          padding: "2rem",
-          boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)",
-          transform: "scale(1)",
-          transition: "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
-        }}
-      >
+  return <ModalSurface onClose={onCancel} labelledBy={titleId} describedBy={descriptionId} className={styles.panel}>
+    {(close, closing) => <>
         <h3 id={titleId} style={{ margin: "0 0 1rem 0", fontSize: "1.25rem", fontWeight: 600, color: "var(--text-primary)" }}>
           {title}
         </h3>
@@ -125,8 +37,9 @@ export default function ConfirmModal({
         <div style={{ display: "flex", gap: "1rem", justifyContent: "flex-end" }}>
           <button
             type="button"
+            disabled={closing}
             data-autofocus
-            onClick={onCancel}
+            onClick={close}
             style={{
               padding: "0.75rem 1.5rem",
               borderRadius: "10px",
@@ -144,6 +57,7 @@ export default function ConfirmModal({
           </button>
           <button
             type="button"
+            disabled={closing}
             onClick={onConfirm}
             style={{
               padding: "0.75rem 1.5rem",
@@ -161,16 +75,7 @@ export default function ConfirmModal({
             {confirmText}
           </button>
         </div>
-      </div>
 
-      <style jsx>{`
-        .modal-overlay {
-          pointer-events: none;
-        }
-        .modal-overlay.active {
-          pointer-events: auto;
-        }
-      `}</style>
-    </div>
-  );
+    </>}
+  </ModalSurface>;
 }

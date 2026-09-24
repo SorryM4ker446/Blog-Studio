@@ -57,7 +57,7 @@ describe("DrivePageClient navigation", () => {
     await waitFor(() => expect(searchResourcesMock).toHaveBeenCalledWith({ query: "report", scope: "files", categoryId: "", page: 1 }));
   });
 
-  it("ignores a late search result after the search is cleared", async () => {
+  it("ignores a late search result after an empty search is submitted", async () => {
     let resolveSearch: ((value: { posts: []; files: FileRecord[] }) => void) | undefined;
     searchResourcesMock.mockReturnValueOnce(new Promise((resolve) => {
       resolveSearch = resolve;
@@ -69,6 +69,8 @@ describe("DrivePageClient navigation", () => {
     fireEvent.change(input, { target: { value: "slow" } });
     fireEvent.keyDown(input, { key: "Enter" });
     fireEvent.change(input, { target: { value: "" } });
+    expect(new URLSearchParams(window.location.search).get("q")).toBe("slow");
+    fireEvent.keyDown(input, { key: "Enter" });
 
     expect(window.location.pathname).toBe("/drive");
     expect(window.location.search).toBe("");

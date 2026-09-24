@@ -4,6 +4,7 @@
   --card-height: 190px;
 }
 .layout[data-editor-layout="files"] { --card-height: 96px; }
+.layout[data-editor-layout="links"] { --card-height: 19rem; }
 .layout :global([data-list-layout]) {
   --rows: var(--rows-1);
   min-height: calc(var(--rows) * var(--card-height) + (var(--rows) - 1) * 16px);

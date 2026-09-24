@@ -8,6 +8,7 @@ import styles from "./ModalSurface.module.css";
 interface ModalSurfaceProps {
   onClose: () => void;
   busy?: boolean;
+  closeRequested?: boolean;
   labelledBy: string;
   describedBy?: string;
   className: string;
@@ -15,12 +16,13 @@ interface ModalSurfaceProps {
 }
 
 /** Keep the dialog and background isolation alive until both surfaces fade out. */
-export default function ModalSurface({ onClose, busy = false, labelledBy, describedBy, className, children }: ModalSurfaceProps) {
+export default function ModalSurface({ onClose, busy = false, closeRequested = false, labelledBy, describedBy, className, children }: ModalSurfaceProps) {
   const panel = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const backdropPressed = useRef(false);
-  const [closing, setClosing] = useState(false);
+  const [dismissed, setClosing] = useState(false);
+  const closing = dismissed || closeRequested;
   const closed = useRef(false);
   const onCloseRef = useRef(onClose);
   useLayoutEffect(() => { onCloseRef.current = onClose; }, [onClose]);

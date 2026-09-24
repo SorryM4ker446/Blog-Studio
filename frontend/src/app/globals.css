@@ -571,13 +571,57 @@ a {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  border: 0;
-  border-radius: 50%;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: rgba(242, 139, 130, 0.1);
   color: var(--accent-red);
   cursor: pointer;
   pointer-events: auto;
+  font-size: 20px;
+  line-height: 1;
+  transition: background-color 140ms ease, border-color 140ms ease;
 }
+.editor-post-delete:hover {
+  background: color-mix(in srgb, var(--accent-red) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent-red) 34%, var(--border-color));
+}
+.editor-post-delete::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 3;
+  width: max-content;
+  padding: 6px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  box-shadow: 0 4px 12px #0003;
+  font-size: .75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-3px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+}
+.editor-post-delete:hover::after,
+.editor-post-delete:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .editor-post-delete::after { transition: none; }
+}
+
+.editor-post-delete:focus-visible {
+  outline: 2px solid var(--accent-red);
+  outline-offset: 2px;
+}
+
 
 .editor-post-card-actions {
   position: relative;
@@ -1334,6 +1378,11 @@ body.theme-light .ai-card {
   height: 20px;
   border-radius: 4px;
   font-size: 0.8rem;
+}
+
+.post-list-icon {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
 }
 
 .card-desc {

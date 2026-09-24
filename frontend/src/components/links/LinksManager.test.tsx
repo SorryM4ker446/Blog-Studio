@@ -163,3 +163,10 @@ it("does not carry a prior account's delayed response into a new session", async
   expect(screen.queryAllByRole("article")).toHaveLength(0);
   expect(screen.getByTestId("count")).toHaveTextContent("0");
 });
+
+it("counts matching links rather than the unfiltered collection", () => {
+  window.history.replaceState(null, "", "/editor?tab=links&link_q=Link%202");
+  render(<Harness />);
+  expect(screen.getByTestId("count")).toHaveTextContent("1");
+  expect(screen.getAllByRole("article")).toHaveLength(1);
+});

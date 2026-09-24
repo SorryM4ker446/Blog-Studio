@@ -4,20 +4,24 @@ import { useSearchParams } from "next/navigation";
 import { createLink, deleteLink, getAdminLinks, moveLink, updateLink, type HomepageLink, type LinkFields } from "@/lib/links";
 import { getApiErrorMessage } from "@/lib/api-client";
 import { readPage } from "@/lib/resource-query";
+import EditorPageLayout from "@/components/editor/EditorPageLayout";
 import PaginatedResults from "@/components/PaginatedResults";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
-import { InboxIcon } from "@/components/Icons";
+import { InboxIcon, EditIcon, TrashIcon } from "@/components/Icons";
 import LinkGrid from "./LinkGrid";
 import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 import LinkEditorDialog from "./LinkEditorDialog";
 import { LinkCardContent } from "./LinkCard";
 import ClampedText from "./ClampedText";
 import styles from "./Links.module.css";
+import actionStyles from "@/components/files/FileCard.module.css";
 
 export default function useLinksManager(active: boolean, initialLinks: HomepageLink[], initialError: string) {
   const params = useSearchParams();
   const query = params.get("link_q") || "";
   const requestedPage = readPage(params.get("link_page") || "");
+  const grid = useRef<LinkGrid>(null);
+  const [boundary, setBoundary] = useState<{ id: number; direction: number }>();
   const [links, setLinks] = useState<HomepageLink[]>(initialLinks);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(initialError);
@@ -78,7 +82,19 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   async function move(link: HomepageLink, neighbor: HomepageLink) {
     if (working.current || loading) return;
     working.current = true; read.current?.abort(); setLoading(false); setBusy(true); setError("");
-    try { const result = await moveLink(link,neighbor); if (live.current) { needsRead.current = false; setLinks(result); } }
+    try {
+      const result = await moveLink(link,neighbor);
+      const from = links.findIndex(item => item.id === link.id);
+      const to = links.findIndex(item => item.id === neighbor.id);
+      const crossesPage = Math.floor(from / 8) !== Math.floor(to / 8);
+      const direction = Math.sign(to - from);
+      if (live.current && crossesPage) await grid.current?.exitBoundary(link.id, direction);
+      if (live.current) {
+        needsRead.current = false;
+        if (crossesPage) setBoundary({ id: neighbor.id, direction });
+        setLinks(result);
+      }
+    }
     catch (err) { needsRead.current = true; if (live.current) setError(getApiErrorMessage(err)); }
     finally { working.current = false; if (live.current) setBusy(false); }
   }
@@ -90,7 +106,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
     finally { working.current = false; if (live.current) setBusy(false); }
   }
   return {
-    query, loading, error, count: resolved ? links.length : null,
+    query, loading, error, count: resolved ? filtered.length : null,
     search: (value: string) => navigate(value.trim(), 1),
     toolbar: <button type="button" className="editor-primary-action" disabled={resolved && links.length >= 100} onClick={() => { setEditing({link:null}); }}>+ New Link</button>,
     content: <>
@@ -100,17 +116,17 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
       title={query ? "No matching links" : "No links yet"}
       message={query ? "Try a different search term." : "Create a link to get started."}
       icon={<InboxIcon size={54} />}
-    /> : <PaginatedResults page={page} totalPages={pages} resultKey={String(page)} pending={loading || busy}
+    /> : <EditorPageLayout resource="links" count={Math.min(8, filtered.length)} pages={pages}><PaginatedResults stablePageHeight page={page} totalPages={pages} resultKey={String(page)} pending={loading || busy}
       transitionGroup={query} animateChanges={animatePages} onPageChange={next => { setAnimatePages(true); navigate(query,next); }}>
-    <LinkGrid order={filtered.slice((page-1)*8,page*8).map(link => link.id)}>{filtered.slice((page-1)*8,page*8).map(link => {
+    <LinkGrid ref={grid} boundary={boundary} order={filtered.slice((page-1)*8,page*8).map(link => link.id)}>{filtered.slice((page-1)*8,page*8).map(link => {
       const index = links.findIndex(item => item.id === link.id);
       return <article className={styles.row} data-link-id={link.id} key={link.id} aria-label={link.title}><div className={styles.status}>{link.visible ? "Visible" : link.url ? "Hidden" : "Needs a URL"}</div><LinkCardContent link={link} /><ClampedText paragraph className={styles.url} text={link.url || "Set a destination before enabling this link."} />
-        <div className={styles.actions}><button className={styles.button} aria-disabled={busy || loading} onClick={() => { if (!working.current && !loading) setEditing({link}); }}>Edit</button>
-          <button className={styles.button} aria-disabled={busy || loading} disabled={index === 0 || Boolean(query)} aria-label={`Move ${link.title} earlier`} onClick={() => void move(link,links[index-1])}>←</button>
-          <button className={styles.button} aria-disabled={busy || loading} disabled={index === links.length-1 || Boolean(query)} aria-label={`Move ${link.title} later`} onClick={() => void move(link,links[index+1])}>→</button>
-          <button className={`${styles.button} ${styles.danger}`} aria-disabled={busy || loading} onClick={() => { if (working.current || loading) return; setDeleting(link); setDeleteError(""); }}>Delete</button></div></article>;
+        <div className={styles.actions}><button className={actionStyles.action} aria-disabled={busy || loading} onClick={() => { if (!working.current && !loading) setEditing({link}); }}><EditIcon size={14} /> Edit</button>
+          <button className={actionStyles.action} aria-disabled={busy || loading} disabled={index === 0 || Boolean(query)} aria-label={`Move ${link.title} earlier`} onClick={() => void move(link,links[index-1])}>←</button>
+          <button className={actionStyles.action} aria-disabled={busy || loading} disabled={index === links.length-1 || Boolean(query)} aria-label={`Move ${link.title} later`} onClick={() => void move(link,links[index+1])}>→</button>
+          <button className={`${actionStyles.action} ${actionStyles.danger}`} aria-disabled={busy || loading} onClick={() => { if (working.current || loading) return; setDeleting(link); setDeleteError(""); }}><TrashIcon size={14} /> Delete</button></div></article>;
     })}</LinkGrid>
-    </PaginatedResults>}
+    </PaginatedResults></EditorPageLayout>}
     </>,
     dialogs: <>
   {editing && <LinkEditorDialog key={editing.link?.id ?? "new"} link={editing.link} blockedReason={saveBlockedReason} onSave={save} onClose={() => setEditing(null)} />}

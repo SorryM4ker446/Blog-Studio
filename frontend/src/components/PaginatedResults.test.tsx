@@ -1,6 +1,39 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { expect, it, vi } from "vitest";
 import PaginatedResults from "./PaginatedResults";
+
+it("holds the outgoing height while replacing results before height animation starts", () => {
+  const motions: { onfinish?: () => void; cancel: () => void; effect: { target: Element } }[] = [];
+  const original = Object.getOwnPropertyDescriptor(Element.prototype, "animate");
+  Object.defineProperty(Element.prototype, "animate", { configurable: true, value: function (this: Element) {
+    const animation = { cancel: vi.fn(), effect: { target: this } };
+    motions.push(animation);
+    return animation;
+  } });
+  const bounds = vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ height: 240 } as DOMRect);
+  let heightDuringReplacement = "";
+  function Result({ updated }: { updated: boolean }) {
+    useLayoutEffect(() => {
+      if (updated) heightDuringReplacement = document.querySelector<HTMLElement>("[data-result-page]")!.parentElement!.style.height;
+    }, [updated]);
+    return <p>{updated ? "New result" : "Old results"}</p>;
+  }
+  const props = { page: 1, totalPages: 2, pending: false, onPageChange: () => {} };
+  const view = render(<PaginatedResults {...props} resultKey="old"><Result updated={false} /></PaginatedResults>);
+  try {
+    view.rerender(<PaginatedResults {...props} resultKey="new"><Result updated /></PaginatedResults>);
+    act(() => motions[0].onfinish?.());
+    expect(heightDuringReplacement).toBe("240px");
+    expect(screen.getByText("New result")).toBeInTheDocument();
+    expect(document.querySelector("[data-result-page]")!.parentElement!.style.height).toBe("");
+  } finally {
+    view.unmount();
+    bounds.mockRestore();
+    if (original) Object.defineProperty(Element.prototype, "animate", original);
+    else Reflect.deleteProperty(Element.prototype, "animate");
+  }
+});
 
 it("updates restored pagination even when the rendered content is reused", () => {
   const children = <p>Retained list content</p>;

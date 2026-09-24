@@ -92,7 +92,7 @@ function PostCard({ post, onView, onEdit, onDelete, opening }: { opening?: boole
           }}
           className="editor-post-delete"
           aria-label={`Delete ${post.title}`}
-          title="Delete post"
+          data-tooltip="Delete post"
         >
           ×
         </button>
