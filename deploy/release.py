@@ -92,7 +92,7 @@ class Deployer:
         if not origin.startswith("https://") or "," in origin:
             raise ReleaseError("Production SITE_ORIGIN must be a single HTTPS origin")
         for path in ("/health/ready", "/api/settings", "/api/links"):
-            self.run(["curl", "--fail", "--silent", "--show-error", "--max-time", "30", origin + path], capture=True)
+            self.run(["curl", "--fail", "--silent", "--show-error", "--retry", "10", "--retry-all-errors", "--max-time", "30", origin + path], capture=True)
 
     def execute(self):
         self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
