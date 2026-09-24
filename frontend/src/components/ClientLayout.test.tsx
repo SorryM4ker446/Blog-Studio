@@ -124,6 +124,49 @@ describe("ClientLayout route transitions", () => {
     expect(readNavigationEntry()?.scroll).toBe(640);
   });
 
+  it("resets inner content scroll on a fresh path navigation", () => {
+    navigationState.pathname = "/posts";
+    navigationState.searchParams = new URLSearchParams();
+    window.history.replaceState({}, "", "/posts");
+    const view = render(<ClientLayout><p>Posts list</p></ClientLayout>);
+    const scroll = document.querySelector<HTMLElement>(".content-scroll")!;
+    scroll.scrollTop = 640;
+    fireEvent.scroll(scroll);
+    expect(readNavigationEntry()?.scroll).toBe(640);
+
+    window.history.pushState({}, "", "/posts/42");
+    navigationState.pathname = "/posts/42";
+    view.rerender(<ClientLayout><p>Post detail</p></ClientLayout>);
+
+    expect(scroll.scrollTop).toBe(0);
+    expect(readNavigationEntry()?.scroll).toBe(0);
+  });
+
+  it("resets a fresh detail navigation and restores the list position on history return", async () => {
+    navigationState.pathname = "/posts";
+    navigationState.searchParams = new URLSearchParams();
+    window.history.replaceState({}, "", "/posts");
+    const view = render(<ClientLayout><p>Posts list</p></ClientLayout>);
+    const scroll = document.querySelector<HTMLElement>(".content-scroll")!;
+    scroll.scrollTop = 640;
+    fireEvent.scroll(scroll);
+    expect(readNavigationEntry()?.scroll).toBe(640);
+    const listState = history.state;
+
+    window.history.pushState({}, "", "/posts/42");
+    navigationState.pathname = "/posts/42";
+    view.rerender(<ClientLayout><p>Post detail</p></ClientLayout>);
+    expect(scroll.scrollTop).toBe(0);
+
+    window.history.replaceState(listState, "", "/posts");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigationState.pathname = "/posts";
+    view.rerender(<ClientLayout><p>Posts list</p></ClientLayout>);
+
+    await waitFor(() => expect(scroll.scrollTop).toBe(640));
+    expect(readNavigationEntry()?.scroll).toBe(640);
+  });
+
   it("records the latest position synchronously before refresh or closing the page", () => {
     render(<ClientLayout><p>Contents</p></ClientLayout>);
     const content = document.querySelector<HTMLElement>(".content-scroll")!;
