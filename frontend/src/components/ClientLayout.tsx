@@ -109,6 +109,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     if (cancelledBeforeHydration || (!historyTraversalRef.current && !reloaded)) {
       focusAfterNavigationRef.current = pathChanged;
       restorationInProgressRef.current = false;
+      if (pathChanged && contentScrollRef.current) {
+        cancelRestorationRef.current?.();
+        cancelRestorationRef.current = undefined;
+        contentScrollRef.current.scrollTop = 0;
+      }
       return;
     }
     historyTraversalRef.current = false;
