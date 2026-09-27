@@ -2,12 +2,14 @@ import { formatDate } from "@/lib/display-date";
 import type { MouseEventHandler } from "react";
 import type { FileRecord } from "@/lib/api";
 import { getDownloadUrl } from "@/lib/api";
+import { getFileTypeLabel } from "@/lib/file-type";
 import { DownloadIcon, EditIcon, PaperclipIcon, TrashIcon } from "@/components/Icons";
 import styles from "./FileCard.module.css";
 
-function formatSize(bytes: number): string {
+export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -49,7 +51,7 @@ export default function FileCard({ file, onPreview, onEdit, onDelete, showDescri
           <span className={styles.name}>{label}</span>
           {showDescription && file.description && <span className={styles.description}>{file.description}</span>}
           <span className={styles.meta}>
-            {formatSize(file.size)} · {file.mime_type} · {formatDate(file.created_at)}
+            {formatFileSize(file.size)} · {getFileTypeLabel(file.orig_name, file.mime_type)} · {formatDate(file.created_at)}
           </span>
         </span>
       </button>

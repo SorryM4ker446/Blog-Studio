@@ -59,3 +59,23 @@ it("keeps legacy metadata intact until it is shortened for a save", async () => 
   fireEvent.click(save);
   await waitFor(() => expect(onSave).toHaveBeenCalledWith(legacy, "名".repeat(25), "介".repeat(100)));
 });
+
+it("rejects a file above 1 GiB before upload and accepts one at the limit", async () => {
+  const onUpload = vi.fn().mockResolvedValue({ ok: true, file });
+  render(<FileUploadDialog open onClose={vi.fn()} onUpload={onUpload} />);
+  const dialog = screen.getByRole("dialog", { name: "Upload a file" });
+  const input = document.querySelector('input[type="file"]')!;
+  const oversized = new File(["content"], "large.png", { type: "image/png" });
+  Object.defineProperty(oversized, "size", { value: 1024 ** 3 + 1 });
+  fireEvent.change(input, { target: { files: [oversized] } });
+  expect(within(dialog).getByRole("alert")).toHaveTextContent("Each file must be 1 GB or smaller.");
+  expect(within(dialog).getByRole("button", { name: "Upload" })).toBeDisabled();
+  expect(onUpload).not.toHaveBeenCalled();
+
+  const allowed = new File(["content"], "large.png", { type: "image/png" });
+  Object.defineProperty(allowed, "size", { value: 1024 ** 3 });
+  fireEvent.change(input, { target: { files: [allowed] } });
+  expect(within(dialog).getByText("1.0 GB · PNG image")).toBeVisible();
+  expect(within(dialog).getByRole("alert")).toBeEmptyDOMElement();
+  expect(within(dialog).getByRole("button", { name: "Upload" })).toBeEnabled();
+});

@@ -9,7 +9,9 @@ import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { FileMutationResult, FileRecord } from "@/lib/api";
 import { getDownloadUrl, getFileViewUrl } from "@/lib/api";
 import { DownloadIcon, EditIcon, FileTextIcon, UploadIcon } from "@/components/Icons";
-import { getFileLabel } from "./FileCard";
+import { formatFileSize, getFileLabel } from "./FileCard";
+import { getFileTypeLabel } from "@/lib/file-type";
+import { MAX_UPLOAD_BYTES } from "@/lib/file-upload";
 import styles from "./FileDialogs.module.css";
 
 const acceptedFileTypes = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv,.json,.zip,.doc,.xls,.ppt,.docx,.xlsx,.pptx";
@@ -24,12 +26,6 @@ function limitMetadataInput(value: string, previous: string, maximum: number) {
   const characters = Array.from(value);
   if (characters.length <= maximum || (characterCount(previous) > maximum && characters.length < characterCount(previous))) return value;
   return characters.slice(0, maximum).join("");
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 interface DialogShellProps {
@@ -116,11 +112,11 @@ export function FilePreviewDialog({ file, onClose, onEdit }: FilePreviewDialogPr
         </div>
         <div className={styles.detail}>
           <dt>Type</dt>
-          <dd>{file.mime_type}</dd>
+          <dd title={file.mime_type}>{getFileTypeLabel(file.orig_name, file.mime_type)}</dd>
         </div>
         <div className={styles.detail}>
           <dt>Size</dt>
-          <dd>{formatSize(file.size)}</dd>
+          <dd>{formatFileSize(file.size)}</dd>
         </div>
         <div className={styles.detail}>
           <dt>Uploaded</dt>
@@ -151,16 +147,17 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
   const [error, setError] = useState("");
   const nameTooLong = characterCount(displayName) > displayNameLimit;
   const descriptionTooLong = characterCount(description) > descriptionLimit;
+  const fileTooLarge = selectedFile !== null && selectedFile.size > MAX_UPLOAD_BYTES;
 
   function chooseFile(file: File | null) {
     if (!file) return;
     setSelectedFile(file);
     setDisplayName(file.name);
-    setError("");
+    setError(file.size > MAX_UPLOAD_BYTES ? "Each file must be 1 GB or smaller." : "");
   }
 
   async function submit(close: () => void) {
-    if (!selectedFile || !displayName.trim() || nameTooLong || descriptionTooLong || saving) return;
+    if (!selectedFile || fileTooLarge || !displayName.trim() || nameTooLong || descriptionTooLong || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -192,7 +189,7 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
             type="button"
             className={`${styles.button} ${styles.primary}`}
             onClick={() => void submit(close)}
-            disabled={!selectedFile || !displayName.trim() || nameTooLong || descriptionTooLong || saving || closing}
+            disabled={!selectedFile || fileTooLarge || !displayName.trim() || nameTooLong || descriptionTooLong || saving || closing}
           >
             {saving ? "Uploading…" : "Upload"}
           </button>
@@ -212,7 +209,7 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
             <span className={styles.selectedIcon}><FileTextIcon size={18} /></span>
             <span className={styles.selectedMeta}>
               <span className={styles.selectedName}>{selectedFile.name}</span>
-              <span className={styles.selectedSize}>{formatSize(selectedFile.size)} · {selectedFile.type || "Unknown type"}</span>
+              <span className={styles.selectedSize}>{formatFileSize(selectedFile.size)} · {getFileTypeLabel(selectedFile.name, selectedFile.type)}</span>
             </span>
             <button type="button" className={styles.replaceButton} onClick={() => inputRef.current?.click()} disabled={saving}>
               Replace
@@ -237,7 +234,7 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
               <span className={styles.dropIcon}><UploadIcon size={19} /></span>
               <span className={styles.dropTitle}>Choose a file or drag it here</span>
               <span className={styles.dropText}>
-                JPG, PNG, GIF, WebP, PDF, TXT, MD, CSV, JSON, ZIP, DOC, XLS, PPT, DOCX, XLSX, or PPTX.
+                JPG, PNG, GIF, WebP, PDF, TXT, MD, CSV, JSON, ZIP, DOC, XLS, PPT, DOCX, XLSX, or PPTX. Max 1 GB per file.
               </span>
             </span>
           </button>

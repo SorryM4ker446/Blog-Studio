@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { FileRecord, PostSummary } from "@/lib/api";
@@ -35,7 +35,7 @@ const post: PostSummary = {
 };
 
 describe("EditorListView", () => {
-  it("opens a post from its metadata while keeping edit and delete actions independent", async () => {
+  it("opens a post from its title while keeping menu actions independent", async () => {
     const user = userEvent.setup();
     const onViewPost = vi.fn();
     const onEditPost = vi.fn();
@@ -78,18 +78,32 @@ describe("EditorListView", () => {
       />,
     );
 
-    await user.click(screen.getByText("Testing"));
+    await user.click(screen.getByRole("button", { name: "Open Clickable post" }));
     expect(onViewPost).toHaveBeenCalledWith(post);
 
     onViewPost.mockClear();
+    const more = screen.getByRole("button", { name: "More actions for Clickable post" });
+    await user.click(more);
+    expect(more).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    await user.click(screen.getByRole("button", { name: "Delete Clickable post" }));
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    await user.click(more);
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(onEditPost).toHaveBeenCalledWith(post);
     expect(onDeletePost).toHaveBeenCalledWith(post.id);
     expect(onViewPost).not.toHaveBeenCalled();
+    await user.click(more);
+    const newPost = screen.getByRole("button", { name: "New Post" });
+    newPost.focus();
+    expect(newPost).toHaveFocus();
+    await waitFor(() => expect(more).toHaveAttribute("aria-expanded", "false"));
   });
 
-  it("keeps the known count and existing content stable during a background refresh", () => {
+  it("keeps the known count and existing content stable during a background refresh", async () => {
+    const user = userEvent.setup();
+    const onPreviewFile = vi.fn();
+    const onEditFile = vi.fn();
+    const onDeleteFile = vi.fn();
     render(
       <EditorListView
         links={{ query: "", loading: false, error: "", count: 0, search: vi.fn(), toolbar: <></>, content: <></>, dialogs: <></> }}
@@ -117,9 +131,9 @@ describe("EditorListView", () => {
         onViewPost={vi.fn()}
         onEditPost={vi.fn()}
         onDeletePost={vi.fn()}
-        onPreviewFile={vi.fn()}
-        onEditFile={vi.fn()}
-        onDeleteFile={vi.fn()}
+        onPreviewFile={onPreviewFile}
+        onEditFile={onEditFile}
+        onDeleteFile={onDeleteFile}
         onLoadPosts={vi.fn()}
         onLoadFiles={vi.fn()}
         onRetryPosts={vi.fn()}
@@ -130,7 +144,18 @@ describe("EditorListView", () => {
     expect(screen.getByRole("tab", { name: "Files (3)" })).toBeVisible();
     expect(screen.queryByText(/Files \(…\)/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview Architecture diagram" })).toBeVisible();
+    expect(screen.getByText("PNG image")).toBeVisible();
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("navigation", { name: "Pagination" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Preview Architecture diagram" }));
+    expect(onPreviewFile).toHaveBeenCalledWith(file);
+    const more = screen.getByRole("button", { name: "More actions for Architecture diagram" });
+    await user.click(more);
+    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("href", expect.stringContaining(String(file.id)));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(more);
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onEditFile).toHaveBeenCalledWith(file);
+    expect(onDeleteFile).toHaveBeenCalledWith(file.id);
   });
 });

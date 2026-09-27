@@ -30,7 +30,7 @@ for (const theme of ["dark", "light"]) {
         await expect(page.locator(`aside.sidebar a[href="${section}"]`)).toHaveAttribute("aria-current", "page");
         await expect(page.locator('aside.sidebar [aria-current="page"]')).toHaveCount(1);
         await expect(page.locator("h1").first()).toBeVisible();
-        if (path === "/editor") await expect(page.locator(".editor-post-title").filter({ hasText: post.title })).toBeVisible();
+        if (path === "/editor") await expect(page.getByRole("button", { name: `Open ${post.title}` })).toBeVisible();
         if (path === "/posts") {
           const card = page.getByRole("link", { name: post.title });
           await card.hover();

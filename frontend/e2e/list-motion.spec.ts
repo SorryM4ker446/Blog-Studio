@@ -66,9 +66,17 @@ for (const scenario of cases) {
     await input.press("Enter");
     const region = editor ? page.getByRole("tabpanel") : page.getByRole("region", { name: scenario.region, exact: true });
     const rows = region.locator("[data-result-page]").locator(scenario.kind === "posts" ? (editor ? ".editor-post-card" : 'a[href^="/posts/"]') : "[data-file-id]");
+    const actionAlignment = async () => {
+      const header = region.locator("[data-editor-list-header] > span").last();
+      const more = rows.first().getByRole("button", { name: /More actions for/ });
+      const x = await Promise.all([header, more].map(locator => locator.evaluate(node =>
+        node.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(node).paddingLeft))));
+      return Math.abs(x[0] - x[1]);
+    };
     const next = region.getByRole("button", { name: "Next page" });
     const previous = region.getByRole("button", { name: "Previous page" });
     await expect(rows).toHaveCount(10);
+    if (editor) expect(await actionAlignment()).toBeLessThan(1);
     await expect.poll(() => region.evaluate(node => node.getAnimations({ subtree: true })
       .filter(animation => animation.playState === "running" || animation.pending).length)).toBe(0);
     await expect(next).toBeEnabled();
@@ -160,10 +168,12 @@ for (const scenario of cases) {
     await page.setViewportSize({ width: 760, height: 1000 });
     if (editor) {
       await expect.poll(() => content.evaluate(node => {
-        const grid = node.querySelector(".editor-resource-grid")!;
-        const row = grid.firstElementChild!.getBoundingClientRect().height;
-        return Math.abs(node.parentElement!.getBoundingClientRect().height - (row * 10 + 9 * 16));
+        const list = node.querySelector("[data-editor-list]")!;
+        const header = list.querySelector("[data-editor-list-header]")!.getBoundingClientRect().height;
+        const row = list.children[1].getBoundingClientRect().height;
+        return Math.abs(node.parentElement!.getBoundingClientRect().height - (header + row * 10));
       })).toBeLessThan(1);
+      expect(await actionAlignment()).toBeLessThan(1);
     }
     const paginationGaps = await region.evaluate((node) => {
       const bottom = node.querySelector('[data-result-page]')!.getBoundingClientRect().bottom;

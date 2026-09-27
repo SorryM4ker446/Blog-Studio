@@ -6,12 +6,14 @@ Blog Studio stores uploaded content behind database records and never exposes se
 
 ```env
 UPLOAD_DIR=uploads
-MAX_UPLOAD_BYTES=10485760
+MAX_UPLOAD_BYTES=1073741824
 ```
 
 `UPLOAD_DIR` may be relative to the backend process or absolute. Every read, write, quarantine, restore, and scan operation is confined to this directory. Symbolic links and nested storage keys are not treated as regular stored content.
 
-`MAX_UPLOAD_BYTES` defaults to 10 MiB and accepts values from 1 byte through 100 MiB. The backend limits the complete multipart request and independently limits bytes written to disk.
+`MAX_UPLOAD_BYTES` defaults to 1 GiB (1,073,741,824 bytes) and accepts values from 1 byte through 1 GiB. The backend limits the complete multipart request and independently limits bytes written to disk. Managed uploads also reject larger files before sending them.
+
+Container deployments read `MAX_UPLOAD_BYTES` from the host's `deploy/.env`. Automatic releases preserve that file, so an existing lower value must be changed there to `1073741824` before the new limit takes effect. The same applies to older `HTTP_READ_TIMEOUT` and `HTTP_WRITE_TIMEOUT` overrides when large uploads need more time.
 
 ## Accepted formats
 
@@ -59,6 +61,8 @@ The response lists database records whose content is missing and stored content 
 
 ## Operational notes
 
+- A 1 GiB multipart upload may temporarily occupy about 1 GiB in the system temporary directory in addition to its final copy in `UPLOAD_DIR`. Provision free disk space for concurrent uploads on both volumes.
+- The default HTTP read and write timeouts are 30 minutes to allow large uploads over slower connections. Existing `HTTP_READ_TIMEOUT` and `HTTP_WRITE_TIMEOUT` environment overrides may need increasing; reverse proxies must also allow the request body and duration.
 - Keep `UPLOAD_DIR` outside publicly served frontend directories.
 - Give the backend process read and write access only to that directory.
 - Back up the database and upload directory together while application writes are stopped; use the matched bundle and isolated restore procedure in [`backup-restore.md`](backup-restore.md).

@@ -39,7 +39,10 @@ for (const theme of ["dark", "light"]) {
       for (const resource of ["links", "files"]) {
         await page.getByRole("tab", { name: new RegExp(`^${resource}`, "i") }).click();
         const row = resource === "links" ? page.getByRole("article", { name: link.title, exact: true }) : page.locator(`[data-file-id="${file.id}"]`);
-        const edit = row.getByRole("button", { name: "Edit", exact: true });
+        const openEdit = async () => {
+          if (resource === "files") await row.getByRole("button", { name: /More actions for/ }).click();
+          await row.getByRole("button", { name: "Edit", exact: true }).click();
+        };
         const dialog = page.getByRole("dialog", { name: resource === "links" ? "Edit link" : "Edit file details", exact: true });
         const overlay = page.locator("[data-modal-overlay]");
         const finishExit = async () => {
@@ -52,7 +55,7 @@ for (const theme of ["dark", "light"]) {
           await expect(dialog).toHaveCount(0);
         };
         for (const dismiss of ["Cancel", "Close dialog", "Escape", "backdrop"]) {
-          await edit.click();
+          await openEdit();
           await expect(dialog).toBeVisible();
           if (dismiss === "Cancel") {
             // Releasing a drag on the backdrop must not dismiss the dialog.
@@ -71,9 +74,9 @@ for (const theme of ["dark", "light"]) {
           else if (dismiss === "backdrop") await overlay.click({ position: { x: 4, y: 4 } });
           else await dialog.getByRole("button", { name: dismiss, exact: true }).click();
           await finishExit();
-          await expect(edit).toBeFocused();
+          await expect(resource === "files" ? row.getByRole("button", { name: /More actions for/ }) : row.getByRole("button", { name: "Edit", exact: true })).toBeFocused();
         }
-        await edit.click();
+        await openEdit();
         const input = resource === "links" ? dialog.getByLabel("TITLE", { exact: true }) : dialog.getByRole("textbox", { name: /Display name/ });
         const updatedTitle = `Saved ${resource} motion`;
         await input.fill(updatedTitle);
@@ -109,6 +112,7 @@ for (const theme of ["dark", "light"]) {
 
         await page.setViewportSize({ width: 375, height: 850 });
         const updatedRow = resource === "links" ? page.getByRole("article", { name: updatedTitle, exact: true }) : row;
+        if (resource === "files") await updatedRow.getByRole("button", { name: /More actions for/ }).click();
         await updatedRow.getByRole("button", { name: "Edit", exact: true }).click();
         await expectNoOverflow(page);
         await scanAccessibility(page, info, `${resource}-edit-mobile-${theme}`);

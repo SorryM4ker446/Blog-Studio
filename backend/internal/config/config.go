@@ -15,16 +15,16 @@ import (
 
 const (
 	minimumJWTSecretLength      = 32
-	defaultMaxUploadBytes       = int64(10 * 1024 * 1024)
-	maximumMaxUploadBytes       = int64(100 * 1024 * 1024)
+	defaultMaxUploadBytes       = int64(1024 * 1024 * 1024)
+	maximumMaxUploadBytes       = defaultMaxUploadBytes
 	defaultDBMaxOpenConnections = 10
 	defaultDBMaxIdleConnections = 5
 	maximumDBConnections        = 100
 	defaultDBConnectionLifetime = 30 * time.Minute
 	defaultDBConnectionIdleTime = 5 * time.Minute
 	defaultReadHeaderTimeout    = 5 * time.Second
-	defaultReadTimeout          = 2 * time.Minute
-	defaultWriteTimeout         = 5 * time.Minute
+	defaultReadTimeout          = 30 * time.Minute
+	defaultWriteTimeout         = 30 * time.Minute
 	defaultIdleTimeout          = 2 * time.Minute
 	defaultShutdownTimeout      = 20 * time.Second
 	defaultHealthCheckTimeout   = 2 * time.Second

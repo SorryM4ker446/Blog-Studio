@@ -68,8 +68,11 @@ func TestLoadFromEnvAcceptsValidatedConfiguration(t *testing.T) {
 	if len(cfg.AllowedOrigins) != 2 {
 		t.Fatalf("default allowed origins = %v", cfg.AllowedOrigins)
 	}
-	if cfg.MaxUploadBytes != 10*1024*1024 {
-		t.Fatalf("MaxUploadBytes = %d, want %d", cfg.MaxUploadBytes, 10*1024*1024)
+	if cfg.MaxUploadBytes != 1024*1024*1024 {
+		t.Fatalf("MaxUploadBytes = %d, want %d", cfg.MaxUploadBytes, 1024*1024*1024)
+	}
+	if cfg.HTTPReadTimeout != 30*time.Minute || cfg.HTTPWriteTimeout != 30*time.Minute {
+		t.Fatalf("upload-compatible HTTP timeout defaults = read %s write %s", cfg.HTTPReadTimeout, cfg.HTTPWriteTimeout)
 	}
 	if !strings.HasSuffix(cfg.UploadDir, "uploads") {
 		t.Fatalf("UploadDir = %q, want an absolute uploads directory", cfg.UploadDir)
@@ -232,13 +235,17 @@ func TestLoadFromEnvValidatesUploadLimit(t *testing.T) {
 	t.Setenv("DB_DSN", "host=localhost dbname=unit_test")
 	t.Setenv("JWT_SECRET", "12345678901234567890123456789012")
 
-	for _, value := range []string{"0", "not-a-number", "104857601"} {
+	for _, value := range []string{"0", "not-a-number", "1073741825"} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("MAX_UPLOAD_BYTES", value)
 			if _, err := LoadFromEnv(); err == nil || !strings.Contains(err.Error(), "MAX_UPLOAD_BYTES") {
 				t.Fatalf("MAX_UPLOAD_BYTES=%q error = %v", value, err)
 			}
 		})
+	}
+	t.Setenv("MAX_UPLOAD_BYTES", "1073741824")
+	if cfg, err := LoadFromEnv(); err != nil || cfg.MaxUploadBytes != 1073741824 {
+		t.Fatalf("1 GiB upload limit = %d, error = %v", cfg.MaxUploadBytes, err)
 	}
 
 	t.Setenv("MAX_UPLOAD_BYTES", "2097152")

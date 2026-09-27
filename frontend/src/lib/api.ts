@@ -9,6 +9,7 @@ import {
   setCSRFToken,
 } from "@/lib/api-client";
 import { rebaseFileViewURLs } from "@/lib/file-url";
+import { MAX_UPLOAD_BYTES } from "@/lib/file-upload";
 import { searchAPIParams, type ResourceQuery } from "@/lib/resource-query";
 
 export { API_BASE, ApiError, getApiErrorMessage, isApiError } from "@/lib/api-client";
@@ -353,6 +354,9 @@ export async function uploadFileWithMetadata(
   metadata: { displayName?: string; description?: string } = {},
   isSystem = false,
 ): Promise<FileMutationResult> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return { ok: false, error: "Each file must be 1 GB or smaller.", kind: "http", status: 413, code: "file_too_large" };
+  }
   try {
     const formData = new FormData();
     formData.append("file", file);

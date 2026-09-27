@@ -1,18 +1,20 @@
 "use client";
 
 import { formatDate } from "@/lib/display-date";
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useScopeTransition } from "@/lib/use-scope-transition";
 import type { ResourceQuery } from "@/lib/resource-query";
 
-import type { Category, FileRecord, PostSummary } from "@/lib/api";
+import { getDownloadUrl, type Category, type FileRecord, type PostSummary } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
-import FileCard, { EditActionButton } from "@/components/files/FileCard";
-import { InboxIcon, PlusIcon, UploadIcon } from "@/components/Icons";
+import { formatFileSize, getFileLabel } from "@/components/files/FileCard";
+import { getFileTypeLabel } from "@/lib/file-type";
+import { ChevronDownIcon, DownloadIcon, EditIcon, InboxIcon, PlusIcon, TrashIcon, UploadIcon } from "@/components/Icons";
 import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 import EditorSelect from "@/components/editor/EditorSelect";
 import EditorPageLayout from "./EditorPageLayout";
+import styles from "./EditorListView.module.css";
 
 import type useLinksManager from "@/components/links/LinksManager";
 import EditorResourceTabs, { EditorHeading, type EditorTab } from "./EditorResourceTabs";
@@ -60,61 +62,120 @@ interface EditorListViewProps {
   onRetryFiles: () => void;
 }
 
-function PostCard({ post, onView, onEdit, onDelete, opening }: { opening?: boolean; post: PostSummary; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+function EditorRowActions({ label, open, opening = false, onToggle, onClose, onEdit, onDelete, downloadUrl }: {
+  label: string; open: boolean; opening?: boolean; onToggle: () => void; onClose: () => void;
+  onEdit: () => void; onDelete: () => void; downloadUrl?: string;
+}) {
+  const id = useId();
+  const container = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [openUp, setOpenUp] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!container.current?.contains(event.target as Node)) onClose();
+    }
+    function onFocusIn(event: FocusEvent) {
+      if (!container.current?.contains(event.target as Node)) onClose();
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        trigger.current?.focus({ preventScroll: true });
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, onClose]);
+
+  function run(action: () => void) {
+    onClose();
+    trigger.current?.focus({ preventScroll: true });
+    action();
+  }
+
   return (
-    <article className="ai-card editor-post-card" onClick={onView}>
+    <div className={styles.actions} ref={container}>
       <button
         type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onView();
+        ref={trigger}
+        className={styles.more}
+        aria-label={`More actions for ${label}`}
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        aria-busy={opening}
+        disabled={opening}
+        onClick={() => {
+          if (!open) setOpenUp(window.innerHeight - (container.current?.closest("article")?.getBoundingClientRect().bottom ?? 0) < 140);
+          onToggle();
         }}
-        className="editor-post-card-open"
-        aria-label={`Open ${post.title}`}
-      />
-      <div className="editor-post-card-header">
-        <div className="editor-post-card-content">
-          <span style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0 }}>
-            <span className="editor-post-title">{post.title}</span>
-            <span className={post.status === "published" ? "editor-post-status editor-post-published" : "editor-post-status editor-post-draft"}>
-              {post.status === "published" ? "Published" : "Draft"}
-            </span>
-          </span>
-          <span className="editor-post-summary">
-            {post.summary || <span>No introduction provided.</span>}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete();
-          }}
-          className="editor-post-delete"
-          aria-label={`Delete ${post.title}`}
-          data-tooltip="Delete post"
-        >
-          ×
-        </button>
+      >More {opening ? <svg className="editor-opening-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" opacity=".2" /><path d="M12 3a9 9 0 0 1 9 9" /></svg> : <span className={styles.chevron}><ChevronDownIcon size={14} /></span>}</button>
+      <div id={id} className={`${styles.menu} ${openUp ? styles.menuUp : ""} ${open ? styles.menuOpen : ""}`} role="group" aria-label={`Actions for ${label}`} aria-hidden={!open} inert={!open}>
+        <button type="button" className={styles.menuItem} onClick={() => run(onEdit)}><EditIcon size={15} /> Edit</button>
+        {downloadUrl && <a className={styles.menuItem} href={downloadUrl} download onClick={() => { onClose(); trigger.current?.focus({ preventScroll: true }); }}><DownloadIcon size={15} /> Download</a>}
+        <button type="button" className={`${styles.menuItem} ${styles.danger}`} onClick={() => run(onDelete)}><TrashIcon size={15} /> Delete</button>
       </div>
-      <div className="editor-post-card-footer">
-        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-          <span>{formatDate(post.updated_at)}</span>
-          <span className={post.category_id == null ? "editor-post-category editor-post-category-empty" : "editor-post-category"}>
-            {post.category_id == null ? "无标签" : post.category?.name || "Uncategorized"}
-          </span>
-        </div>
-        <span className="editor-post-card-actions" onClick={(event) => event.stopPropagation()}>
-          <EditActionButton onClick={onEdit} busy={opening} />
+    </div>
+  );
+}
+
+function PostRow({ post, onView, onEdit, onDelete, opening, actionsOpen, onToggleActions, onCloseActions }: {
+  post: PostSummary; onView: () => void; onEdit: () => void; onDelete: () => void; opening: boolean;
+  actionsOpen: boolean; onToggleActions: () => void; onCloseActions: () => void;
+}) {
+  return (
+    <article className={`${styles.row} ${actionsOpen ? styles.rowActive : ""} editor-post-card`}>
+      <button type="button" className={styles.main} onClick={onView} aria-label={`Open ${post.title}`}>
+        <span className={styles.title}>{post.title}</span>
+        <span className={styles.description}>{post.summary || "No introduction provided."}</span>
+      </button>
+      <div className={styles.meta}>
+        <span className={post.status === "published" ? "editor-post-status editor-post-published" : "editor-post-status editor-post-draft"}>
+          {post.status === "published" ? "Published" : "Draft"}
         </span>
+        <span className={post.category_id == null ? "editor-post-category editor-post-category-empty" : "editor-post-category"}>
+          {post.category_id == null ? "无标签" : post.category?.name || "Uncategorized"}
+        </span>
+        <time className={styles.date} dateTime={post.updated_at}>{formatDate(post.updated_at)}</time>
       </div>
+      <EditorRowActions label={post.title} open={actionsOpen} opening={opening} onToggle={onToggleActions} onClose={onCloseActions} onEdit={onEdit} onDelete={onDelete} />
     </article>
   );
+}
+
+function FileRow({ file, onPreview, onEdit, onDelete, actionsOpen, onToggleActions, onCloseActions }: {
+  file: FileRecord; onPreview: () => void; onEdit: () => void; onDelete: () => void;
+  actionsOpen: boolean; onToggleActions: () => void; onCloseActions: () => void;
+}) {
+  const label = getFileLabel(file);
+  const description = file.description || (label === file.orig_name ? "No description provided." : file.orig_name);
+  return <article className={`${styles.row} ${actionsOpen ? styles.rowActive : ""}`} data-file-id={file.id}>
+    <button type="button" className={styles.main} onClick={onPreview} aria-label={`Preview ${label}`}>
+      <span className={styles.title}>{label}</span>
+      <span className={styles.description}>{description}</span>
+    </button>
+    <div className={styles.meta}>
+      <span className={styles.fileMeta}>{formatFileSize(file.size)}</span>
+      <span className={styles.fileMeta} title={file.mime_type}>{getFileTypeLabel(file.orig_name, file.mime_type)}</span>
+      <time className={styles.date} dateTime={file.created_at}>{formatDate(file.created_at)}</time>
+    </div>
+    <EditorRowActions label={label} open={actionsOpen} onToggle={onToggleActions} onClose={onCloseActions}
+      onEdit={onEdit} onDelete={onDelete} downloadUrl={getDownloadUrl(file.id)} />
+  </article>;
 }
 
 export default function EditorListView(controls: EditorListViewProps) {
   const [animatePages, setAnimatePages] = useState(false);
   const [animateCriteria, setAnimateCriteria] = useState(false);
+  const [openActions, setOpenActions] = useState<string | null>(null);
   const requestedLoading = controls.activeTab === "links" ? controls.links.loading : controls.activeTab === "posts" ? controls.postsLoading : controls.filesLoading;
   const resultQuery = controls.activeTab === "posts" ? controls.postResultQuery : controls.fileResultQuery;
   const value = useMemo(() => ({ ...controls, scope: controls.activeTab,
@@ -124,7 +185,7 @@ export default function EditorListView(controls: EditorListViewProps) {
   }), [controls, resultQuery]);
   const { displayed: props, ref, changing } = useScopeTransition(value, controls.activeTab, requestedLoading,
     { query: controls.activeTab === "links" ? controls.links.query : controls.searchQuery, categoryId: controls.activeTab === "posts" ? controls.categoryId : "" }, animateCriteria && !controls.restoring);
-  function changeTab(tab: EditorTab) { setAnimateCriteria(true); controls.onTabChange(tab); }
+  function changeTab(tab: EditorTab) { setOpenActions(null); setAnimateCriteria(true); controls.onTabChange(tab); }
   const loading = props.activeTab === "posts" ? props.postsLoading : props.filesLoading;
   const error = props.activeTab === "posts" ? props.postsError : props.filesError;
   const hasItems = props.activeTab === "posts" ? props.posts.length > 0 : props.files.length > 0;
@@ -150,9 +211,9 @@ export default function EditorListView(controls: EditorListViewProps) {
               { value: "0", label: "Uncategorized" },
               ...controls.categories.map((category) => ({ value: String(category.id), label: category.name })),
             ]}
-            onChange={category => { setAnimateCriteria(true); controls.onCategoryChange(category); }}
+            onChange={category => { setOpenActions(null); setAnimateCriteria(true); controls.onCategoryChange(category); }}
           />}
-          <SearchInput variant="editor" placeholder={`Search ${controls.activeTab}...`} onSearch={query => { setAnimateCriteria(true); if (controls.activeTab === "links") controls.links.search(query); else controls.onSearch(query); }} value={controls.activeTab === "links" ? controls.links.query : controls.searchQuery} />
+          <SearchInput variant="editor" placeholder={`Search ${controls.activeTab}...`} onSearch={query => { setOpenActions(null); setAnimateCriteria(true); if (controls.activeTab === "links") controls.links.search(query); else controls.onSearch(query); }} value={controls.activeTab === "links" ? controls.links.query : controls.searchQuery} />
           {controls.activeTab === "links" ? controls.links.toolbar : <button type="button" onClick={controls.activeTab === "posts" ? controls.onNewPost : controls.onUploadFile} className="editor-primary-action">
             {controls.activeTab === "posts" ? <><PlusIcon size={16} /> New Post</> : <><UploadIcon size={16} /> Upload</>}
           </button>}
@@ -185,6 +246,7 @@ export default function EditorListView(controls: EditorListViewProps) {
           <EditorPageLayout resource={props.activeTab} count={(loading || error) && !hasItems ? 10 : count} pages={pages}>
             <PaginatedResults
               stablePageHeight
+              allowOverflow
               animateChanges={animatePages && !props.restoring}
               key={props.activeTab}
               transitionGroup={JSON.stringify([props.activeTab, props.query, props.categoryId])}
@@ -193,29 +255,43 @@ export default function EditorListView(controls: EditorListViewProps) {
               resultKey={String(page)}
               pending={loading}
               onPageChange={(page) => {
+                setOpenActions(null);
                 setAnimatePages(true);
                 (props.activeTab === "posts" ? props.onLoadPosts : props.onLoadFiles)(page);
               }}
             >
-              {error ? <ErrorState title={`Editor ${props.activeTab} could not be loaded`} message={error} onRetry={retry} retrying={loading} /> : loading && !hasItems ? <p role="status" style={{ padding: "1.5rem", color: "var(--text-muted)" }}>Loading {props.activeTab}…</p> : <div className="editor-resource-grid">
+              {error ? <ErrorState title={`Editor ${props.activeTab} could not be loaded`} message={error} onRetry={retry} retrying={loading} /> : loading && !hasItems ? <p role="status" style={{ padding: "1.5rem", color: "var(--text-muted)" }}>Loading {props.activeTab}…</p> : <div className={styles.list} data-editor-list>
+                <div className={styles.header} data-editor-list-header aria-hidden="true">
+                  <span>{props.activeTab === "posts" ? "Title & Introduction" : "File & Description"}</span>
+                  <span>{props.activeTab === "posts" ? "Status" : "Size"}</span>
+                  <span>{props.activeTab === "posts" ? "Category" : "Type"}</span>
+                  <span>{props.activeTab === "posts" ? "Updated At" : "Uploaded At"}</span>
+                  <span>Actions</span>
+                </div>
                 {props.activeTab === "posts"
                   ? props.posts.map((post) => (
-                      <PostCard
+                      <PostRow
                         key={post.id}
                         post={post}
                         opening={controls.openingPostId === post.id && !controls.openingError}
+                        actionsOpen={openActions === `post:${post.id}`}
+                        onToggleActions={() => setOpenActions(current => current === `post:${post.id}` ? null : `post:${post.id}`)}
+                        onCloseActions={() => setOpenActions(null)}
                         onView={() => props.onViewPost(post)}
                         onEdit={() => props.onEditPost(post)}
                         onDelete={() => props.onDeletePost(post.id)}
                       />
                     ))
                   : props.files.map((file) => (
-                      <FileCard
+                      <FileRow
                         key={file.id}
                         file={file}
-                        onPreview={props.onPreviewFile}
-                        onEdit={props.onEditFile}
-                        onDelete={(item) => props.onDeleteFile(item.id)}
+                        actionsOpen={openActions === `file:${file.id}`}
+                        onToggleActions={() => setOpenActions(current => current === `file:${file.id}` ? null : `file:${file.id}`)}
+                        onCloseActions={() => setOpenActions(null)}
+                        onPreview={() => props.onPreviewFile(file)}
+                        onEdit={() => props.onEditFile(file)}
+                        onDelete={() => props.onDeleteFile(file.id)}
                       />
                     ))}
               </div>}

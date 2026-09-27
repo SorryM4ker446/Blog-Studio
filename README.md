@@ -58,7 +58,7 @@ $env:ALLOWED_ORIGINS = "http://localhost:3000"
 $env:COOKIE_SECURE = "false"
 $env:TRUSTED_PROXIES = ""
 $env:UPLOAD_DIR = "uploads"
-$env:MAX_UPLOAD_BYTES = "10485760"
+$env:MAX_UPLOAD_BYTES = "1073741824"
 
 go run ./cmd/migrate up
 ```
