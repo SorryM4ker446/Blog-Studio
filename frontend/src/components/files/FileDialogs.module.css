@@ -15,6 +15,32 @@
   width: min(880px, 100%);
 }
 
+.uploadDialog {
+  height: min(620px, calc(100dvh - 48px));
+  overflow: hidden;
+}
+
+.uploadDialog > div {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.uploadDialog .body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 640px) {
+  .uploadDialog {
+    height: min(620px, calc(100dvh - 24px));
+    max-height: calc(100dvh - 24px);
+  }
+}
+
 .header {
   display: flex;
   align-items: flex-start;
@@ -178,13 +204,19 @@
 }
 
 .selectedFile {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  position: relative;
+  display: grid;
+  min-height: 78px;
   padding: 12px;
   background: var(--file-muted-bg);
   border: 1px solid var(--border-color);
   border-radius: 11px;
+}
+
+.selectedFileRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .selectedIcon {
@@ -220,16 +252,90 @@
 }
 
 .replaceButton {
+  padding: 7px 9px;
   color: var(--text-secondary);
   font: inherit;
   font-size: 0.76rem;
   background: transparent;
   border: 0;
+  border-radius: 7px;
   cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
 }
 
-.replaceButton:hover {
+.replaceButton:hover:not(:disabled) {
   color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-blue) 14%, var(--file-muted-bg));
+}
+
+.replaceButton:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.replaceButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.uploadProgress {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 12px;
+  background: var(--file-muted-bg);
+  border-radius: inherit;
+}
+
+.uploadProgressHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.uploadPercent {
+  color: var(--accent-blue);
+  font-weight: 700;
+}
+
+.progressTrack {
+  height: 7px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text-muted) 27%, var(--file-muted-bg));
+  border-radius: 99px;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  background: var(--accent-blue);
+  border-radius: inherit;
+  transition: width 120ms ease;
+}
+
+.progressIndeterminate {
+  width: 32%;
+  animation: uploadProgressSweep 1.4s ease-in-out infinite alternate;
+}
+
+.progressAmount {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+@keyframes uploadProgressSweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(315%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressIndeterminate { animation: none; }
+  .progressFill { transition: none; }
 }
 
 .error {

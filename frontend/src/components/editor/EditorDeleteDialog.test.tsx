@@ -20,6 +20,19 @@ function mockMotion() {
 }
 
 describe("EditorDeleteDialog", () => {
+  it("reveals the updated page through the backdrop after a successful deletion", () => {
+    mockMotion();
+    const props = { open: true, resourceType: "post" as const, busy: false, blocked: false, error: "", onConfirm: vi.fn(), onCancel: vi.fn() };
+    const view = render(<EditorDeleteDialog {...props} />);
+    view.rerender(<EditorDeleteDialog {...props} open={false} completed />);
+    const [overlayFrames, overlayOptions] = vi.mocked(Element.prototype.animate).mock.calls.at(-2)!;
+    const [panelFrames] = vi.mocked(Element.prototype.animate).mock.calls.at(-1)!;
+    expect((overlayFrames as Keyframe[]).at(-1)?.backdropFilter).toBe("blur(0px)");
+    expect((overlayOptions as KeyframeAnimationOptions).duration).toBe(300);
+    expect((panelFrames as Keyframe[])[1]).toMatchObject({ opacity: 0, transform: "scale(.985)", offset: .58 });
+    expect(screen.getByRole("alertdialog").parentElement).toHaveAttribute("data-exit", "deleted");
+  });
+
   it.each(["post", "file", "category", "link"] as const)("keeps the %s dialog and background isolation until exit finishes", resourceType => {
     const motions = mockMotion();
     const trigger = document.createElement("button"); document.body.appendChild(trigger); trigger.focus();

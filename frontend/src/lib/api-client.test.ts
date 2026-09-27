@@ -209,6 +209,66 @@ describe("apiRequest", () => {
     expect(mutationHeaders).toEqual(["token-1", "token-2"]);
   });
 
+  it("reports real multipart progress and preserves CSRF recovery for uploads", async () => {
+    setCSRFToken("stale-token");
+    setCSRFCookie("stale-token");
+    class UploadRequest extends EventTarget {
+      static instances: UploadRequest[] = [];
+      upload = new EventTarget();
+      headers = new Map<string, string>();
+      withCredentials = false;
+      status = 0;
+      statusText = "";
+      responseText = "";
+      body: FormData | null = null;
+      method = "";
+      url = "";
+      constructor() { super(); UploadRequest.instances.push(this); }
+      open(method: string, url: string) { this.method = method; this.url = url; }
+      setRequestHeader(name: string, value: string) { this.headers.set(name.toLowerCase(), value); }
+      getResponseHeader(name: string) { return name.toLowerCase() === "content-type" ? "application/json" : null; }
+      send(body: FormData) { this.body = body; }
+      finish(status: number, payload: unknown) {
+        this.status = status;
+        this.responseText = JSON.stringify(payload);
+        this.dispatchEvent(new Event("load"));
+      }
+    }
+    vi.stubGlobal("XMLHttpRequest", UploadRequest);
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => {
+      expect(url).toBe("http://localhost:8080/api/csrf");
+      setCSRFCookie("fresh-token");
+      return jsonResponse({ csrf_token: "fresh-token" });
+    }));
+    const form = new FormData();
+    form.append("file", new File(["sample"], "sample.txt", { type: "text/plain" }));
+    const onProgress = vi.fn();
+    const pending = apiRequest<{ id: number }>("/admin/files", {
+      method: "POST", body: form, auth: true, csrf: true, onUploadProgress: onProgress,
+    });
+
+    await vi.waitFor(() => expect(UploadRequest.instances).toHaveLength(1));
+    const first = UploadRequest.instances[0];
+    expect(first.method).toBe("POST");
+    expect(first.url).toBe("http://localhost:8080/api/admin/files");
+    expect(first.body).toBe(form);
+    expect(first.withCredentials).toBe(true);
+    expect(first.headers.get("x-csrf-token")).toBe("stale-token");
+    expect(first.headers.has("content-type")).toBe(false);
+    first.upload.dispatchEvent(new ProgressEvent("progress", { lengthComputable: true, loaded: 68, total: 100 }));
+    expect(onProgress).toHaveBeenLastCalledWith({ loaded: 68, total: 100 });
+    first.finish(403, { error: "Invalid CSRF token", code: "invalid_csrf" });
+
+    await vi.waitFor(() => expect(UploadRequest.instances).toHaveLength(2));
+    const retry = UploadRequest.instances[1];
+    expect(retry.body).toBe(form);
+    expect(retry.headers.get("x-csrf-token")).toBe("fresh-token");
+    expect(onProgress).toHaveBeenLastCalledWith(null);
+    retry.finish(201, { id: 7 });
+    await expect(pending).resolves.toEqual({ id: 7 });
+    expect(onProgress).toHaveBeenCalledTimes(3);
+  });
+
   it("shares a refreshed CSRF token across out-of-order invalid responses", async () => {
     setCSRFToken("stale-token");
     setCSRFCookie("stale-token");

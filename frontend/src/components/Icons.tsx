@@ -75,6 +75,18 @@ export const ChevronDownIcon = ({ size = 16, className = "", style = {} }) => (
   </svg>
 );
 
+export const CheckIcon = ({ size = 16, className = "", style = {} }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <path d="m5 12 4 4L19 6" />
+  </svg>
+);
+
+export const XIcon = ({ size = 16, className = "", style = {} }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className} style={style}>
+    <path d="M6 6 18 18M18 6 6 18" />
+  </svg>
+);
+
 export const StudioLogo = ({ size = 24, className = "", style = {} }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} style={style}>
     <rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />

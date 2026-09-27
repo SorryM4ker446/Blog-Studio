@@ -124,6 +124,12 @@ export interface ApiRequestOptions extends Omit<RequestInit, "body"> {
   csrf?: boolean;
   forceCSRFRefresh?: boolean;
   responseType?: "json" | "text" | "void";
+  onUploadProgress?: (progress: UploadProgress | null) => void;
+}
+
+export interface UploadProgress {
+  loaded: number;
+  total: number;
 }
 
 function resolveApiURL(path: string): string {
@@ -229,6 +235,67 @@ async function parseSuccessResponse<T>(response: Response, responseType: ApiRequ
   }
 }
 
+function sendUploadWithProgress(
+  url: string,
+  request: RequestInit & { body?: BodyInit | null },
+  headers: Headers,
+  onProgress: NonNullable<ApiRequestOptions["onUploadProgress"]>,
+): Promise<Response> {
+  if (!(request.body instanceof FormData)) {
+    throw new TypeError("Upload progress requires FormData");
+  }
+  const body = request.body;
+  return new Promise<Response>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const signal = request.signal;
+    const onAbort = () => xhr.abort();
+    const cleanup = () => signal?.removeEventListener("abort", onAbort);
+    xhr.open(request.method || "POST", url);
+    xhr.withCredentials = request.credentials !== "omit";
+    headers.forEach((value, name) => xhr.setRequestHeader(name, value));
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onProgress({ loaded: event.loaded, total: event.total });
+      }
+    });
+    xhr.addEventListener("load", () => {
+      cleanup();
+      if (xhr.status === 0) {
+        reject(new ApiError("Unable to reach the server", { kind: "network", code: "network_error" }));
+        return;
+      }
+      resolve(new Response([204, 205, 304].includes(xhr.status) ? null : xhr.responseText, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: {
+          "Content-Type": xhr.getResponseHeader("Content-Type") || "",
+          "Retry-After": xhr.getResponseHeader("Retry-After") || "",
+        },
+      }));
+    });
+    xhr.addEventListener("error", () => {
+      cleanup();
+      reject(new ApiError("Unable to reach the server", { kind: "network", code: "network_error" }));
+    });
+    xhr.addEventListener("abort", () => {
+      cleanup();
+      reject(new ApiError("Request was cancelled", { kind: "aborted", code: "request_aborted" }));
+    });
+    if (signal?.aborted) {
+      reject(new ApiError("Request was cancelled", { kind: "aborted", code: "request_aborted" }));
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+    onProgress(null);
+    try {
+      xhr.send(body);
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
+  });
+}
+
 async function performRequest<T>(path: string, options: ApiRequestOptions, allowCSRFRefresh: boolean): Promise<T> {
   const {
     auth = false,
@@ -236,6 +303,7 @@ async function performRequest<T>(path: string, options: ApiRequestOptions, allow
     csrf = false,
     forceCSRFRefresh = false,
     responseType = "json",
+    onUploadProgress,
     headers: providedHeaders,
     ...requestInit
   } = options;
@@ -249,11 +317,13 @@ async function performRequest<T>(path: string, options: ApiRequestOptions, allow
 
   let response: Response;
   try {
-    response = await fetch(resolveApiURL(path), {
-      ...requestInit,
-      credentials: requestInit.credentials ?? "include",
-      headers,
-    });
+    response = onUploadProgress
+      ? await sendUploadWithProgress(resolveApiURL(path), { ...requestInit, credentials: requestInit.credentials ?? "include" }, headers, onUploadProgress)
+      : await fetch(resolveApiURL(path), {
+        ...requestInit,
+        credentials: requestInit.credentials ?? "include",
+        headers,
+      });
   } catch (error) {
     throw classifyFetchError(error);
   }

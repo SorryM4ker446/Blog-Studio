@@ -10,6 +10,7 @@ import type { Category, PostDetail } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
 import { createMarkdownParser } from "@/lib/markdown";
 import CategoryField from "@/components/editor/CategoryField";
+import { CheckIcon } from "@/components/Icons";
 import { validatePostFields, type PostAction } from "@/lib/post-editor";
 import "react-markdown-editor-lite/lib/index.css";
 
@@ -74,6 +75,8 @@ export default function PostEditorForm(props: PostEditorFormProps) {
   const MdEditor = props.MarkdownComponent ?? LazyMdEditor;
   const errors = props.validationAttempted ? validatePostFields(props) : { title: "", summary: "", content: "" };
   const failed = props.saveMessage.startsWith("❌");
+  const saveFeedbackTone = failed ? "error" : props.saveMessage.startsWith("✅") ? "success" : "info";
+  const saveFeedbackText = props.saveMessage.replace(/^[✅❌]\s*/u, "");
   const params = useSearchParams();
   const returnTo = `/editor?${params.toString()}`;
 
@@ -213,7 +216,23 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </fieldset>
 
         <div>
-          <label htmlFor="post-markdown_md" id="post-content-label" style={labelStyle}>CONTENT (MARKDOWN) · REQUIRED</label>
+          <div className="editor-content-heading">
+            <label htmlFor="post-markdown_md" id="post-content-label" style={{ ...labelStyle, marginBottom: 0 }}>CONTENT (MARKDOWN) · REQUIRED</label>
+            {props.saveMessage && (
+              <div
+                id="post-save-message"
+                role={failed ? "alert" : "status"}
+                aria-live={failed ? "assertive" : "polite"}
+                className="editor-save-message"
+                data-tone={saveFeedbackTone}
+              >
+                <span className="editor-save-message-icon" aria-hidden="true">
+                  {saveFeedbackTone === "success" ? <CheckIcon size={13} /> : saveFeedbackTone === "error" ? "!" : "i"}
+                </span>
+                <span>{saveFeedbackText}</span>
+              </div>
+            )}
+          </div>
             <div
               className="custom-editor-wrapper"
               data-invalid={Boolean(errors.content)}
@@ -238,18 +257,6 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </div>
 
       </fieldset>
-      <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
-        {props.saveMessage && (
-          <div
-            id="post-save-message"
-            role={failed ? "alert" : "status"}
-            aria-live={failed ? "assertive" : "polite"}
-            className={failed ? "editor-save-message editor-save-message-error" : "editor-save-message"}
-          >
-            {props.saveMessage}
-          </div>
-        )}
-      </div>
     </form>
   );
 }

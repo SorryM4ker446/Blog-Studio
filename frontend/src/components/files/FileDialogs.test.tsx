@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import type { FileRecord } from "@/lib/api";
+import type { FileRecord, UploadProgress } from "@/lib/api";
 import { FileEditDialog, FileUploadDialog } from "./FileDialogs";
 
 const file: FileRecord = {
@@ -38,7 +38,91 @@ it("requires a long selected filename to be shortened and caps managed metadata"
   expect(within(dialog).getByText("100/100")).toBeVisible();
   expect(upload).toBeEnabled();
   fireEvent.click(upload);
-  await waitFor(() => expect(onUpload).toHaveBeenCalledWith(chosen, "名".repeat(25), "介".repeat(100)));
+  await waitFor(() => expect(onUpload).toHaveBeenCalledWith(chosen, "名".repeat(25), "介".repeat(100), expect.any(Function)));
+});
+
+it("shows actual transfer progress only after upload starts and clears it after a failed attempt", async () => {
+  let reportProgress: (progress: UploadProgress | null) => void = () => undefined;
+  let finishUpload: (result: { ok: boolean; error?: string }) => void = () => undefined;
+  const onUpload = vi.fn((_file: File, _name: string, _description: string, onProgress: typeof reportProgress) => {
+    reportProgress = onProgress;
+    return new Promise<{ ok: boolean; error?: string }>(resolve => { finishUpload = resolve; });
+  });
+  render(<FileUploadDialog open onClose={vi.fn()} onUpload={onUpload} />);
+  const chosen = new File(["a".repeat(100)], "assets.zip", { type: "application/zip" });
+  fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [chosen] } });
+  const dialog = screen.getByRole("dialog", { name: "Upload a file" });
+  expect(within(dialog).queryByRole("progressbar")).not.toBeInTheDocument();
+  expect(within(dialog).getByText("assets.zip")).toBeVisible();
+  expect(within(dialog).getByText("100 B · ZIP archive")).toBeVisible();
+  expect(within(dialog).getByText("Replace").closest("button")).toBeEnabled();
+
+  fireEvent.click(within(dialog).getByRole("button", { name: /^Upload$/ }));
+  expect(within(dialog).getByRole("progressbar")).not.toHaveAttribute("aria-valuenow");
+  expect(within(dialog).getByRole("button", { name: "Replace" })).toBeDisabled();
+  act(() => reportProgress({ loaded: 68, total: 100 }));
+  expect(within(dialog).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "68");
+  expect(within(dialog).getByText("68 B of 100 B")).toBeVisible();
+  act(() => reportProgress({ loaded: 100, total: 100 }));
+  expect(within(dialog).getByText("Uploading file…")).toBeVisible();
+  await waitFor(() => expect(within(dialog).getByText("Processing file…")).toBeVisible(), { timeout: 1200 });
+
+  await act(async () => finishUpload({ ok: false, error: "Upload failed" }));
+  expect(within(dialog).queryByRole("progressbar")).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("alert")).toHaveTextContent("Upload failed");
+  expect(within(dialog).getByRole("button", { name: "Replace" })).toBeEnabled();
+  expect(within(dialog).getByRole("button", { name: /^Upload$/ })).toBeEnabled();
+});
+
+it("keeps unsupported files blocked until a different file is selected", async () => {
+  const onUpload = vi.fn().mockResolvedValue({
+    ok: false, code: "unsupported_file_type", error: "File extension and content type must match an allowed format",
+  });
+  render(<FileUploadDialog open onClose={vi.fn()} onUpload={onUpload} />);
+  const input = document.querySelector('input[type="file"]')!;
+  const dialog = screen.getByRole("dialog", { name: "Upload a file" });
+  const upload = within(dialog).getByRole("button", { name: "Upload" });
+
+  fireEvent.change(input, { target: { files: [new File(["icon"], "favicon.ico", { type: "image/x-icon" })] } });
+  expect(within(dialog).getByRole("alert")).toHaveTextContent("File extension and content type must match an allowed format");
+  expect(upload).toBeDisabled();
+  fireEvent.click(upload);
+  expect(onUpload).not.toHaveBeenCalled();
+
+  fireEvent.change(input, { target: { files: [new File(["not a png"], "favicon.png", { type: "image/png" })] } });
+  expect(upload).toBeEnabled();
+  fireEvent.click(upload);
+  await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent("File extension and content type must match an allowed format"));
+  expect(upload).toBeDisabled();
+  fireEvent.click(upload);
+  expect(onUpload).toHaveBeenCalledTimes(1);
+  expect(within(dialog).queryByRole("progressbar")).not.toBeInTheDocument();
+
+  fireEvent.change(input, { target: { files: [new File(["plain text"], "notes.txt", { type: "text/plain" })] } });
+  expect(within(dialog).getByRole("alert")).toBeEmptyDOMElement();
+  expect(upload).toBeEnabled();
+});
+
+it("keeps the upload label stable when the server responds soon after transfer", async () => {
+  let reportProgress: (progress: UploadProgress | null) => void = () => undefined;
+  let finishUpload: (result: { ok: boolean }) => void = () => undefined;
+  const onUpload = vi.fn((_file: File, _name: string, _description: string, onProgress: typeof reportProgress) => {
+    reportProgress = onProgress;
+    return new Promise<{ ok: boolean }>(resolve => { finishUpload = resolve; });
+  });
+  const onClose = vi.fn();
+  render(<FileUploadDialog open onClose={onClose} onUpload={onUpload} />);
+  fireEvent.change(document.querySelector('input[type="file"]')!, {
+    target: { files: [new File(["sample"], "sample.txt", { type: "text/plain" })] },
+  });
+  const dialog = screen.getByRole("dialog", { name: "Upload a file" });
+  fireEvent.click(within(dialog).getByRole("button", { name: /^Upload$/ }));
+  act(() => reportProgress({ loaded: 100, total: 100 }));
+  expect(within(dialog).getByText("Uploading file…")).toBeVisible();
+  await act(async () => finishUpload({ ok: true }));
+  await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 550)); });
+  expect(within(dialog).queryByText("Processing file…")).not.toBeInTheDocument();
 });
 
 it("keeps legacy metadata intact until it is shortened for a save", async () => {

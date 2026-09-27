@@ -34,6 +34,28 @@
 .row:has([data-order-editing="true"])::before,
 .row:has([data-order-editing="true"])::after { opacity: 1; }
 
+.row[data-editor-entering]::before {
+  animation: rowEntranceGlow 680ms ease-out both;
+}
+
+.row[data-editor-entering]::after {
+  animation: rowEntranceAccent 680ms ease-out both;
+}
+
+@keyframes rowEntranceGlow {
+  0% { opacity: 0; }
+  28% { opacity: 0.72; }
+  55% { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+
+@keyframes rowEntranceAccent {
+  0% { opacity: 0; }
+  28% { opacity: 0.55; }
+  55% { opacity: 0.42; }
+  100% { opacity: 0; }
+}
+
 @media (hover: hover) {
   .row:hover:not(:has([role="group"]:hover))::before,
   .row:hover:not(:has([role="group"]:hover))::after { opacity: 1; }
@@ -41,5 +63,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .row::before,
-  .row::after { transition: none; }
+  .row::after { transition: none; animation: none; }
 }

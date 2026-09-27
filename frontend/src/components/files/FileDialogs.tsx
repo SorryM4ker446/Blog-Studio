@@ -5,18 +5,21 @@ import ModalSurface from "@/components/ModalSurface";
 
 import { formatDateTime } from "@/lib/display-date";
 
-import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
-import type { FileMutationResult, FileRecord } from "@/lib/api";
+import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
+import type { FileMutationResult, FileRecord, UploadProgress } from "@/lib/api";
 import { getDownloadUrl, getFileViewUrl } from "@/lib/api";
-import { DownloadIcon, EditIcon, FileTextIcon, UploadIcon } from "@/components/Icons";
+import { DownloadIcon, EditIcon, FileTextIcon, PaperclipIcon, UploadIcon } from "@/components/Icons";
 import { formatFileSize, getFileLabel } from "./FileCard";
 import { getFileTypeLabel, getSelectedFileTypeLabel } from "@/lib/file-type";
 import { MAX_UPLOAD_BYTES } from "@/lib/file-upload";
 import styles from "./FileDialogs.module.css";
 
 const acceptedFileTypes = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv,.json,.zip,.doc,.xls,.ppt,.docx,.xlsx,.pptx";
+const acceptedExtensions = new Set(acceptedFileTypes.split(","));
+const unsupportedFileMessage = "File extension and content type must match an allowed format";
 const displayNameLimit = 25;
 const descriptionLimit = 100;
+const processingLabelDelayMs = 500;
 
 function characterCount(value: string) {
   return Array.from(value).length;
@@ -34,16 +37,17 @@ interface DialogShellProps {
   eyebrow: string;
   subtitle?: string;
   wide?: boolean;
+  panelClassName?: string;
   busy?: boolean;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode | ((close: () => void, closing: boolean) => ReactNode);
 }
 
-function DialogShell({ open, title, eyebrow, subtitle, wide, busy, onClose, children, footer }: DialogShellProps) {
+function DialogShell({ open, title, eyebrow, subtitle, wide, panelClassName, busy, onClose, children, footer }: DialogShellProps) {
   const titleId = useId();
   if (!open) return null;
-  return <ModalSurface onClose={onClose} busy={busy} labelledBy={titleId} className={`${styles.dialog} ${wide ? styles.wideDialog : ""}`}>
+  return <ModalSurface onClose={onClose} busy={busy} labelledBy={titleId} className={`${styles.dialog} ${wide ? styles.wideDialog : ""} ${panelClassName || ""}`}>
     {(close, closing) => <>
         <header className={styles.header}>
           <div>
@@ -134,42 +138,81 @@ export function FilePreviewDialog({ file, onClose, onEdit }: FilePreviewDialogPr
 interface FileUploadDialogProps {
   open: boolean;
   onClose: () => void;
-  onUpload: (file: File, displayName: string, description: string) => Promise<FileMutationResult>;
+  onUpload: (file: File, displayName: string, description: string, onProgress: (progress: UploadProgress | null) => void) => Promise<FileMutationResult>;
 }
 
 export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadSettledRef = useRef(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
   const [dragging, setDragging] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [showProcessing, setShowProcessing] = useState(false);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const nameTooLong = characterCount(displayName) > displayNameLimit;
   const descriptionTooLong = characterCount(description) > descriptionLimit;
   const fileTooLarge = selectedFile !== null && selectedFile.size > MAX_UPLOAD_BYTES;
+  const unsupportedFile = selectedFile !== null
+    && (!acceptedExtensions.has(selectedFile.name.slice(selectedFile.name.lastIndexOf(".")).toLowerCase())
+      || errorCode === "unsupported_file_type");
+  const progressPercent = uploadProgress && uploadProgress.total > 0
+    ? Math.max(0, Math.min(100, Math.floor(uploadProgress.loaded / uploadProgress.total * 100)))
+    : null;
+  const uploadedFileBytes = selectedFile && uploadProgress && uploadProgress.total > 0
+    ? Math.min(selectedFile.size, Math.round(selectedFile.size * uploadProgress.loaded / uploadProgress.total))
+    : 0;
+
+  useEffect(() => {
+    if (!saving || progressPercent !== 100) return;
+    const timer = window.setTimeout(() => {
+      if (!uploadSettledRef.current) setShowProcessing(true);
+    }, processingLabelDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [saving, progressPercent]);
 
   function chooseFile(file: File | null) {
     if (!file) return;
     setSelectedFile(file);
     setDisplayName(file.name);
-    setError(file.size > MAX_UPLOAD_BYTES ? "Each file must be 1 GB or smaller." : "");
+    setUploadProgress(null);
+    setShowProcessing(false);
+    setErrorCode("");
+    const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    setError(file.size > MAX_UPLOAD_BYTES ? "Each file must be 1 GB or smaller."
+      : !acceptedExtensions.has(extension) ? unsupportedFileMessage : "");
   }
 
   async function submit(close: () => void) {
-    if (!selectedFile || fileTooLarge || !displayName.trim() || nameTooLong || descriptionTooLong || saving) return;
+    if (!selectedFile || fileTooLarge || unsupportedFile || !displayName.trim() || nameTooLong || descriptionTooLong || saving) return;
     setSaving(true);
+    setUploadProgress(null);
+    setShowProcessing(false);
+    uploadSettledRef.current = false;
     setError("");
     try {
-      const result = await onUpload(selectedFile, displayName.trim(), description.trim());
+      const result = await onUpload(selectedFile, displayName.trim(), description.trim(), (progress) => {
+        setUploadProgress(progress);
+        if (!progress || progress.loaded < progress.total) setShowProcessing(false);
+      });
+      uploadSettledRef.current = true;
       if (!result.ok) {
         setSaving(false);
+        setUploadProgress(null);
+        setShowProcessing(false);
+        setErrorCode(result.code || "");
         setError(result.error || "Could not upload file");
         return;
       }
       close();
     } catch (error) {
+      uploadSettledRef.current = true;
       setSaving(false);
+      setUploadProgress(null);
+      setShowProcessing(false);
       setError(getApiErrorMessage(error));
     }
   }
@@ -177,6 +220,7 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
   return (
     <DialogShell
       open={open}
+      panelClassName={styles.uploadDialog}
       eyebrow="New file"
       title="Upload a file"
       subtitle="Add a clear public name and optional context before publishing it to Drive."
@@ -189,7 +233,7 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
             type="button"
             className={`${styles.button} ${styles.primary}`}
             onClick={() => void submit(close)}
-            disabled={!selectedFile || fileTooLarge || !displayName.trim() || nameTooLong || descriptionTooLong || saving || closing}
+            disabled={!selectedFile || fileTooLarge || unsupportedFile || !displayName.trim() || nameTooLong || descriptionTooLong || saving || closing}
           >
             {saving ? "Uploading…" : "Upload"}
           </button>
@@ -206,14 +250,30 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
         />
         {selectedFile ? (
           <div className={styles.selectedFile}>
-            <span className={styles.selectedIcon}><FileTextIcon size={18} /></span>
-            <span className={styles.selectedMeta}>
-              <span className={styles.selectedName}>{selectedFile.name}</span>
-              <span className={styles.selectedSize}>{formatFileSize(selectedFile.size)} · {getSelectedFileTypeLabel(selectedFile.name, selectedFile.type)}</span>
-            </span>
-            <button type="button" className={styles.replaceButton} onClick={() => inputRef.current?.click()} disabled={saving}>
-              Replace
-            </button>
+            <div className={styles.selectedFileRow}>
+              <span className={styles.selectedIcon} data-file-icon="attachment" aria-hidden="true"><PaperclipIcon size={18} /></span>
+              <span className={styles.selectedMeta}>
+                <span className={styles.selectedName}>{selectedFile.name}</span>
+                <span className={styles.selectedSize}>{formatFileSize(selectedFile.size)} · {getSelectedFileTypeLabel(selectedFile.name, selectedFile.type)}</span>
+              </span>
+              <button type="button" className={styles.replaceButton} onClick={() => inputRef.current?.click()} disabled={saving}>
+                Replace
+              </button>
+            </div>
+            {saving && <div className={styles.uploadProgress}>
+              <div className={styles.uploadProgressHeading}>
+                <span>{showProcessing ? "Processing file…" : "Uploading file…"}</span>
+                {progressPercent !== null && <span className={styles.uploadPercent}>{progressPercent}%</span>}
+              </div>
+              <div className={styles.progressTrack} role="progressbar" aria-label="File upload progress"
+                aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent ?? undefined}>
+                <span className={`${styles.progressFill} ${progressPercent === null ? styles.progressIndeterminate : ""}`}
+                  style={progressPercent === null ? undefined : { width: `${progressPercent}%` }} />
+              </div>
+              {progressPercent !== null && <span className={styles.progressAmount}>
+                {formatFileSize(uploadedFileBytes)} of {formatFileSize(selectedFile.size)}
+              </span>}
+            </div>}
           </div>
         ) : (
           <button

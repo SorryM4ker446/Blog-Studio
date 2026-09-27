@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createLink, deleteLink, getAdminLinks, moveLink, swapLinkPositions, updateLink, type HomepageLink, type LinkFields } from "@/lib/links";
 import { getApiErrorMessage } from "@/lib/api-client";
@@ -7,6 +7,7 @@ import { readPage } from "@/lib/resource-query";
 import EditorPageLayout from "@/components/editor/EditorPageLayout";
 import PaginatedResults from "@/components/PaginatedResults";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
+import { animateCreatedListRow, animateDeletedListRow, captureDeletedListRow, captureListRows, type DeletedListSnapshot, type ListRowsSnapshot } from "@/components/editor/list-row-motion";
 import { InboxIcon, PlusIcon } from "@/components/Icons";
 import EditorRowActions from "@/components/editor/EditorRowActions";
 import highlightStyles from "@/components/editor/EditorRowHighlight.module.css";
@@ -65,6 +66,11 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState<{ link: HomepageLink | null } | null>(null);
   const [deleting, setDeleting] = useState<HomepageLink | null>(null);
+  const [deleteCompleted, setDeleteCompleted] = useState(false);
+  const pendingDeletion = useRef<{ snapshot: DeletedListSnapshot; links: HomepageLink[] } | null>(null);
+  const deletionMotion = useRef<(() => void) | null>(null);
+  const pendingCreation = useRef<{ id: number; snapshot: ListRowsSnapshot | null; links: HomepageLink[] } | null>(null);
+  const creationMotion = useRef<(() => void) | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [openActions, setOpenActions] = useState<number | null>(null);
@@ -90,6 +96,28 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   const pages = Math.max(1, Math.ceil(filtered.length / 8));
   const page = Math.min(requestedPage, pages);
   const pageLinks = filtered.slice((page - 1) * 8, page * 8);
+  useLayoutEffect(() => {
+    const pending = pendingDeletion.current;
+    if (!pending || pending.links === links) return;
+    pendingDeletion.current = null;
+    deletionMotion.current?.();
+    if (!links.some((item) => String(item.id) === pending.snapshot.deletedId)) {
+      deletionMotion.current = animateDeletedListRow(pending.snapshot, page);
+    }
+  }, [links, page]);
+  useLayoutEffect(() => {
+    const pending = pendingCreation.current;
+    if (!pending || editing || pending.links === links) return;
+    pendingCreation.current = null;
+    creationMotion.current?.();
+    creationMotion.current = animateCreatedListRow(
+      document.querySelector<HTMLElement>("[data-editor-links-list]"), pending.id, page, pending.snapshot);
+  }, [links, editing, page]);
+  useEffect(() => () => { deletionMotion.current?.(); creationMotion.current?.(); }, []);
+  useEffect(() => { if (!active) {
+    pendingDeletion.current = null; deletionMotion.current?.(); deletionMotion.current = null;
+    pendingCreation.current = null; creationMotion.current?.(); creationMotion.current = null;
+  } }, [active]);
   const orderUnavailable = Boolean(query) || links.length < 2;
   function navigate(search: string, next: number, replace = false) {
     setOpenActions(null);
@@ -109,8 +137,13 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
     if (working.current || saveBlockedReason) throw new Error(saveBlockedReason || "Wait for the current link update to finish before saving.");
     working.current = true; read.current?.abort(); setLoading(false); setBusy(true);
     try {
-      const result = editing?.link ? await updateLink(editing.link,fields) : await createLink(fields,requestID);
+      const creating = !editing?.link;
+      const result = creating ? await createLink(fields,requestID) : await updateLink(editing.link!,fields);
       if (!live.current) return;
+      if (creating) pendingCreation.current = {
+        id: result.id, links,
+        snapshot: captureListRows(document.querySelector<HTMLElement>("[data-editor-links-list]"), page),
+      };
       setLinks(current => [...current.filter(item => item.id !== result.id),result].sort((a,b) => a.position-b.position || a.id-b.id));
     } catch (err) { needsRead.current = true; throw err; }
     finally { working.current = false; if (live.current) setBusy(false); }
@@ -142,7 +175,11 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
     if (!deleting || working.current) return;
     setOpenActions(null);
     working.current = true; read.current?.abort(); setLoading(false); setBusy(true); setDeleteError("");
-    try { await deleteLink(deleting); if (live.current) { setLinks(items => items.filter(item => item.id !== deleting.id)); setDeleting(null); } }
+    try { await deleteLink(deleting); if (live.current) {
+      const snapshot = captureDeletedListRow(document.querySelector<HTMLElement>("[data-editor-links-list]"), deleting.id, page);
+      pendingDeletion.current = snapshot ? { snapshot, links } : null;
+      setLinks(items => items.filter(item => item.id !== deleting.id)); setDeleteCompleted(true); setDeleting(null);
+    } }
     catch (err) { needsRead.current = true; if (live.current) setDeleteError(getApiErrorMessage(err)); }
     finally { working.current = false; if (live.current) setBusy(false); }
   }
@@ -163,7 +200,9 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
       <div className={styles.header} aria-hidden="true"><span>Link &amp; Description</span><span>Destination</span><span>Status</span><span>Order</span><span>Actions</span></div>
     <LinkGrid ref={grid} boundary={boundary} samePageSwap={samePageSwap} order={pageLinks.map(link => link.id)}>{pageLinks.map(link => {
       const index = links.findIndex(item => item.id === link.id);
-      return <article className={`${styles.row} ${highlightStyles.row} ${openActions === link.id ? highlightStyles.active : ""}`} data-link-id={link.id} key={link.id} aria-label={link.title}>
+      return <article className={`${styles.row} ${highlightStyles.row} ${openActions === link.id ? highlightStyles.active : ""}`} data-link-id={link.id} data-editor-row-id={link.id} key={link.id} aria-label={link.title}
+        style={pendingCreation.current?.id === link.id && editing ? { opacity: 0 } : undefined}
+        aria-hidden={pendingCreation.current?.id === link.id && Boolean(editing) || undefined}>
         <div className={styles.linkInfo}><LinkCardContent link={link} /></div>
         <div className={styles.meta}><ClampedText paragraph className={styles.url} text={link.url || "Set a destination before enabling this link."} />
           <span className={styles.status} data-state={link.visible ? "visible" : link.url ? "hidden" : "missing"}>{link.visible ? "Visible" : link.url ? "Hidden" : "Needs a URL"}</span></div>
@@ -175,14 +214,14 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
         <div className={styles.moreCell}><EditorRowActions label={link.title} open={openActions === link.id} unavailable={busy || loading}
           onToggle={() => setOpenActions(current => current === link.id ? null : link.id)} onClose={() => setOpenActions(null)}
           onEdit={() => { if (!working.current && !loading) setEditing({ link }); }}
-          onDelete={() => { if (working.current || loading) return; setDeleting(link); setDeleteError(""); }} /></div>
+          onDelete={() => { if (working.current || loading) return; setDeleteCompleted(false); setDeleting(link); setDeleteError(""); }} /></div>
       </article>;
     })}</LinkGrid></div>
     </PaginatedResults></EditorPageLayout>}
     </>,
     dialogs: <>
   {editing && <LinkEditorDialog key={editing.link?.id ?? "new"} link={editing.link} blockedReason={saveBlockedReason} onSave={save} onClose={() => setEditing(null)} />}
-  <EditorDeleteDialog open={Boolean(deleting)} resourceType="link" busy={busy} blocked={false} error={deleteError} onConfirm={() => void remove()} onCancel={() => { if (!working.current) setDeleting(null); }} />
+  <EditorDeleteDialog open={Boolean(deleting)} completed={deleteCompleted} resourceType="link" busy={busy} blocked={false} error={deleteError} onConfirm={() => void remove()} onCancel={() => { if (!working.current) { setDeleteCompleted(false); setDeleting(null); } }} />
   </>,
   };
 }

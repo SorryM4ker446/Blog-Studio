@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useSearchParams } from "next/navigation";
 import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { useAuth } from "@/context/AuthContext";
-import type { Category, FileRecord, PostDetail, PostSummary } from "@/lib/api";
+import type { Category, FileRecord, PostDetail, PostSummary, UploadProgress } from "@/lib/api";
 import {
   createCategory,
   createPost,
@@ -43,6 +43,7 @@ import PostEditorForm from "@/components/editor/PostEditorForm";
 import type MarkdownEditor from "@/components/editor/MarkdownEditor";
 import PostDetailLoader from "@/components/editor/PostDetailLoader";
 import EditorViewTransition from "@/components/editor/EditorViewTransition";
+import { animateCreatedListRow, animateDeletedListRow, captureDeletedListRow, captureListRows, type DeletedListSnapshot, type ListRowsSnapshot } from "@/components/editor/list-row-motion";
 import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
@@ -134,6 +135,36 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const files = fileResource.restoring ? [] : fileData;
   const postsLoading = postResource.loading;
   const filesLoading = fileResource.loading;
+  const pendingListDeletion = useRef<{ type: "post" | "file"; snapshot: DeletedListSnapshot; data: PostSummary[] | FileRecord[] } | null>(null);
+  const listDeletionMotion = useRef<(() => void) | null>(null);
+  const pendingCreatedPostId = useRef<number | null>(null);
+  const postListBeforeCreate = useRef<ListRowsSnapshot | null>(null);
+  const pendingCreatedFile = useRef<{ id: number; snapshot: ListRowsSnapshot | null; data: FileRecord[] } | null>(null);
+  const listCreationMotion = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    if (urlTab !== "posts" || editTarget !== null || pendingCreatedPostId.current === null) return;
+    const id = pendingCreatedPostId.current;
+    pendingCreatedPostId.current = null;
+    listCreationMotion.current?.();
+    listCreationMotion.current = animateCreatedListRow(
+      document.querySelector<HTMLElement>('[data-editor-list][data-resource="posts"]'), id, postPage, postListBeforeCreate.current, "fade");
+    postListBeforeCreate.current = null;
+  }, [urlTab, editTarget, postData, postPage]);
+  useLayoutEffect(() => {
+    const pending = pendingListDeletion.current;
+    if (!pending) return;
+    const data = pending.type === "post" ? postData : fileData;
+    const error = pending.type === "post" ? postsError : filesError;
+    if (data === pending.data && !error) return;
+    pendingListDeletion.current = null;
+    listDeletionMotion.current?.();
+    if (!error && !data.some((item) => String(item.id) === pending.snapshot.deletedId)) {
+      listDeletionMotion.current = animateDeletedListRow(pending.snapshot, pending.type === "post" ? postPage : filePage);
+    }
+  }, [postData, fileData, postPage, filePage, postsError, filesError]);
+  useEffect(() => () => { listDeletionMotion.current?.(); listCreationMotion.current?.(); }, []);
+  useEffect(() => { listDeletionMotion.current?.(); listDeletionMotion.current = null; pendingListDeletion.current = null; }, [urlTab, editTarget]);
+  useEffect(() => { if (urlTab !== "posts") pendingCreatedPostId.current = null; }, [urlTab]);
   const [hasShownList, setHasShownList] = useState(editTarget === null);
   if (editTarget === null && !hasShownList) setHasShownList(true);
   const [detailError, setDetailError] = useState("");
@@ -195,13 +226,23 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const [metadataFile, setMetadataFile] = useState<FileRecord | null>(null);
+  useLayoutEffect(() => {
+    if (uploadDialogOpen || !pendingCreatedFile.current) return;
+    const pending = pendingCreatedFile.current;
+    if (pending.data === fileData && !filesError) return;
+    pendingCreatedFile.current = null;
+    listCreationMotion.current?.();
+    if (!filesError) listCreationMotion.current = animateCreatedListRow(
+      document.querySelector<HTMLElement>('[data-editor-list][data-resource="files"]'), pending.id, filePage, pending.snapshot);
+  }, [uploadDialogOpen, fileData, filePage, filesError]);
 
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     type: DeleteType;
     id: number | null;
     busy: boolean;
-  }>({ open: false, type: "post", id: null, busy: false });
+    completed: boolean;
+  }>({ open: false, type: "post", id: null, busy: false, completed: false });
   const [deleteError, setDeleteError] = useState("");
   const [deleteErrorCode, setDeleteErrorCode] = useState("");
 
@@ -342,6 +383,9 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       if (detailError) { setDetailError(""); setDetailAttempt(value => value + 1); }
       return;
     }
+    postListBeforeCreate.current = post === null
+      ? captureListRows(document.querySelector<HTMLElement>('[data-editor-list][data-resource="posts"]'), postPage)
+      : null;
     writeEditorTarget(target);
     scrollOnOpenRef.current = { target, revision: navigationRevision() };
     resetForm(target);
@@ -349,7 +393,11 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
   function closeEditor() {
     if (saveOperationRef.current) return;
-    const proceed = () => { writeEditorTarget(null, true); resetForm(null); };
+    const proceed = () => {
+      if (pendingCreatedPostId.current === null) postListBeforeCreate.current = null;
+      writeEditorTarget(null, true);
+      resetForm(null);
+    };
     if (requestEditorNavigation("/editor", proceed)) proceed();
   }
 
@@ -373,6 +421,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
   async function handleSave(action: PostAction = "save") {
     if (postToLoad || saveOperationRef.current || conflict || recovery.checking || recovery.copies.length) return;
+    if (action === "save" && editingPost && !dirty && !saveMessage.startsWith("❌")) return;
     const errors = validatePostFields(currentSnapshot);
     if (action !== "unpublish" && Object.values(errors).some(Boolean)) {
       setValidationAttempted(true);
@@ -405,6 +454,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       } else if (!editingPost) {
         savedDraft = await createPost(payload);
         if (!isCurrentSave()) return;
+        pendingCreatedPostId.current = savedDraft.id;
         setEditingPost(savedDraft);
         result = action === "publish" ? await publishPost(savedDraft.id, { ...payload, version: savedDraft.version }) : savedDraft;
       } else {
@@ -458,8 +508,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   async function handleRenameCategory(id: number, name: string): Promise<string | null> {
     try {
       const updated = await updateCategory(id, name);
-      if (!updated) return "Failed to rename category.";
-      await loadCategories();
+      setCategories((current) => current.map((category) => category.id === id ? { ...category, name: updated.name } : category));
       notifyUpdate();
       return null;
     } catch (error) {
@@ -470,14 +519,14 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   function openDelete(type: DeleteType, id: number) {
     setDeleteError("");
     setDeleteErrorCode("");
-    setDeleteDialog({ open: true, type, id, busy: false });
+    setDeleteDialog({ open: true, type, id, busy: false, completed: false });
   }
 
   function closeDelete() {
     if (deleteDialog.busy) return;
     setDeleteError("");
     setDeleteErrorCode("");
-    setDeleteDialog({ open: false, type: "post", id: null, busy: false });
+    setDeleteDialog({ open: false, type: "post", id: null, busy: false, completed: false });
   }
 
   async function executeDelete() {
@@ -490,6 +539,8 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       if (type === "post") {
         const deleted = await deletePost(id);
         if (!deleted) throw new Error("Failed to delete post.");
+        const snapshot = captureDeletedListRow(document.querySelector<HTMLElement>('[data-editor-list][data-resource="posts"]'), id, postPage);
+        pendingListDeletion.current = snapshot ? { type, snapshot, data: postData } : null;
         if (editingPost?.id === id) {
           setEditingPost(null);
           writeEditorTarget(null, true);
@@ -504,25 +555,33 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           setDeleteDialog((current) => ({ ...current, busy: false }));
           return;
         }
+        const snapshot = captureDeletedListRow(document.querySelector<HTMLElement>('[data-editor-list][data-resource="files"]'), id, filePage);
+        pendingListDeletion.current = snapshot ? { type, snapshot, data: fileData } : null;
         await refreshFiles(filePage);
       } else {
         const deleted = await deleteCategory(id);
         if (!deleted) throw new Error("Failed to delete category.");
         if (editCategoryId === id) setEditCategoryId(0);
-        await Promise.all([loadCategories(), refreshPosts(postPage)]);
+        setCategories((current) => current.filter((category) => category.id !== id));
+        setEditingPost((current) => current?.category_id === id ? { ...current, category_id: null } : current);
+        await refreshPosts(postPage);
       }
       notifyUpdate();
-      setDeleteDialog({ open: false, type: "post", id: null, busy: false });
+      setDeleteDialog({ open: false, type: "post", id: null, busy: false, completed: true });
     } catch (error) {
       setDeleteError(getApiErrorMessage(error, `Failed to delete ${type}.`));
       setDeleteDialog((current) => ({ ...current, busy: false }));
     }
   }
 
-  async function handleManagedFileUpload(file: File, displayName: string, description: string) {
-    const result = await uploadFileWithMetadata(file, { displayName, description });
+  async function handleManagedFileUpload(file: File, displayName: string, description: string, onProgress: (progress: UploadProgress | null) => void) {
+    const result = await uploadFileWithMetadata(file, { displayName, description }, false, onProgress);
     if (result.ok && result.file) {
-      await refreshFiles(1);
+      pendingCreatedFile.current = {
+        id: result.file.id,
+        snapshot: captureListRows(document.querySelector<HTMLElement>('[data-editor-list][data-resource="files"]'), filePage),
+        data: fileData,
+      };
       notifyUpdate();
     }
     return result;
@@ -672,7 +731,10 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       </EditorViewTransition>
       {urlTab === "links" && linkResource.dialogs}
 
-      {uploadDialogOpen && <FileUploadDialog open onClose={() => setUploadDialogOpen(false)} onUpload={handleManagedFileUpload} />}
+      {uploadDialogOpen && <FileUploadDialog open onClose={() => {
+        setUploadDialogOpen(false);
+        if (pendingCreatedFile.current) void refreshFiles(1);
+      }} onUpload={handleManagedFileUpload} />}
       <FilePreviewDialog
         file={previewFile}
         onClose={() => setPreviewFile(null)}
@@ -686,6 +748,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       )}
       <EditorDeleteDialog
         open={deleteDialog.open}
+        completed={deleteDialog.completed}
         resourceType={deleteDialog.type}
         busy={deleteDialog.busy}
         blocked={deleteErrorCode === "file_in_use"}

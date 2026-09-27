@@ -105,7 +105,7 @@ Search checks cover summary-only SQL/JSON, protected article details, exact tota
 
 Migration tests cover fixed historical schemas, bounded backfill, unchanged article content/timestamps, extension and permission failures, rollback/retry and concurrent migration locking. The backup drill uses real PostgreSQL 18 `pg_dump`/`pg_restore`, disposable source and `_restore` databases, and uploaded files. It checks checksums, restored indexes/triggers, Links and storage reconciliation. Matching client tools are required when `TEST_DB_DSN` is configured.
 
-File tests cover content/extension mismatches, size limits, multipart temporary storage and cleanup, disk-write failures, safe storage keys, path confinement, symlinks, attachment headers, referenced-file protection, deletion compensation and reconciliation. Browser workflows exercise upload, metadata editing, preview, search and deletion through the actual API.
+File tests cover content/extension mismatches, size limits, multipart temporary storage and cleanup, disk-write failures, safe storage keys, path confinement, symlinks, attachment headers, referenced-file protection, deletion compensation and reconciliation. Browser workflows exercise upload, metadata editing, preview, search and deletion through the actual API. Upload checks include transfer progress, an unchanged dialog position on failure, and repeated clicks after an unsupported file is rejected.
 
 ### Article editing and recovery
 
@@ -133,7 +133,7 @@ Initial search keeps its loading status visually hidden for screen readers; resu
 
 Pagination tests check stable outgoing height, sequential result replacement and coordinated list/pagination transitions without duplicate layers or nested animations. Editor checks cover full-page spacing on short last pages, reloads and resizing, with spacing removed for single-page results. Links coverage includes filtered counts, tab resets, long content, same-page swaps, and cross-page swaps in both directions with reduced motion. Navigation checks use 991 articles/files, deep pages and repeated detail round trips with storage blocked or snapshots expired. This is a functional navigation fixture, not a performance benchmark.
 
-Frame assertions check DOM continuity, opacity, dimensions and scroll position during sidebar, save, refresh and navigation transitions. Sampling accounts for elapsed time and existing animations; screenshots are diagnostic attachments rather than byte-equality assertions. Script-blocked reloads distinguish server rendering from hydration.
+Frame assertions check DOM continuity, opacity, dimensions and scroll position during sidebar, save, refresh and navigation transitions. Editor list checks cover new-row entrance, existing-row movement, deletion fill, dialog exit order and reduced motion. Sampling accounts for elapsed time and existing animations; screenshots are diagnostic attachments rather than byte-equality assertions. Script-blocked reloads distinguish server rendering from hydration.
 
 ## Appearance preferences
 

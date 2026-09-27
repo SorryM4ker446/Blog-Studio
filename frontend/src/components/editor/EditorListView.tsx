@@ -70,7 +70,7 @@ function PostRow({ post, onView, onEdit, onDelete, opening, actionsOpen, onToggl
   actionsOpen: boolean; onToggleActions: () => void; onCloseActions: () => void;
 }) {
   return (
-    <article className={`${styles.row} ${highlightStyles.row} ${actionsOpen ? highlightStyles.active : ""} editor-post-card`}>
+    <article className={`${styles.row} ${highlightStyles.row} ${actionsOpen ? highlightStyles.active : ""} editor-post-card`} data-editor-row-id={post.id}>
       <button type="button" className={styles.main} onClick={onView} aria-label={`Open ${post.title}`}>
         <span className={styles.title}>{post.title}</span>
         <span className={styles.description}>{post.summary || "No introduction provided."}</span>
@@ -95,7 +95,7 @@ function FileRow({ file, onPreview, onEdit, onDelete, actionsOpen, onToggleActio
 }) {
   const label = getFileLabel(file);
   const description = file.description.trim() || "No description provided.";
-  return <article className={`${styles.row} ${highlightStyles.row} ${actionsOpen ? highlightStyles.active : ""}`} data-file-id={file.id}>
+  return <article className={`${styles.row} ${highlightStyles.row} ${actionsOpen ? highlightStyles.active : ""}`} data-file-id={file.id} data-editor-row-id={file.id}>
     <button type="button" className={styles.main} onClick={onPreview} aria-label={`Preview ${label}`}>
       <span className={styles.title}>{label}</span>
       <span className={styles.description}>{description}</span>
@@ -206,7 +206,7 @@ export default function EditorListView(controls: EditorListViewProps) {
                 (props.activeTab === "posts" ? props.onLoadPosts : props.onLoadFiles)(page);
               }}
             >
-              {error ? <ErrorState title={`Editor ${props.activeTab} could not be loaded`} message={error} onRetry={retry} retrying={loading} /> : loading && !hasItems ? <p role="status" style={{ padding: "1.5rem", color: "var(--text-muted)" }}>Loading {props.activeTab}…</p> : <div className={styles.list} data-editor-list>
+              {error ? <ErrorState title={`Editor ${props.activeTab} could not be loaded`} message={error} onRetry={retry} retrying={loading} /> : loading && !hasItems ? <p role="status" style={{ padding: "1.5rem", color: "var(--text-muted)" }}>Loading {props.activeTab}…</p> : <div className={styles.list} data-editor-list data-resource={props.activeTab}>
                 <div className={styles.header} data-editor-list-header aria-hidden="true">
                   <span>{props.activeTab === "posts" ? "Title & Introduction" : "File & Description"}</span>
                   <span>{props.activeTab === "posts" ? "Status" : "Size"}</span>

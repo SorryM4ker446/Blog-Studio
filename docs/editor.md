@@ -8,6 +8,8 @@ Posts, Files, and Links in Content Editor use single-column management lists wit
 
 Existing rows and pagination remain visible during explicit paging. A cold return uses the target URL's server data when it matches, otherwise a stable loading area with the target page. Failures offer retry without showing rows from an unrelated page. Background revalidation commits a complete response; obsolete navigation, account or session work cannot update the current result. Deletion can replace an exhausted page with the last valid page through a bounded correction. Reduced motion disables result animations. All Posts and Cloud Drive retain their natural content heights and bottom controls; advanced search keeps independent Posts/Files pages and its existing responsive arrows.
 
+Creating a post, file or link briefly fades the new row in; existing rows displaced by insertion move into place. The new row also borrows the list's left-side hover glow and accent line for a short entrance, then clears that highlight. Files enter after the upload dialog exits. Deleting a row fades it out while surviving rows close the gap; deleting the last row fades it without a list jump. Reduced motion applies these changes immediately.
+
 ## Explicit actions
 
 | Action | Request | Behavior |
@@ -19,7 +21,7 @@ Existing rows and pagination remain visible during explicit paging. A cold retur
 
 All actions require administrator authentication and CSRF protection. Ordinary updates reject a supplied `status`; use the dedicated action endpoints. Category ID `0` clears the category. Missing, fractional, negative or otherwise invalid versions return HTTP 400. Unknown resources return 404. A stale version returns HTTP 409 with `code: post_version_conflict`; an incompatible publication state returns 409 with `code: post_state_conflict`. Clients must not automatically retry conflicting writes or substitute a newer version into an old payload.
 
-The form displays a compact publication badge and separate `Save` and `Publish`/`Draft` controls. Enter submits an ordinary save. `Save` always stays in the current editor, for both drafts and published articles; only a successful `Publish` returns to Content Editor. `Draft` withdraws publication through the existing unpublish API and remains in the editor. Pending writes lock editable controls and duplicate submissions. The Save button keeps its label, dimensions, colors and opacity throughout the request; a separate live status reports progress. Saved timestamps and a subtle `View article` text link with a diagonal arrow remain available for published articles. The link keeps the same in-tab navigation and editor return target.
+The form displays a compact publication badge and separate `Save` and `Publish`/`Draft` controls. Enter submits an ordinary save. `Save` always stays in the current editor, for both drafts and published articles; only a successful `Publish` returns to Content Editor. `Draft` withdraws publication through the existing unpublish API and remains in the editor. Pending writes lock editable controls and duplicate submissions. Clicking Save again without new changes does not send another write or replay its success message; a failed save remains retryable. The Save button keeps its label, dimensions, colors and opacity throughout the request; a separate live status reports progress. Save feedback appears beside the Markdown field label and wraps beneath it on narrow screens; success and errors retain their status and alert roles. Saved timestamps and a subtle `View article` text link with a diagonal arrow remain available for published articles. The link keeps the same in-tab navigation and editor return target.
 
 `View article` opens in the current tab. Its URL carries a local `returnTo` editor URL matching the article ID, preserving the source list filters. The page Back button returns directly to that editor; browser Back also returns through history. Return targets outside the matching editor are rejected. Ordinary article links retain history-based return, with All Posts as the fallback when no history exists.
 
@@ -99,6 +101,7 @@ The Markdown library detects browser language at import time, whereas its server
 
 The category-add button keeps its normal opacity while recovery discovery or saving disables the enclosing form. It remains disabled and excluded from interaction until the lock clears. Explicitly unavailable category actions retain their ordinary disabled presentation outside that form-wide lock.
 
+The inline category-create row expands and collapses on Create and Cancel. Successful rename updates the selected category from the server response without replacing the whole dropdown; moving into its management controls clears any unrelated option highlight.
 
 ## Homepage links
 
@@ -121,7 +124,7 @@ API: `GET /api/links`; administrator-only `GET/POST /api/admin/links`, `PUT/DELE
 
 ## Dialogs and controls
 
-Content Editor deletion dialogs share an entrance and exit transition across posts, files, links and categories. Cancel, Escape, backdrop dismissal and successful deletion keep the dialog mounted until exit finishes; background isolation and focus containment remain active during that interval. Closing preserves the displayed resource and message even when the parent clears its selection. Reopening cancels an obsolete exit, and reduced motion closes immediately. Failed or blocked deletions remain open. Focus returns to the invoking control, or to the resource panel when that control was deleted.
+Content Editor deletion dialogs share an entrance and exit transition across posts, files, links and categories. Cancel, Escape, backdrop dismissal and successful deletion keep the dialog mounted until exit finishes; successful deletion also eases the backdrop blur away as the updated page appears. Background isolation and focus containment remain active during that interval. Closing preserves the displayed resource and message even when the parent clears its selection. Reopening cancels an obsolete exit, and reduced motion closes immediately. Failed or blocked deletions remain open. Focus returns to the invoking control, or to the resource panel when that control was deleted.
 
 Posts, Files and Links use matching toolbar controls; All Posts and Cloud Drive share their search-field style. Submit with Enter or the search button; clearing the input takes effect only after submission. Enter during text composition does not submit.
 
