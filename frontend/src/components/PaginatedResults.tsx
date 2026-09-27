@@ -12,12 +12,13 @@ interface Props {
   pending: boolean;
   edgeArrows?: boolean;
   stablePageHeight?: boolean;
+  allowOverflow?: boolean;
   transitionGroup?: string;
   animateChanges?: boolean;
   onPageChange: (page: number) => void;
 }
 
-export default function PaginatedResults({ children, page, totalPages, resultKey, pending, edgeArrows = false, stablePageHeight = false, transitionGroup = "", animateChanges = true, onPageChange }: Props) {
+export default function PaginatedResults({ children, page, totalPages, resultKey, pending, edgeArrows = false, stablePageHeight = false, allowOverflow = false, transitionGroup = "", animateChanges = true, onPageChange }: Props) {
   const viewport = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState({ children, page, totalPages, key: resultKey, group: transitionGroup });
@@ -87,7 +88,7 @@ export default function PaginatedResults({ children, page, totalPages, resultKey
 
   return (
     <div className={styles.frame}>
-      <div ref={viewport} className={styles.viewport} data-list-layout={stablePageHeight ? "editor" : undefined} inert={changing}>
+      <div ref={viewport} className={`${styles.viewport} ${allowOverflow && !changing ? styles.visibleViewport : ""}`} data-list-layout={stablePageHeight ? "editor" : undefined} inert={changing}>
         <div ref={content} data-result-page={shown.page}>{shown.children}</div>
       </div>
       <Pagination currentPage={shown.page} totalPages={shown.totalPages} pending={pending || changing} edgeArrows={edgeArrows} onPageChange={onPageChange} />

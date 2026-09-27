@@ -15,6 +15,7 @@ import PaginatedResults from "@/components/PaginatedResults";
 import ListPending from "@/components/ListPending";
 import { FolderIcon, ClipboardIcon, InboxIcon, FileTextIcon } from "@/components/Icons";
 import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
+import styles from "./PostsPageClient.module.css";
 
 export interface PostsPageInitialState {
   query: string;
@@ -24,6 +25,20 @@ export interface PostsPageInitialState {
   totalPages: number;
   currentCategoryName: string | null;
   error: string;
+}
+
+function positionPostTooltip(link: HTMLAnchorElement) {
+  const tooltip = link.querySelector<HTMLElement>('[role="tooltip"]');
+  if (!tooltip) return;
+  const card = link.getBoundingClientRect();
+  const scrollArea = link.closest(".content-scroll")?.getBoundingClientRect();
+  const visibleTop = Math.max(0, scrollArea?.top ?? 0);
+  const visibleBottom = Math.min(window.innerHeight, scrollArea?.bottom ?? window.innerHeight);
+  const below = visibleBottom - card.bottom - 8;
+  const above = card.top - visibleTop - 8;
+  const placement = below < 160 && above > below ? "above" : "below";
+  link.dataset.tooltipPlacement = placement;
+  link.style.setProperty("--tooltip-available-space", `${Math.max(0, placement === "above" ? above : below)}px`);
 }
 
 export default function PostsPageClient({ initialState }: { initialState: PostsPageInitialState }) {
@@ -103,7 +118,7 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
           <ListPending label="Loading posts…" />
         </PaginatedResults>
       ) : (
-        <PaginatedResults page={page} totalPages={totalPages} pending={loading || changing} animateChanges={animateChanges}
+        <PaginatedResults page={page} totalPages={totalPages} pending={loading || changing} animateChanges={animateChanges} allowOverflow
           transitionGroup={JSON.stringify([displayed.query, displayed.categoryId])}
           resultKey={JSON.stringify([displayed.query, displayed.categoryId, page])} onPageChange={handlePageChange}>
         {posts.length === 0 ? (
@@ -121,14 +136,15 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
           style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}
         >
           {posts.map((post: PostSummary) => (
-            <Link key={post.id} href={`/posts/${post.id}`} style={{ textDecoration: "none" }}>
+            <Link key={post.id} href={`/posts/${post.id}`} className={styles.link}
+              aria-label={post.title} aria-describedby={post.summary?.trim() ? `post-summary-${post.id}` : undefined}
+              onPointerEnter={(event) => positionPostTooltip(event.currentTarget)}
+              onFocus={(event) => positionPostTooltip(event.currentTarget)}>
               <div
-                className="ai-card"
+                className={`ai-card ${styles.card}`}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  padding: "1.2rem 1.5rem",
-                  transition: "all 0.2s ease",
                 }}
               >
                 <div
@@ -154,35 +170,18 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
                   >
                     {post.title}
                   </h4>
-                  {post.summary && (
-                    <div
-                      style={{
-                        fontSize: "0.9rem",
-                        color: "var(--text-secondary)",
-                        marginTop: "0.4rem",
-                        lineHeight: 1.5,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis"
-                      }}
-                    >
-                      {post.summary}
-                    </div>
-                  )}
                   <div
                     style={{
                       fontSize: "0.82rem",
                       color: "var(--text-muted)",
-                      marginTop: post.summary ? "0.6rem" : "0.3rem",
+                      marginTop: "0.3rem",
                       display: "flex",
                       gap: "0.8rem",
-                      flexWrap: "wrap",
+                      flexWrap: "nowrap",
                       alignItems: "center"
                     }}
                     >
-                      <span>
+                      <span style={{ flexShrink: 0 }}>
                       {getPostTimeline(post).label} on{" "}
                       {formatDate(getPostTimeline(post).timestamp)}
                     </span>
@@ -193,6 +192,10 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
                         padding: "2px 8px",
                         borderRadius: "4px",
                         fontSize: "0.75rem",
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       {post.category_id == null ? "无标签" : (post.category ? post.category.name : "Uncategorized")}
@@ -200,6 +203,12 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
                   </div>
                 </div>
               </div>
+              {post.summary?.trim() && (
+                <span id={`post-summary-${post.id}`} role="tooltip" className={styles.tooltip} onClick={(event) => event.preventDefault()}>
+                  <span className={styles.tooltipLabel}>Introduction</span>
+                  <span className={styles.tooltipText}>{post.summary}</span>
+                </span>
+              )}
             </Link>
           ))}
         </div>
