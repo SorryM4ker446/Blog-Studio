@@ -4,6 +4,38 @@ import os from "node:os";
 import { loginAdmin, expectNoOverflow, scanAccessibility } from "./support/accessibility";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 
+test("long editor introductions stay within a compact single line", async ({ page }) => {
+  const headers = await loginAdmin(page);
+  const intro = "A long introduction for the editor list. ".repeat(12);
+  const response = await page.request.post(`${E2E_API_URL}/admin/posts`, {
+    headers,
+    data: { title: "Long editor introduction", summary: intro, content: "Saved content" },
+  });
+  expect(response.ok()).toBeTruthy();
+  const post = await response.json();
+  try {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto("/editor");
+    await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+    const preview = page.getByRole("button", { name: "Open Long editor introduction" });
+    const description = preview.locator("span").last();
+    await expect(description).toHaveText(intro.trim());
+    await expect(description).toHaveCSS("text-overflow", "ellipsis");
+    await expect(description).toHaveCSS("white-space", "nowrap");
+    expect(await description.evaluate(node => node.clientWidth)).toBeLessThanOrEqual(608);
+    expect(await description.evaluate(node => node.scrollWidth)).toBeGreaterThan(await description.evaluate(node => node.clientWidth));
+    await page.screenshot({ path: path.join(os.tmpdir(), "blog-editor-introduction-desktop.png") });
+
+    await page.setViewportSize({ width: 375, height: 850 });
+    await expectNoOverflow(page);
+    const widths = await description.evaluate(node => ({ description: node.clientWidth, preview: node.parentElement!.clientWidth }));
+    expect(widths.description).toBeLessThanOrEqual(widths.preview);
+    await page.screenshot({ path: path.join(os.tmpdir(), "blog-editor-introduction-mobile.png") });
+  } finally {
+    await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers });
+  }
+});
+
 for (const theme of ["dark", "light"]) {
   test(`editor category controls and action colors in ${theme}`, async ({ page, context }, info) => {
     await context.addCookies([{ name: "blog_theme", value: theme, url: E2E_APP_URL }]);

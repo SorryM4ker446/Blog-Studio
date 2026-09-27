@@ -6,12 +6,14 @@ Blog Studio stores uploaded content behind database records and never exposes se
 
 ```env
 UPLOAD_DIR=uploads
-MAX_UPLOAD_BYTES=10485760
+MAX_UPLOAD_BYTES=1073741824
 ```
 
 `UPLOAD_DIR` may be relative to the backend process or absolute. Every read, write, quarantine, restore, and scan operation is confined to this directory. Symbolic links and nested storage keys are not treated as regular stored content.
 
-`MAX_UPLOAD_BYTES` defaults to 10 MiB and accepts values from 1 byte through 100 MiB. The backend limits the complete multipart request and independently limits bytes written to disk.
+`MAX_UPLOAD_BYTES` defaults to 1 GiB (1,073,741,824 bytes) and accepts values from 1 byte through 1 GiB. The backend limits the complete multipart request and independently limits bytes written to disk. Managed uploads also reject larger files before sending them.
+
+Container deployments read `MAX_UPLOAD_BYTES` from the host's `deploy/.env`. Automatic releases preserve that file, so an existing lower value must be changed there to `1073741824` before the new limit takes effect. The same applies to older `HTTP_READ_TIMEOUT` and `HTTP_WRITE_TIMEOUT` overrides when large uploads need more time.
 
 ## Accepted formats
 
@@ -26,7 +28,7 @@ SVG and HTML documents, script or executable extensions, empty files, unsupporte
 
 ## File metadata and previews
 
-Administrators provide a required display name and an optional description during a managed upload. Display names are limited to 255 characters and descriptions to 500 characters. Existing records are migrated with their original filename as the display name.
+Administrators provide a required display name and an optional description during a managed upload. Managed display names are limited to 25 characters and descriptions to 100 characters. The original filename remains available for downloads and type validation. Internal editor-image uploads retain the 255-character filename limit because they do not use the managed metadata form. Existing records were migrated with their original filename as the display name. Records with longer metadata remain readable, but their values must be shortened to the new limits before saving file details.
 
 Display metadata can be changed without renaming the stored object or changing the original download filename:
 
@@ -34,7 +36,7 @@ Display metadata can be changed without renaming the stored object or changing t
 PUT /api/admin/files/:id
 ```
 
-Public Drive, advanced search, and home-page search match only the effective file name. A custom display name supersedes the original filename; uploads without a custom name use the original filename as their display name. Public search never matches descriptions. Administrator search uses the same effective-name rule and additionally matches descriptions. Selecting a file in Drive, advanced search, or the administrator list opens the same details dialog. Validated images render through the hardened view endpoint; formats that are always served as attachments show metadata and a download action instead of attempting an unsafe inline preview.
+Public Drive, advanced search, and home-page search match only the effective file name. A custom display name supersedes the original filename; uploads without a custom name use the original filename as their display name when it fits the 25-character managed limit. Public search never matches descriptions. Administrator search uses the same effective-name rule and additionally matches descriptions. Selecting a file in Drive, advanced search, or the administrator list opens the same details dialog. Validated images render through the hardened view endpoint; formats that are always served as attachments show metadata and a download action instead of attempting an unsafe inline preview.
 
 ## Serving rules
 
@@ -59,6 +61,8 @@ The response lists database records whose content is missing and stored content 
 
 ## Operational notes
 
+- A 1 GiB multipart upload may temporarily occupy about 1 GiB in the system temporary directory in addition to its final copy in `UPLOAD_DIR`. Provision free disk space for concurrent uploads on both volumes.
+- The default HTTP read and write timeouts are 30 minutes to allow large uploads over slower connections. Existing `HTTP_READ_TIMEOUT` and `HTTP_WRITE_TIMEOUT` environment overrides may need increasing; reverse proxies must also allow the request body and duration.
 - Keep `UPLOAD_DIR` outside publicly served frontend directories.
 - Give the backend process read and write access only to that directory.
 - Back up the database and upload directory together while application writes are stopped; use the matched bundle and isolated restore procedure in [`backup-restore.md`](backup-restore.md).

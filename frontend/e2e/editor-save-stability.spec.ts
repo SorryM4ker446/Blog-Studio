@@ -202,7 +202,9 @@ for (const theme of ["dark", "light"]) {
       expect(await unchangedA.json()).toMatchObject({ content: "Preserved submitted body" });
 
       await page.getByRole("button", { name: "Back to content list" }).click();
-      await page.locator(".editor-post-card").filter({ has: page.getByText(articleA.title, { exact: true }) }).getByRole("button", { name: "Edit", exact: true }).click();
+      const savedRow = page.locator(".editor-post-card").filter({ has: page.getByText(articleA.title, { exact: true }) });
+      await savedRow.getByRole("button", { name: /More actions for/ }).click();
+      await savedRow.getByRole("button", { name: "Edit", exact: true }).click();
       await expect(body).toHaveValue("Preserved submitted body");
       await expect.poll(() => save.evaluate(button => button.closest("[data-editor-view]")!.getAnimations({ subtree: true })
         .filter(animation => animation.playState === "running" || animation.pending).length)).toBe(0);
@@ -245,8 +247,10 @@ for (const theme of ["dark", "light"]) {
       expect(await sidebarPresentation(sidebar)).toEqual(publishedSidebar);
       expect(await save.evaluate(button => (button as HTMLElement & { finishSaveCheck?: () => string[] }).finishSaveCheck?.())).toEqual([]);
       await page.unroute(endpoint);
-      await expect(page.getByRole("link", { name: "View article" })).toHaveText("");
-      await expect(page.getByRole("link", { name: "View article" })).toHaveAttribute("title", "View article");
+      const viewArticle = page.getByRole("link", { name: "View article" });
+      await expect(viewArticle).toHaveText("View article");
+      await expect(viewArticle).toHaveCSS("border-top-width", "0px");
+      await expect(viewArticle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       const publishedScreenshot = testInfo.outputPath(`published-controls-${theme}.png`);
       await page.screenshot({ path: publishedScreenshot });
       await testInfo.attach(`Published controls (${theme})`, { path: publishedScreenshot, contentType: "image/png" });

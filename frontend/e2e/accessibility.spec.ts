@@ -12,7 +12,7 @@ for (const theme of ["dark", "light"]) {
     await scanAccessibility(page, info, "login");
     const headers = await loginAdmin(page);
     const created = await createArticle(page.request, { headers, data: {
-      title: `Accessible article ${theme}`, status: "published", category_id: 0,
+      title: `Accessible article ${theme}`, summary: "An accessible introduction for the post list.", status: "published", category_id: 0,
       content: `A long link: [${"longword".repeat(30)}](https://example.com)\n\n| Column | Details |\n| --- | --- |\n| text | ${"wide".repeat(100)} |\n\n\`\`\`\n${"code ".repeat(100)}\n\`\`\`\n\n![diagram =320x180](/missing-test-image.png)`,
     }});
     const post = await created.json();
@@ -20,7 +20,7 @@ for (const theme of ["dark", "light"]) {
     try {
       const uploaded = await page.request.post(`${E2E_API_URL}/admin/files`, { headers, multipart: {
         file: { name: "accessible-notes.txt", mimeType: "text/plain", buffer: Buffer.from("Accessible file contents.") },
-        display_name: `Accessible ${"long-file-name-".repeat(10)}`, description: "A file for keyboard preview and download.",
+        display_name: "Accessible notes", description: "A file for keyboard preview and download.",
       } });
       expect(uploaded.ok()).toBeTruthy();
       fileId = (await uploaded.json()).id;
@@ -30,7 +30,14 @@ for (const theme of ["dark", "light"]) {
         await expect(page.locator(`aside.sidebar a[href="${section}"]`)).toHaveAttribute("aria-current", "page");
         await expect(page.locator('aside.sidebar [aria-current="page"]')).toHaveCount(1);
         await expect(page.locator("h1").first()).toBeVisible();
-        if (path === "/editor") await expect(page.locator(".editor-post-title").filter({ hasText: post.title })).toBeVisible();
+        if (path === "/editor") await expect(page.getByRole("button", { name: `Open ${post.title}` })).toBeVisible();
+        if (path === "/posts") {
+          const card = page.getByRole("link", { name: post.title });
+          await card.hover();
+          const summary = card.locator('p[id^="post-summary-"]');
+          await expect(summary).toBeVisible();
+          await expect(summary).toHaveCSS("opacity", "1");
+        }
         if (path === `/posts/${post.id}`) {
           const image = page.locator(".post-body img");
           await expect(image).toHaveAttribute("loading", "lazy");
@@ -62,7 +69,7 @@ for (const theme of ["dark", "light"]) {
       await scanAccessibility(page, info, "leave-dialog");
       await page.getByRole("button", { name: "Leave editor", exact: true }).press("Enter");
       await page.getByRole("tab", { name: /Files/ }).press("Enter");
-      await page.getByRole("button", { name: "Upload File", exact: true }).press("Enter");
+      await page.getByRole("button", { name: "Upload", exact: true }).press("Enter");
       await expect(page.getByRole("dialog")).toBeVisible();
       await scanAccessibility(page, info, "upload-dialog");
     } finally {

@@ -117,8 +117,9 @@ test("editor refresh preserves a short page's reserved height and scroll before 
       await expect(page.locator(".editor-post-card")).toHaveCount(1);
       await page.setViewportSize({ width: 760, height: 900 });
       await expect.poll(() => viewport.evaluate(node => {
-        const card = node.querySelector(".editor-post-card")!;
-        return Math.abs(node.getBoundingClientRect().height - (card.getBoundingClientRect().height * 10 + 9 * 16));
+        const row = node.querySelector(".editor-post-card")!;
+        const header = node.querySelector("[data-editor-list-header]")!;
+        return Math.abs(node.getBoundingClientRect().height - (header.getBoundingClientRect().height + row.getBoundingClientRect().height * 10));
       })).toBeLessThan(1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     } finally { releaseNarrow(); }

@@ -36,7 +36,7 @@ func validLinkInput(input *linkInput) bool {
 	input.Title = strings.TrimSpace(input.Title)
 	input.Description = strings.TrimSpace(input.Description)
 	input.URL = strings.TrimSpace(input.URL)
-	if input.Title == "" || utf8.RuneCountInString(input.Title) > 100 || utf8.RuneCountInString(input.Description) > 300 || len(input.URL) > 2048 {
+	if input.Title == "" || utf8.RuneCountInString(input.Title) > 25 || utf8.RuneCountInString(input.Description) > 50 || len(input.URL) > 2048 {
 		return false
 	}
 	switch input.Icon {
@@ -224,12 +224,16 @@ func MoveLink(c *gin.Context) {
 		Version         int64 `json:"version"`
 		NeighborID      uint  `json:"neighbor_id"`
 		NeighborVersion int64 `json:"neighbor_version"`
+		TargetID        uint  `json:"target_id"`
+		TargetVersion   int64 `json:"target_version"`
 	}
 	if !bindJSON(c, &input) {
 		return
 	}
-	if input.Version < 1 || input.NeighborVersion < 1 || input.NeighborID == id {
-		apiresponse.Error(c, 400, "invalid_move", "Two adjacent links and their versions are required")
+	adjacent := input.NeighborID != 0 && input.TargetID == 0 && input.NeighborVersion > 0
+	swap := input.TargetID != 0 && input.NeighborID == 0 && input.TargetVersion > 0
+	if input.Version < 1 || (!adjacent && !swap) || input.NeighborID == id || input.TargetID == id {
+		apiresponse.Error(c, 400, "invalid_move", "A different target link and current versions are required")
 		return
 	}
 	var links []models.Link
@@ -242,14 +246,18 @@ func MoveLink(c *gin.Context) {
 			if link.ID == id {
 				a = i
 			}
-			if link.ID == input.NeighborID {
+			if link.ID == input.NeighborID || link.ID == input.TargetID {
 				b = i
 			}
 		}
 		if a < 0 || b < 0 {
 			return gorm.ErrRecordNotFound
 		}
-		if (a-b != 1 && b-a != 1) || links[a].Version != input.Version || links[b].Version != input.NeighborVersion {
+		otherVersion := input.TargetVersion
+		if adjacent {
+			otherVersion = input.NeighborVersion
+		}
+		if (adjacent && a-b != 1 && b-a != 1) || links[a].Version != input.Version || links[b].Version != otherVersion {
 			return linkConflict()
 		}
 		first, second := links[a], links[b]

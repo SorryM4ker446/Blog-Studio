@@ -38,7 +38,7 @@ export default function SearchInput({ placeholder = "Search...", onSearch, style
   return (
     <div className={variant === "editor" ? "editor-search-control" : undefined} style={{ position: "relative", ...style }}>
       {variant === "editor" ? <button type="button" className="editor-search-submit" aria-label="Submit search" onClick={() => void onSearch(inputRef.current?.value ?? "")}>
-        <span aria-hidden="true"><SearchIcon size={18} /></span>
+        <span aria-hidden="true"><SearchIcon size={16} /></span>
       </button> : <span aria-hidden="true" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: "0.9rem" }}>
         🔍
       </span>}

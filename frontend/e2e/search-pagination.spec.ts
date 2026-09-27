@@ -11,7 +11,7 @@ test("search pages restore filters and editor deletion corrects the last page", 
   });
   expect(login.ok()).toBeTruthy();
   const headers = { "X-CSRF-Token": (await login.json()).csrf_token };
-  const q = `pagedneedle${Date.now()}`;
+  const q = `pg${Date.now()}`;
   const postIds: number[] = [], fileIds: number[] = [];
   let categoryId = 0;
   try {
@@ -164,7 +164,9 @@ test("search pages restore filters and editor deletion corrects the last page", 
     await page.reload();
     await expect(page.locator(".editor-post-card")).toHaveCount(1);
     const deleteResponse = page.waitForResponse((response) => response.url() === `${E2E_API_URL}/admin/posts/${postIds[0]}` && response.request().method() === "DELETE");
-    await page.getByRole("button", { name: `Delete ${q} article 0`, exact: true }).click();
+    const lastPost = page.locator(".editor-post-card").filter({ hasText: `${q} article 0` });
+    await lastPost.getByRole("button", { name: /More actions for/ }).click();
+    await lastPost.getByRole("button", { name: "Delete", exact: true }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
     expect((await deleteResponse).ok()).toBeTruthy(); postIds.shift();
     await expect(page.locator(".editor-post-card")).toHaveCount(10);

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"gorm.io/gorm"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 
@@ -176,5 +177,79 @@ func TestHomepageLinksConcurrentCreateAndFailedMove(t *testing.T) {
 	denied := performJSONRequest(t, router, http.MethodGet, "/api/admin/links", nil, reader, false)
 	if denied.Code != 403 {
 		t.Fatalf("non-admin access: %d", denied.Code)
+	}
+}
+
+func TestHomepageLinkPositionAndTextLimits(t *testing.T) {
+	db := requireTestDatabase(t)
+	createTestUser(t, db, "links-position", "correct-password", "admin")
+	router := SetupRouter()
+	auth := loginAs(t, router, "links-position", "correct-password")
+	var links []models.Link
+	for i := 1; i <= 4; i++ {
+		input := map[string]any{"title": fmt.Sprintf("Link %d", i), "description": "Short description", "url": "", "icon": "link", "color": "blue", "visible": false, "request_id": fmt.Sprintf("position-test-link-%04d", i)}
+		response := performJSONRequest(t, router, http.MethodPost, "/api/admin/links", input, auth, true)
+		if response.Code != 201 {
+			t.Fatalf("create: %s", response.Body.String())
+		}
+		var link models.Link
+		if err := json.Unmarshal(response.Body.Bytes(), &link); err != nil {
+			t.Fatal(err)
+		}
+		links = append(links, link)
+	}
+	path := fmt.Sprintf("/api/admin/links/%d/move", links[0].ID)
+	input := map[string]any{"version": links[0].Version, "target_id": links[3].ID, "target_version": links[3].Version}
+	response := performJSONRequest(t, router, http.MethodPost, path, input, auth, true)
+	if response.Code != 200 {
+		t.Fatalf("reposition: %s", response.Body.String())
+	}
+	var moved []models.Link
+	if err := json.Unmarshal(response.Body.Bytes(), &moved); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []uint{links[3].ID, links[1].ID, links[2].ID, links[0].ID} {
+		version := int64(1)
+		if i == 0 || i == 3 {
+			version = 2
+		}
+		if moved[i].ID != want || moved[i].Version != version {
+			t.Fatalf("swapped positions and versions: %s", response.Body.String())
+		}
+	}
+	if stale := performJSONRequest(t, router, http.MethodPost, path, input, auth, true); stale.Code != 409 {
+		t.Fatalf("stale reposition: %d", stale.Code)
+	}
+	back := performJSONRequest(t, router, http.MethodPost, path, map[string]any{"version": moved[3].Version, "target_id": moved[0].ID, "target_version": moved[0].Version}, auth, true)
+	if back.Code != 200 {
+		t.Fatalf("reposition back: %s", back.Body.String())
+	}
+	var restored []models.Link
+	if err := json.Unmarshal(back.Body.Bytes(), &restored); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range links {
+		version := int64(1)
+		if i == 0 || i == 3 {
+			version = 3
+		}
+		if restored[i].ID != want.ID || restored[i].Version != version {
+			t.Fatalf("restored order: %s", back.Body.String())
+		}
+	}
+	invalid := map[string]any{"title": "A", "description": "", "url": "", "icon": "link", "color": "blue", "visible": false, "request_id": "position-test-too-long"}
+	invalid["title"] = strings.Repeat("字", 26)
+	if result := performJSONRequest(t, router, http.MethodPost, "/api/admin/links", invalid, auth, true); result.Code != 400 {
+		t.Fatalf("long title: %d", result.Code)
+	}
+	invalid["title"] = "Valid"
+	invalid["description"] = strings.Repeat("字", 51)
+	if result := performJSONRequest(t, router, http.MethodPost, "/api/admin/links", invalid, auth, true); result.Code != 400 {
+		t.Fatalf("long description: %d", result.Code)
+	}
+	invalid["title"] = strings.Repeat("字", 25)
+	invalid["description"] = strings.Repeat("字", 50)
+	if result := performJSONRequest(t, router, http.MethodPost, "/api/admin/links", invalid, auth, true); result.Code != 201 {
+		t.Fatalf("valid Unicode limits: %s", result.Body.String())
 	}
 }

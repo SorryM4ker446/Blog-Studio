@@ -423,13 +423,15 @@ a {
   align-items: center;
   gap: 10px;
 }
+.editor-list-actions .editor-search-control { width: 220px; height: 42px; }
 
 .editor-primary-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-width: 104px;
+  width: 124px;
+  min-width: 124px;
   min-height: 42px;
   height: 42px;
   padding: 0 18px;
@@ -466,71 +468,6 @@ a {
   gap: 1rem;
 }
 
-.editor-post-card {
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  min-height: 190px;
-  padding: 1.5rem;
-}
-
-.editor-post-card-open {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  padding: 0;
-  border: 0;
-  border-radius: inherit;
-  background: transparent;
-  cursor: pointer;
-}
-
-.editor-post-card-open:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 3px;
-}
-
-.editor-post-card-header,
-.editor-post-card-footer {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  gap: 1rem;
-  pointer-events: none;
-}
-
-.editor-post-card-header {
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.editor-post-card-footer {
-  align-items: center;
-  justify-content: space-between;
-  margin-top: auto;
-}
-
-.editor-post-card-content {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  padding: 0;
-  color: inherit;
-  text-align: left;
-}
-
-.editor-post-title {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 1.1rem;
-  font-weight: 600;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .editor-post-status {
   flex-shrink: 0;
   padding: 2px 10px;
@@ -548,84 +485,6 @@ a {
 .editor-post-draft {
   background: rgba(255, 183, 77, 0.15);
   color: #ffb74d;
-}
-
-.editor-post-summary {
-  display: -webkit-box;
-  flex: 1;
-  overflow: hidden;
-  margin: 0.75rem 0 1.5rem;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.6;
-  text-overflow: ellipsis;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.editor-post-delete {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: rgba(242, 139, 130, 0.1);
-  color: var(--accent-red);
-  cursor: pointer;
-  pointer-events: auto;
-  font-size: 20px;
-  line-height: 1;
-  transition: background-color 140ms ease, border-color 140ms ease;
-}
-.editor-post-delete:hover {
-  background: color-mix(in srgb, var(--accent-red) 18%, transparent);
-  border-color: color-mix(in srgb, var(--accent-red) 34%, var(--border-color));
-}
-.editor-post-delete::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 3;
-  width: max-content;
-  padding: 6px 9px;
-  border: 1px solid var(--border-color);
-  border-radius: 7px;
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  box-shadow: 0 4px 12px #0003;
-  font-size: .75rem;
-  font-weight: 500;
-  line-height: 1.4;
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-3px);
-  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
-}
-.editor-post-delete:hover::after,
-.editor-post-delete:focus-visible::after {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-@media (prefers-reduced-motion: reduce) {
-  .editor-post-delete::after { transition: none; }
-}
-
-.editor-post-delete:focus-visible {
-  outline: 2px solid var(--accent-red);
-  outline-offset: 2px;
-}
-
-
-.editor-post-card-actions {
-  position: relative;
-  pointer-events: auto;
 }
 
 .editor-post-category {
@@ -2467,7 +2326,7 @@ body.theme-light .custom-select-options {
 .editor-publication-status[data-published="true"] { color: var(--text-primary); }
 .editor-save-state { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-height: 28px; margin-bottom: 1rem; color: var(--text-muted); font-size: 0.8125rem; }
 .editor-save-state > span { min-width: 136px; }
-.editor-view-link, .login-home-link {
+.login-home-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2482,19 +2341,33 @@ body.theme-light .custom-select-options {
   text-decoration: none;
   transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
-.editor-view-link svg, .login-home-link svg { display: block; }
-.editor-view-link { flex-basis: 32px; width: 32px; height: 32px; border-radius: 6px; }
-.editor-view-link:hover, .login-home-link:hover {
+.login-home-link svg { display: block; }
+.login-home-link:hover {
   background: var(--bg-hover);
   border-color: var(--text-muted);
   color: var(--text-primary);
   text-decoration: none;
 }
+.editor-view-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  padding: 0 1px;
+  border-bottom: 1px solid transparent;
+  color: var(--text-muted);
+  font: 500 0.8125rem/1 var(--font-family);
+  text-decoration: none;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+.editor-view-link svg { display: block; transition: transform 150ms ease; }
+.editor-view-link:hover { color: var(--text-primary); border-color: currentColor; text-decoration: none; }
+.editor-view-link:hover svg { transform: translate(1px, -1px); }
 .editor-view-link[aria-disabled="true"] { cursor: wait; }
 .login-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 2rem; }
 .login-next-button { min-width: 96px; min-height: 38px; padding: 0 16px; border: 1px solid var(--text-primary); border-radius: 7px; background: var(--text-primary); color: var(--bg-base); font: inherit; font-size: 0.875rem; cursor: pointer; }
 .login-next-button:disabled { cursor: not-allowed; opacity: 0.65; }
-@media (prefers-reduced-motion: reduce) { .editor-view-link, .login-home-link { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .editor-view-link, .editor-view-link svg, .login-home-link { transition: none; } }
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .sidebar * {
     transition: none !important;

@@ -32,7 +32,7 @@ test(`keyboard login, category management, Markdown editing and resource tabs in
   const csrf = await page.request.get(`${E2E_API_URL}/csrf`);
   const headers = { "X-CSRF-Token": (await csrf.json()).csrf_token };
   try {
-    await tabTo(page, page.getByRole("button", { name: "+ New Post", exact: true }));
+    await tabTo(page, page.getByRole("button", { name: "New Post", exact: true }));
     await page.keyboard.press("Enter");
     await tabTo(page, page.getByLabel("POST TITLE"));
     await page.keyboard.type("Keyboard article");

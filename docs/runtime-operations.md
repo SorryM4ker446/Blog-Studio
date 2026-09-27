@@ -45,8 +45,8 @@ The Compose deployment assigns Caddy a stable private address and configures the
 | `DB_CONNECTION_MAX_LIFETIME` | `30m` | Positive and at most 24 hours |
 | `DB_CONNECTION_MAX_IDLE_TIME` | `5m` | Positive and at most 24 hours |
 | `HTTP_READ_HEADER_TIMEOUT` | `5s` | Positive and at most 30 minutes |
-| `HTTP_READ_TIMEOUT` | `2m` | Positive and at most 30 minutes |
-| `HTTP_WRITE_TIMEOUT` | `5m` | Positive and at most 30 minutes |
+| `HTTP_READ_TIMEOUT` | `30m` | Positive and at most 30 minutes |
+| `HTTP_WRITE_TIMEOUT` | `30m` | Positive and at most 30 minutes |
 | `HTTP_IDLE_TIMEOUT` | `2m` | Positive and at most 30 minutes |
 | `HTTP_SHUTDOWN_TIMEOUT` | `20s` | Positive and at most 30 minutes |
 | `HEALTH_CHECK_TIMEOUT` | `2s` | Positive and at most 30 minutes |

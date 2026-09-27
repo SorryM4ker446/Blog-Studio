@@ -7,10 +7,21 @@ import {
   logoutUser,
   normalizeFileViewUrl,
   normalizeMarkdownFileUrls,
+  uploadFileWithMetadata,
   type PostSummary,
 } from "./api";
 import { clearCSRFToken, setCSRFToken } from "./api-client";
 import { rebaseFileViewURLs } from "./file-url";
+
+it("rejects uploads above 1 GiB before issuing a request", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const file = new File(["content"], "large.png", { type: "image/png" });
+  Object.defineProperty(file, "size", { value: 1024 ** 3 + 1 });
+  await expect(uploadFileWithMetadata(file)).resolves.toMatchObject({ ok: false, status: 413, code: "file_too_large" });
+  expect(fetchMock).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
+});
 
 describe("paginated search requests", () => {
   afterEach(() => vi.unstubAllGlobals());

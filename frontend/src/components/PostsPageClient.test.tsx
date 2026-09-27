@@ -68,6 +68,22 @@ describe("category post search", () => {
     expect(await screen.findByText("Go observability")).toBeVisible();
   });
 
+  it("keeps introductions inside cards only for posts that have one", () => {
+    render(<PostsPageClient initialState={{
+      query: "observability", categoryId: "2",
+      posts: [matchingPost, { ...matchingPost, id: 13, title: "Without introduction", summary: "  " }],
+      page: 1, totalPages: 1, currentCategoryName: "Go", error: "",
+    }} />);
+
+    const described = screen.getByRole("link", { name: "Go observability" });
+    const plain = screen.getByRole("link", { name: "Without introduction" });
+    expect(described).toHaveAttribute("aria-describedby", "post-summary-12");
+    expect(described).toHaveAccessibleDescription("Tracing in Go");
+    expect(described.querySelector("#post-summary-12")).toHaveTextContent("Tracing in Go");
+    expect(plain).not.toHaveAttribute("aria-describedby");
+    expect(plain.querySelector("#post-summary-13")).toBeNull();
+  });
+
   it("preserves the category parameter and searches without remounting the page", async () => {
     render(<PostsPageClient initialState={{
       query: "observability", categoryId: "2",

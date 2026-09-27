@@ -18,6 +18,13 @@ export function saveEntryScroll(position: number) {
   history.replaceState({ ...history.state, [key]: { ...entry, scroll: position } }, "");
 }
 
+export function submitSearchFromTop(navigate: () => void) {
+  const scroller = document.querySelector<HTMLElement>(".content-scroll");
+  if (scroller) saveEntryScroll(scroller.scrollTop);
+  navigate();
+  if (scroller) scroller.scrollTop = 0;
+}
+
 export function installNavigationEntries() {
   const push = history.pushState;
   const replace = history.replaceState;

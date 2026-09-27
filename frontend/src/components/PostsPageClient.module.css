@@ -1,0 +1,113 @@
+.link {
+  display: block;
+  text-decoration: none;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 3px;
+  border-radius: var(--radius-lg);
+}
+
+.link .card {
+  display: grid;
+  grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+  align-items: center;
+  gap: 1.5rem;
+  height: 5.125rem;
+  padding: 1rem 1.5rem;
+}
+
+.primary {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  min-width: 0;
+}
+
+.primary:only-child { grid-column: 1 / -1; }
+
+.details {
+  flex: 1;
+  min-width: 0;
+}
+
+.meta { margin-top: 0.3rem; }
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+  min-width: 0;
+  height: 3rem;
+  margin: 0;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border-color);
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 180ms ease-out, visibility 180ms;
+}
+
+.summaryLabel {
+  color: color-mix(in srgb, var(--text-muted) 80%, var(--text-primary));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.08em;
+}
+
+.summaryText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: color-mix(in srgb, var(--text-primary) 70%, var(--text-secondary));
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.link:hover .summary,
+.link:focus-visible .summary {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (max-width: 700px) {
+  .link .card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.1rem;
+    padding: 0.35rem 1rem;
+  }
+
+  .primary { gap: 0.9rem; }
+  .meta { margin-top: 0.12rem; }
+
+  .summary {
+    display: block;
+    margin-left: calc(20px + 0.9rem);
+    height: auto;
+    padding: 0;
+    border-left: 0;
+  }
+
+  .summaryLabel { display: none; }
+
+  .summaryText {
+    display: block;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    line-height: 1.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary { transition: none; }
+}

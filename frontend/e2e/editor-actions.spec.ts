@@ -22,12 +22,21 @@ for (const theme of ["dark", "light"]) {
     try {
       await page.goto("/editor?tab=links");
       await expect(page).toHaveTitle("Blog Studio");
+      let toolbarSize: { primaryWidth: number; primaryHeight: number; searchWidth: number; searchHeight: number } | null = null;
       for (const resource of ["posts", "files", "links"]) {
         await page.getByRole("tab", { name: new RegExp(`^${resource}`, "i") }).click();
         await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", `editor-${resource}-tab`);
         const primary = page.locator(".editor-list-actions .editor-primary-action");
         const search = page.locator(".editor-search-control");
-        expect(Math.abs((await primary.boundingBox())!.height - (await search.boundingBox())!.height)).toBeLessThanOrEqual(1);
+        const primaryBox = (await primary.boundingBox())!;
+        const searchBox = (await search.boundingBox())!;
+        const size = { primaryWidth: primaryBox.width, primaryHeight: primaryBox.height, searchWidth: searchBox.width, searchHeight: searchBox.height };
+        if (toolbarSize) expect(size).toEqual(toolbarSize);
+        else toolbarSize = size;
+        expect(Math.abs(size.primaryHeight - size.searchHeight)).toBeLessThanOrEqual(1);
+        await expect(primary).toHaveText(resource === "files" ? "Upload" : resource === "posts" ? "New Post" : "New Link");
+        await expect(primary.locator("svg")).toHaveAttribute("width", "16");
+        await expect(search.locator("svg")).toHaveAttribute("width", "16");
         await expect(primary).toHaveCSS("border-radius", "7px");
         await expect(search.getByRole("button", { name: "Submit search" })).toBeVisible();
       }
@@ -65,6 +74,7 @@ for (const theme of ["dark", "light"]) {
         await expect(dialog).toHaveCount(0);
       };
       for (const dismiss of ["Cancel", "Escape", "backdrop"]) {
+        await row.getByRole("button", { name: `More actions for ${link.title}` }).click();
         await row.getByRole("button", { name: "Delete", exact: true }).click();
         await expect(overlay).toHaveAttribute("data-state", "open");
         expect(await dialog.evaluate(node => node.getAnimations().some(motion => motion.effect?.getTiming().duration === 240))).toBe(true);
@@ -75,7 +85,7 @@ for (const theme of ["dark", "light"]) {
         } else if (dismiss === "Escape") await page.keyboard.press("Escape");
         else await overlay.click({ position: { x: 8, y: 8 } });
         await finishExit();
-        await expect(row.getByRole("button", { name: "Delete", exact: true })).toBeFocused();
+        await expect(row.getByRole("button", { name: `More actions for ${link.title}` })).toBeFocused();
       }
       const gate = new Promise<void>(resolve => { release = resolve; });
       let requests = 0;
@@ -85,6 +95,7 @@ for (const theme of ["dark", "light"]) {
         if (requests === 1) { await gate; return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Temporary deletion failure" }) }); }
         await route.continue();
       });
+      await row.getByRole("button", { name: `More actions for ${link.title}` }).click();
       await row.getByRole("button", { name: "Delete", exact: true }).click();
       await dialog.getByRole("button", { name: "Delete", exact: true }).click();
       await expect(dialog).toHaveAttribute("aria-busy", "true");

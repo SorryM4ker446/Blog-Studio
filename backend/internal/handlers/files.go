@@ -22,9 +22,11 @@ import (
 )
 
 const (
-	multipartOverheadAllowance = int64(1024 * 1024)
-	maxFileDisplayNameRunes    = 255
-	maxFileDescriptionRunes    = 500
+	multipartOverheadAllowance    = int64(1024 * 1024)
+	maxFileDisplayNameRunes       = 25
+	maxFileDescriptionRunes       = 100
+	maxSystemFileNameRunes        = 255
+	maxSystemFileDescriptionRunes = 500
 )
 
 type updateFileRequest struct {
@@ -115,13 +117,19 @@ func UploadFile(c *gin.Context) {
 	if displayName == "" {
 		displayName = originalName
 	}
-	displayName, err = normalizeRequired(displayName, "display_name", maxFileDisplayNameRunes)
+	nameLimit := maxFileDisplayNameRunes
+	descriptionLimit := maxFileDescriptionRunes
+	if isSystem {
+		nameLimit = maxSystemFileNameRunes
+		descriptionLimit = maxSystemFileDescriptionRunes
+	}
+	displayName, err = normalizeRequired(displayName, "display_name", nameLimit)
 	if err != nil {
 		apiresponse.Error(c, http.StatusBadRequest, "invalid_display_name", err.Error())
 		return
 	}
 	description := strings.TrimSpace(c.PostForm("description"))
-	if err := validateOptionalLength(description, "description", maxFileDescriptionRunes); err != nil {
+	if err := validateOptionalLength(description, "description", descriptionLimit); err != nil {
 		apiresponse.Error(c, http.StatusBadRequest, "invalid_description", err.Error())
 		return
 	}

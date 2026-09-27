@@ -8,7 +8,7 @@ for (const theme of ["dark", "light"]) {
     await loginAdmin(page);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/editor?tab=links");
-    await page.getByRole("button", { name: "+ New Link", exact: true }).click();
+    await page.getByRole("button", { name: "New Link", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "New link" });
     await dialog.getByLabel("TITLE", { exact: true }).fill("Save validation");
     await dialog.getByLabel("DESTINATION URL", { exact: true }).fill("http://localhost:3000/editor?tab=links1");

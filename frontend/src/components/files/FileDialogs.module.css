@@ -101,6 +101,8 @@
   font-size: 0.74rem;
 }
 
+.overLimit { color: var(--accent-red); font-size: 0.74rem; }
+
 .input,
 .textarea {
   width: 100%;

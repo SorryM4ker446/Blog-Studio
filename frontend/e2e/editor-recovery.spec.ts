@@ -290,7 +290,9 @@ test("restarted browsers retain article recovery through authentication renewal 
     await reopened.goto("/login");
     headers = await login(reopened);
     await reopened.goto(`/editor?tab=posts&q=${encodeURIComponent(post.title)}`);
-    await reopened.getByRole("article").filter({ hasText: post.title }).getByRole("button", { name: "Edit", exact: true }).click();
+    const recoveredRow = reopened.getByRole("article").filter({ hasText: post.title });
+    await recoveredRow.getByRole("button", { name: /More actions for/ }).click();
+    await recoveredRow.getByRole("button", { name: "Edit", exact: true }).click();
     await expect(reopened.getByRole("region", { name: "Browser recovery" })).toBeVisible();
     await restore(reopened);
     await expect(body(reopened)).toHaveValue("Unsaved published article text retained after browser restart");
