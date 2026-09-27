@@ -16,9 +16,8 @@ import LinkEditorDialog from "./LinkEditorDialog";
 import { LinkCardContent } from "./LinkCard";
 import ClampedText from "./ClampedText";
 import styles from "./Links.module.css";
-import actionStyles from "@/components/files/FileCard.module.css";
 
-function OrderNumber({ link, position, total, disabled, onMove }: { link: HomepageLink; position: number; total: number; disabled: boolean; onMove: (position: number) => void }) {
+function OrderNumber({ link, position, total, disabled, dimmed, onMove }: { link: HomepageLink; position: number; total: number; disabled: boolean; dimmed: boolean; onMove: (position: number) => void }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(position));
   const [invalid, setInvalid] = useState(false);
@@ -41,7 +40,7 @@ function OrderNumber({ link, position, total, disabled, onMove }: { link: Homepa
   }
   function cancel(restore = false) { settled.current = true; restoreFocus.current = restore; setEditing(false); setInvalid(false); }
   return <span className={styles.orderNumberSlot} data-order-editing={editing || undefined}>
-    <button ref={button} type="button" className={styles.orderNumber} disabled={disabled || editing} aria-label={`Change position of ${link.title}, currently ${position}`} title="Change position" onClick={start}>{String(position).padStart(2, "0")}</button>
+    <button ref={button} type="button" className={styles.orderNumber} disabled={disabled || editing} data-dimmed={dimmed || undefined} aria-label={`Change position of ${link.title}, currently ${position}`} title="Change position" onClick={start}>{String(position).padStart(2, "0")}</button>
     <input ref={input} className={styles.orderInput} type="text" inputMode="numeric" pattern="[0-9]*" disabled={!editing} value={value} aria-label={`New position for ${link.title}, from 1 to ${total}`} aria-invalid={invalid} onChange={event => { setValue(event.target.value); setInvalid(false); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commit(); } else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(true); } }} onBlur={() => { if (settled.current) return; if (/^[0-9]+$/.test(value) && Number(value) >= 1 && Number(value) <= total) commit(); else cancel(); }} />
   </span>;
 }
@@ -89,6 +88,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   const pages = Math.max(1, Math.ceil(filtered.length / 8));
   const page = Math.min(requestedPage, pages);
   const pageLinks = filtered.slice((page - 1) * 8, page * 8);
+  const orderUnavailable = Boolean(query) || links.length < 2;
   function navigate(search: string, next: number, replace = false) {
     setOpenActions(null);
     const target = new URLSearchParams(window.location.search);
@@ -166,9 +166,9 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
         <div className={styles.meta}><ClampedText paragraph className={styles.url} text={link.url || "Set a destination before enabling this link."} />
           <span className={styles.status} data-state={link.visible ? "visible" : link.url ? "hidden" : "missing"}>{link.visible ? "Visible" : link.url ? "Hidden" : "Needs a URL"}</span></div>
         <div className={styles.order} aria-label={`Position ${index + 1}`}>
-          <button type="button" className={`${actionStyles.action} ${styles.moveButton}`} aria-disabled={busy || loading} disabled={index === 0 || Boolean(query)} aria-label={`Move ${link.title} earlier`} onClick={() => void move(link, links[index - 1])}>←</button>
-          <OrderNumber link={link} position={index + 1} total={links.length} disabled={busy || loading || Boolean(query) || links.length < 2} onMove={target => void move(link, links[target - 1], true)} />
-          <button type="button" className={`${actionStyles.action} ${styles.moveButton}`} aria-disabled={busy || loading} disabled={index === links.length - 1 || Boolean(query)} aria-label={`Move ${link.title} later`} onClick={() => void move(link, links[index + 1])}>→</button>
+          <button type="button" className={styles.moveButton} aria-disabled={busy || loading} disabled={index === 0 || Boolean(query)} aria-label={`Move ${link.title} earlier`} onClick={() => void move(link, links[index - 1])}>←</button>
+          <OrderNumber link={link} position={index + 1} total={links.length} disabled={busy || loading || orderUnavailable} dimmed={orderUnavailable} onMove={target => void move(link, links[target - 1], true)} />
+          <button type="button" className={styles.moveButton} aria-disabled={busy || loading} disabled={index === links.length - 1 || Boolean(query)} aria-label={`Move ${link.title} later`} onClick={() => void move(link, links[index + 1])}>→</button>
         </div>
         <div className={styles.moreCell}><EditorRowActions label={link.title} open={openActions === link.id} unavailable={busy || loading}
           onToggle={() => setOpenActions(current => current === link.id ? null : link.id)} onClose={() => setOpenActions(null)}
