@@ -215,7 +215,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   await page.getByRole("combobox", { name: "Post category" }).click();
   await page.getByRole("option", { name: "General", exact: true }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved successfully!", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 
   const publicDraftSearch = await request.get(`${E2E_API_URL}/search`, {
@@ -655,7 +655,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   });
   await page.getByRole("button", { name: "Save", exact: true }).click();
   expect((await filteredPostRefreshPromise).ok()).toBeTruthy();
-  await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved successfully!", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back to content list" }).click();
   await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
@@ -698,7 +698,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   let deleteResponsePromise = page.waitForResponse(
     (response) => response.request().method() === "DELETE" && /\/api\/admin\/files\/\d+$/.test(response.url()),
   );
-  let deletionPanel = page.getByRole("heading", { name: "Confirm Deletion" }).locator("..");
+  let deletionPanel = page.getByRole("alertdialog", { name: "Confirm Deletion" });
   await deletionPanel.getByRole("button", { name: "Delete", exact: true }).click();
   let deleteResponse = await deleteResponsePromise;
   expect(deleteResponse.status()).toBe(503);
@@ -739,7 +739,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await postEditButton.click();
   await page.locator(".custom-editor-wrapper textarea").fill("# Image reference removed");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved successfully!", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back to content list" }).click();
   await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
@@ -749,14 +749,32 @@ test("administrator can publish an uploaded image and safely remove it after ref
   fileCard = page.locator("[data-file-id]").filter({ hasText: updatedDisplayName });
   await fileCard.getByRole("button", { name: `More actions for ${updatedDisplayName}` }).click();
   await fileCard.getByRole("button", { name: "Delete" }).click();
+  await page.evaluate(() => {
+    const frame = document.querySelector<HTMLElement>("[data-editor-view]")!;
+    const animate = frame.animate.bind(frame);
+    frame.animate = (keyframes, options) => {
+      frame.dataset.unexpectedDeleteMotion = "true";
+      return animate(keyframes, options);
+    };
+    const original = Element.prototype.animate;
+    Element.prototype.animate = function (...args) {
+      if (this.classList.contains("editor-delete-overlay") && (args[0] as Keyframe[]).at(-1)?.backdropFilter === "blur(0px)") {
+        frame.dataset.deleteExit = "unblur";
+      }
+      return original.apply(this, args);
+    };
+  });
   deleteResponsePromise = page.waitForResponse(
     (response) => response.request().method() === "DELETE" && /\/api\/admin\/files\/\d+$/.test(response.url()),
   );
-  deletionPanel = page.getByRole("heading", { name: "Confirm Deletion" }).locator("..");
+  deletionPanel = page.getByRole("alertdialog", { name: "Confirm Deletion" });
   await deletionPanel.getByRole("button", { name: "Delete", exact: true }).click();
   deleteResponse = await deleteResponsePromise;
   expect(deleteResponse.status()).toBe(200);
+  await expect(page.locator("[data-editor-view]")).toHaveAttribute("data-delete-exit", "unblur");
+  await expect(page.locator("[data-editor-view]")).not.toHaveAttribute("data-unexpected-delete-motion", "true");
   await expect(page.getByText(updatedDisplayName, { exact: true })).toHaveCount(0);
+  await expect(deletionPanel).toHaveCount(0);
 
   const categoryToggle = page.getByRole("button", { name: "Toggle categories" });
   const categoryMenu = page.locator(".sidebar-categories");

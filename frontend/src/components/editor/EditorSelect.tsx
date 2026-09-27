@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { ChevronDownIcon, EditIcon, TrashIcon } from "@/components/Icons";
+import { CheckIcon, ChevronDownIcon, EditIcon, TrashIcon, XIcon } from "@/components/Icons";
 
 type SelectValue = string | number;
 
@@ -106,6 +106,7 @@ export default function EditorSelect<T extends SelectValue>({
   }
 
   function startRename(option: EditorSelectOption<T>) {
+    setHighlightedIndex(-1);
     setEditingValue(option.value);
     setEditName(option.label);
     setManagementError("");
@@ -141,7 +142,7 @@ export default function EditorSelect<T extends SelectValue>({
 
   function moveHighlight(offset: number) {
     if (options.length === 0) return;
-    setHighlightedIndex((current) => (current + offset + options.length) % options.length);
+    setHighlightedIndex((current) => current < 0 ? (offset > 0 ? 0 : options.length - 1) : (current + offset + options.length) % options.length);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
@@ -191,7 +192,7 @@ export default function EditorSelect<T extends SelectValue>({
         aria-expanded={menuOpen}
         aria-invalid={!selectedOption || undefined}
         aria-controls={listboxId}
-        aria-activedescendant={menuOpen ? `${listboxId}-option-${highlightedIndex}` : undefined}
+        aria-activedescendant={menuOpen && highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined}
         disabled={disabled}
         className="custom-select-trigger"
         onClick={() => open ? closeMenu() : openMenu()}
@@ -213,7 +214,8 @@ export default function EditorSelect<T extends SelectValue>({
             <span className="custom-select-option-label">{option.label}</span>
           </li>)}
         </ul>
-        {manageable && managedOption && <div className="custom-select-management" role="group" aria-label={`Manage ${managedOption.label}`}>
+        {manageable && managedOption && <div className="custom-select-management" role="group" aria-label={`Manage ${managedOption.label}`}
+          onPointerEnter={() => setHighlightedIndex(-1)}>
           {editingValue !== null ? <div className="custom-select-rename">
             <label htmlFor={`${listboxId}-rename`} className="sr-only">New category name</label>
             <input id={`${listboxId}-rename`} autoFocus value={editName} readOnly={saving} maxLength={255}
@@ -224,10 +226,10 @@ export default function EditorSelect<T extends SelectValue>({
                   event.preventDefault(); event.stopPropagation(); setEditingValue(null); setManagementError(""); triggerRef.current?.focus({ preventScroll: true });
                 }
               }} />
-            <button type="button" disabled={saving} onClick={() => void submitRename()} aria-label={`Save ${managedOption.label} rename`}>✓</button>
-            <button type="button" disabled={saving} aria-label="Cancel rename" onClick={() => {
+            <button type="button" className="custom-select-rename-save" disabled={saving} onClick={() => void submitRename()} aria-label={`Save ${managedOption.label} rename`} title="Save category name"><CheckIcon size={16} /></button>
+            <button type="button" className="custom-select-rename-cancel" disabled={saving} aria-label="Cancel rename" title="Cancel rename" onClick={() => {
               setEditingValue(null); setManagementError(""); triggerRef.current?.focus({ preventScroll: true });
-            }}>×</button>
+            }}><XIcon size={16} /></button>
             {managementError && <span role="alert" className="custom-select-option-error">{managementError}</span>}
           </div> : <>
             <span className="custom-select-option-label">{managedOption.label}</span>

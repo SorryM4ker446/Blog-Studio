@@ -60,6 +60,13 @@ for (const theme of ["dark", "light"]) {
           const motion = original.apply(this, args);
           const frames = args[0] as Keyframe[];
           if (this.classList.contains("editor-delete-dialog") && Array.isArray(frames) && frames.at(-1)?.opacity === 0) motion.pause();
+          if (this.classList.contains("editor-delete-overlay") && Array.isArray(frames) && frames.at(-1)?.opacity === 0) {
+            this.setAttribute("data-exit-blur", String(frames.at(-1)?.backdropFilter));
+            this.setAttribute("data-exit-duration", String((args[1] as KeyframeAnimationOptions).duration));
+          }
+          if (this.hasAttribute("data-editor-view")) {
+            this.setAttribute("data-unexpected-delete-motion", "true");
+          }
           return motion;
         };
       });
@@ -69,6 +76,8 @@ for (const theme of ["dark", "light"]) {
         await expect(overlay).toHaveAttribute("data-state", "closing");
         await expect(dialog).toHaveText(/delete this link/);
         await expect(dialog.locator(".editor-delete-confirm")).toBeDisabled();
+        await expect(dialog.locator(".editor-delete-confirm")).toHaveCSS("cursor", "default");
+        await expect(dialog.locator(".editor-delete-cancel")).toHaveCSS("cursor", "default");
         expect(await page.locator(".editor-list-toolbar").evaluate(node => Boolean(node.closest("[inert]")))).toBe(true);
         await dialog.evaluate(node => node.getAnimations().forEach(motion => motion.finish()));
         await expect(dialog).toHaveCount(0);
@@ -79,12 +88,17 @@ for (const theme of ["dark", "light"]) {
         await expect(overlay).toHaveAttribute("data-state", "open");
         expect(await dialog.evaluate(node => node.getAnimations().some(motion => motion.effect?.getTiming().duration === 240))).toBe(true);
         if (dismiss === "Cancel") {
+          await expect(overlay).toHaveCSS("backdrop-filter", "blur(6px)");
+          await expect(dialog.locator(".editor-delete-icon svg")).toHaveCount(1);
+          await expect(dialog.getByRole("button", { name: "Delete", exact: true }).locator("svg")).toHaveCount(0);
           await scanAccessibility(page, info, `delete-dialog-${theme}`);
           await page.screenshot({ path: path.join(os.tmpdir(), `blog-editor-delete-${theme}.png`) });
           await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
         } else if (dismiss === "Escape") await page.keyboard.press("Escape");
         else await overlay.click({ position: { x: 8, y: 8 } });
+        await expect(overlay).toHaveAttribute("data-exit", "cancelled");
         await finishExit();
+        await expect(page.locator("[data-editor-view]")).not.toHaveAttribute("data-unexpected-delete-motion", "true");
         await expect(row.getByRole("button", { name: `More actions for ${link.title}` })).toBeFocused();
       }
       const gate = new Promise<void>(resolve => { release = resolve; });
@@ -104,8 +118,13 @@ for (const theme of ["dark", "light"]) {
       release();
       await expect(dialog.getByRole("alert")).toContainText("Temporary deletion failure");
       await expect(overlay).toHaveAttribute("data-state", "open");
+      await expect(page.locator("[data-editor-deletion-ghost]")).toHaveCount(0);
       await dialog.getByRole("button", { name: "Delete", exact: true }).click();
       await expect(overlay).toHaveAttribute("data-state", "closing");
+      await expect(overlay).toHaveAttribute("data-exit", "deleted");
+      await expect(overlay).toHaveAttribute("data-exit-duration", "300");
+      await expect(overlay).toHaveAttribute("data-exit-blur", "blur(0px)");
+      await expect(page.locator("[data-editor-view]")).not.toHaveAttribute("data-unexpected-delete-motion", "true");
       await finishExit();
       await expect(row).toHaveCount(0);
       await expect(page.getByRole("tabpanel")).toBeFocused();

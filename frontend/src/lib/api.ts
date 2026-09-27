@@ -7,6 +7,7 @@ import {
   isApiError,
   publicApiRequest,
   setCSRFToken,
+  type UploadProgress,
 } from "@/lib/api-client";
 import { rebaseFileViewURLs } from "@/lib/file-url";
 import { MAX_UPLOAD_BYTES } from "@/lib/file-upload";
@@ -14,6 +15,7 @@ import { searchAPIParams, type ResourceQuery } from "@/lib/resource-query";
 
 export { API_BASE, ApiError, getApiErrorMessage, isApiError } from "@/lib/api-client";
 export type { ApiErrorKind } from "@/lib/api-client";
+export type { UploadProgress } from "@/lib/api-client";
 
 interface Category {
   id: number;
@@ -309,16 +311,14 @@ export async function createCategory(name: string): Promise<Category | null> {
   });
 }
 
-export async function updateCategory(id: number, name: string): Promise<boolean> {
-  await apiRequest<void>(`/admin/categories/${id}`, {
+export async function updateCategory(id: number, name: string): Promise<Category> {
+  return apiRequest<Category>(`/admin/categories/${id}`, {
     method: "PUT",
     auth: true,
     csrf: true,
     headers: getMutationHeaders(),
     body: JSON.stringify({ name }),
-    responseType: "void",
   });
-  return true;
 }
 
 export async function deleteCategory(id: number): Promise<boolean> {
@@ -353,6 +353,7 @@ export async function uploadFileWithMetadata(
   file: File,
   metadata: { displayName?: string; description?: string } = {},
   isSystem = false,
+  onUploadProgress?: (progress: UploadProgress | null) => void,
 ): Promise<FileMutationResult> {
   if (file.size > MAX_UPLOAD_BYTES) {
     return { ok: false, error: "Each file must be 1 GB or smaller.", kind: "http", status: 413, code: "file_too_large" };
@@ -369,6 +370,7 @@ export async function uploadFileWithMetadata(
       csrf: true,
       headers: getMutationHeaders(true),
       body: formData,
+      onUploadProgress,
     });
     return { ok: true, file: fileRecord };
   } catch (error) {

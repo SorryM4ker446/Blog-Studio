@@ -49,8 +49,13 @@ test("editor URLs restore saved articles and new drafts through refresh and hist
     await expect(body).toHaveValue(published.content);
     await page.reload();
     await expect(body).toHaveValue(published.content);
+    const updatedPublishedBody = `${published.content} updated`;
+    await body.fill(updatedPublishedBody);
+    const saveResponse = page.waitForResponse(response => response.request().method() === "PUT"
+      && new URL(response.url()).pathname === `/api/admin/posts/${published.id}`);
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText("✅ Saved successfully!", { exact: true })).toBeVisible();
+    expect((await saveResponse).ok()).toBeTruthy();
+    await expect(page.getByText("Saved successfully!", { exact: true })).toBeVisible();
     expect(new URL(page.url()).searchParams.get("edit")).toBe(String(published.id));
     await page.getByRole("button", { name: "Back to content list" }).click();
 

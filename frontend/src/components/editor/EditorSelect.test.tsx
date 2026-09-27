@@ -17,6 +17,9 @@ describe("EditorSelect", () => {
     await user.click(screen.getByRole("combobox"));
     await user.hover(screen.getByRole("option", { name: "Published" }));
     expect(screen.getByRole("group", { name: "Manage Draft" })).toBeInTheDocument();
+    await user.hover(screen.getByRole("group", { name: "Manage Draft" }));
+    expect(document.querySelector(".custom-select-option.highlighted")).toBeNull();
+    expect(screen.getByRole("combobox")).not.toHaveAttribute("aria-activedescendant");
     await user.keyboard("{End}");
     await user.click(screen.getByRole("button", { name: "Rename Draft" }));
     await user.clear(screen.getByLabelText("New category name"));

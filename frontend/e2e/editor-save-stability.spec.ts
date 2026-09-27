@@ -169,6 +169,18 @@ for (const theme of ["dark", "light"]) {
       await attachSidebar(sidebar, testInfo, "after failed save");
       expect(await sidebarPresentation(sidebar)).toEqual(beforeSidebar);
       await page.unroute(endpoint);
+      await body.fill("Body A");
+      await expect(page.locator(".editor-save-state > span")).toHaveText("All changes saved");
+      let retryRequests = 0;
+      await page.route(endpoint, async route => {
+        if (route.request().method() === "PUT") retryRequests++;
+        await route.continue();
+      });
+      await save.click();
+      await expect(page.locator("#post-save-message")).toHaveAttribute("role", "status");
+      expect(retryRequests).toBe(1);
+      await page.unroute(endpoint);
+      await body.fill("Preserved submitted body");
 
       await sidebar.evaluate(element => element.setAttribute("data-preserved", "yes"));
       const publishGate = new Promise<void>(resolve => { release = resolve; });
@@ -209,8 +221,30 @@ for (const theme of ["dark", "light"]) {
       await expect.poll(() => save.evaluate(button => button.closest("[data-editor-view]")!.getAnimations({ subtree: true })
         .filter(animation => animation.playState === "running" || animation.pending).length)).toBe(0);
       const savedURL = page.url();
-      const publishedSavePresentation = await presentation(save);
       const publishedSidebar = await sidebarPresentation(sidebar);
+      const saveState = page.locator(".editor-save-state > span");
+      await expect(saveState).toHaveText("All changes saved");
+      await saveState.evaluate(node => {
+        const state = node as HTMLElement & { finishSaveStateCheck?: () => string[] };
+        const changes: string[] = [];
+        const observer = new MutationObserver(() => changes.push(state.textContent || ""));
+        observer.observe(state, { childList: true, characterData: true, subtree: true });
+        state.finishSaveStateCheck = () => { observer.disconnect(); return changes; };
+      });
+      const cleanSaveRequests: string[] = [];
+      const recordCleanSave = (request: { method: () => string; url: () => string }) => {
+        if (request.method() === "PUT" && request.url().includes(`/admin/posts/${articleA.id}`)) cleanSaveRequests.push(request.url());
+      };
+      page.on("request", recordCleanSave);
+      for (let attempt = 0; attempt < 3; attempt++) await save.click();
+      await expect(saveState).toHaveText("All changes saved");
+      expect(await saveState.evaluate(node => (node as HTMLElement & { finishSaveStateCheck?: () => string[] }).finishSaveStateCheck?.())).toEqual([]);
+      expect(cleanSaveRequests).toEqual([]);
+      page.off("request", recordCleanSave);
+      await body.fill("Preserved submitted body with final edit");
+      await expect(saveState).toHaveText("Unsaved changes");
+      await save.scrollIntoViewIfNeeded();
+      const publishedSavePresentation = await presentation(save);
       await save.evaluate(button => {
         const element = button as HTMLElement & { finishSaveCheck?: () => string[] };
         const baseline = element.outerHTML;

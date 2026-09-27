@@ -87,8 +87,8 @@ export default function CategoryField({ categories, value, loading = false, onCh
         <button ref={createRef} type="button" onClick={startCreate} disabled={loading || saving || mode !== "idle"} aria-label="Create category" title="Create category" className="editor-icon-button">+</button>
       </div>
 
-      {mode !== "idle" && (
-        <div className="fade-in editor-category-create">
+      <div className="editor-category-create-shell" data-open={mode === "create"} aria-hidden={mode !== "create"} inert={mode !== "create"}>
+        <div className="editor-category-create">
           <label htmlFor="category-name" className="sr-only">
             Category name
           </label>
@@ -131,7 +131,7 @@ export default function CategoryField({ categories, value, loading = false, onCh
             Cancel
           </button>
         </div>
-      )}
+      </div>
       <p
         id="category-name-error"
         role="alert"
