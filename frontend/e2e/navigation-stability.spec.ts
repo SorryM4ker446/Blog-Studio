@@ -2,8 +2,9 @@ import { expect, test, type Page, type APIRequestContext } from "@playwright/tes
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL } from "./support/test-env";
 import { createArticle } from "./support/articles";
 import { writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 
-const query = `Navigation stability ${Date.now()}`;
+const query = `Navigation ${randomUUID().slice(0, 5)}`;
 const ids: number[] = [];
 const fileIds: number[] = [];
 let fixture: APIRequestContext;
@@ -105,7 +106,7 @@ test("expired snapshots preserve the target page and editor geometry throughout 
   await expect(page.locator(".editor-post-card")).toHaveCount(1);
   const viewport = page.locator("[data-result-page]").locator("..");
   const height = (await viewport.boundingBox())!.height;
-  await page.getByRole("button", { name: /^Open Navigation stability/ }).click();
+  await page.getByRole("button", { name: /^Open Navigation / }).click();
   await expect(page.locator(".post-body")).toBeVisible();
   await page.clock.install();
   await page.clock.setSystemTime(Date.now() + 6 * 60_000);

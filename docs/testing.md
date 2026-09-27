@@ -117,7 +117,7 @@ Recovery tests use the real IndexedDB adapter with fake-indexeddb for validation
 
 ### Homepage links and dialogs
 
-Links tests cover migration replay, hidden templates, URL and color validation, visibility, collection limits, version conflicts, idempotent create retries and atomic adjacent ordering. Browser checks cover server-rendered lists, failed-read retry, drafts during pending ordering, save/reopen persistence, clamped card geometry, touch/mouse scrolling and keyboard activation.
+Links tests cover migration replay, hidden templates, URL and color validation, visibility, collection limits, version conflicts, idempotent create retries, and atomic adjacent or direct position swaps. Browser checks cover server-rendered lists, failed-read retry, drafts during pending ordering, save/reopen persistence, aligned management rows, clamped homepage cards, touch/mouse scrolling, and keyboard activation.
 
 Dialog tests cover Cancel, Escape, backdrop dismissal, drag-out protection, busy blocking, failed-save retention and focus restoration. Actual exit animations are paused to inspect mounted-but-inactive states and background isolation. The color picker covers dragging, keyboard sliders, invalid HEX recovery, viewport positioning, interrupted dismissal and reduced motion.
 
@@ -131,7 +131,7 @@ Unit tests cover URL normalization, independent search section pages, stale resp
 
 Initial search keeps its loading status visually hidden for screen readers; results enter without a preceding placeholder exit. Later searches retain resolved content while pending, then transition to the new result. Idle scope changes leave the keyword prompt stable. The Posts category field becomes inactive immediately on exit and hides after its transition; reversing an unfinished exit and reduced-motion behavior are checked.
 
-Pagination tests check stable outgoing height, sequential result replacement and coordinated list/pagination transitions without duplicate layers or nested animations. Editor checks cover full-page spacing on short last pages, reloads and resizing, with spacing removed for single-page results. Links coverage includes filtered counts, tab resets, long content and cross-page reordering in both directions with reduced motion. Navigation checks use 991 articles/files, deep pages and repeated detail round trips with storage blocked or snapshots expired. This is a functional navigation fixture, not a performance benchmark.
+Pagination tests check stable outgoing height, sequential result replacement and coordinated list/pagination transitions without duplicate layers or nested animations. Editor checks cover full-page spacing on short last pages, reloads and resizing, with spacing removed for single-page results. Links coverage includes filtered counts, tab resets, long content, same-page swaps, and cross-page swaps in both directions with reduced motion. Navigation checks use 991 articles/files, deep pages and repeated detail round trips with storage blocked or snapshots expired. This is a functional navigation fixture, not a performance benchmark.
 
 Frame assertions check DOM continuity, opacity, dimensions and scroll position during sidebar, save, refresh and navigation transitions. Sampling accounts for elapsed time and existing animations; screenshots are diagnostic attachments rather than byte-equality assertions. Script-blocked reloads distinguish server rendering from hydration.
 

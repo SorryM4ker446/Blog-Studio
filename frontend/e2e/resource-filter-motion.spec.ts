@@ -52,7 +52,7 @@ for (const route of ["/editor", "/editor?tab=files", "/posts", "/drive"]) {
       data: { username: E2E_ADMIN_USER, password: E2E_ADMIN_PASS } });
     expect(login.ok()).toBeTruthy();
     const headers = { "X-CSRF-Token": (await login.json()).csrf_token };
-    const name = `Filter continuity ${Date.now()}`;
+    const name = `Filter ${Date.now().toString(36)}`;
     const category = await (await page.request.post(`${E2E_API_URL}/admin/categories`, { headers, data: { name } })).json();
     const post = await (await createArticle(page.request, { headers, data: { title: name, content: "Continuity content", status: "published", category_id: category.id } })).json();
     const uploaded = await page.request.post(`${E2E_API_URL}/admin/files`, { headers, multipart: {

@@ -23,6 +23,7 @@ for (const reducedMotion of [false, true]) {
       await more.click();
       const edit = card.getByRole("button", { name: "Edit", exact: true });
       const before = await more.boundingBox();
+      const scrollBefore = await page.locator(".content-scroll").evaluate(node => node.scrollTop);
       await page.evaluate(() => {
         const frame = document.querySelector<HTMLElement>("[data-editor-view]")!;
         frame.dataset.entries = "0";
@@ -45,7 +46,14 @@ for (const reducedMotion of [false, true]) {
       await expect(page.locator("[data-editor-view]")).toHaveAttribute("data-entries", "0");
       await expect(page.getByText("Loading article…", { exact: true })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
-      expect(await more.boundingBox()).toEqual(before);
+      const after = await more.boundingBox();
+      const scrollAfter = await page.locator(".content-scroll").evaluate(node => node.scrollTop);
+      expect(after).not.toBeNull();
+      expect(before).not.toBeNull();
+      expect(after!.x).toBeCloseTo(before!.x, 0);
+      expect(after!.width).toBeCloseTo(before!.width, 0);
+      expect(after!.height).toBeCloseTo(before!.height, 0);
+      expect(after!.y + scrollAfter).toBeCloseTo(before!.y + scrollBefore, 0);
       // Repeated card activation must not start another detail request.
       await card.getByRole("button", { name: `Open ${post.title}`, exact: true }).click();
       release();

@@ -129,7 +129,7 @@ class ReleaseTests(unittest.TestCase):
             ["curl", "--fail", "--silent", "--show-error", "--retry", "10", "--retry-all-errors", "--max-time", "30", "https://example.test/api/settings"],
             ["curl", "--fail", "--silent", "--show-error", "--retry", "10", "--retry-all-errors", "--max-time", "30", "https://example.test/api/links"],
         ])
-        
+
     def test_pull_failure_keeps_application_running(self):
         fake = FakeDocker(lambda args: args[:2] == ["docker", "pull"])
         with self.assertRaises(subprocess.CalledProcessError):

@@ -29,7 +29,7 @@ for (const settings of [
       });
       expect(login.ok()).toBe(true);
       const headers = { "X-CSRF-Token": (await login.json()).csrf_token };
-      const title = `Date rendering ${Date.now()}`;
+      const title = `Date rendering ${Date.now().toString(36)}`;
       let postId = 0;
       let fileId = 0;
       try {
