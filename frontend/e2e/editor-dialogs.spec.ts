@@ -40,7 +40,7 @@ for (const theme of ["dark", "light"]) {
         await page.getByRole("tab", { name: new RegExp(`^${resource}`, "i") }).click();
         const row = resource === "links" ? page.getByRole("article", { name: link.title, exact: true }) : page.locator(`[data-file-id="${file.id}"]`);
         const openEdit = async () => {
-          if (resource === "files") await row.getByRole("button", { name: /More actions for/ }).click();
+          await row.getByRole("button", { name: /More actions for/ }).click();
           await row.getByRole("button", { name: "Edit", exact: true }).click();
         };
         const dialog = page.getByRole("dialog", { name: resource === "links" ? "Edit link" : "Edit file details", exact: true });
@@ -74,7 +74,7 @@ for (const theme of ["dark", "light"]) {
           else if (dismiss === "backdrop") await overlay.click({ position: { x: 4, y: 4 } });
           else await dialog.getByRole("button", { name: dismiss, exact: true }).click();
           await finishExit();
-          await expect(resource === "files" ? row.getByRole("button", { name: /More actions for/ }) : row.getByRole("button", { name: "Edit", exact: true })).toBeFocused();
+          await expect(row.getByRole("button", { name: /More actions for/ })).toBeFocused();
         }
         await openEdit();
         const input = resource === "links" ? dialog.getByLabel("TITLE", { exact: true }) : dialog.getByRole("textbox", { name: /Display name/ });
@@ -112,7 +112,7 @@ for (const theme of ["dark", "light"]) {
 
         await page.setViewportSize({ width: 375, height: 850 });
         const updatedRow = resource === "links" ? page.getByRole("article", { name: updatedTitle, exact: true }) : row;
-        if (resource === "files") await updatedRow.getByRole("button", { name: /More actions for/ }).click();
+        await updatedRow.getByRole("button", { name: /More actions for/ }).click();
         await updatedRow.getByRole("button", { name: "Edit", exact: true }).click();
         await expectNoOverflow(page);
         await scanAccessibility(page, info, `${resource}-edit-mobile-${theme}`);

@@ -20,6 +20,12 @@ export default function LinkEditorDialog({ link, blockedReason = "", onSave, onC
   const errors = attempted ? validateLink(fields) : { title: "", description: "", url: "" };
   useEffect(() => registerLeaveGuard({ dirty: () => false, busy: () => live.current.saving, flush: async () => {}, expire: async () => {} }), []);
   function field<K extends keyof LinkFields>(key: K, value: LinkFields[K]) { setFields(current => ({ ...current, [key]: value })); }
+  function textField(key: "title" | "description", value: string, max: number) {
+    const previousLength = [...fields[key]].length;
+    if (previousLength > max && [...value].length > max) {
+      if ([...value].length < previousLength) field(key, value);
+    } else field(key, [...value].slice(0, max).join(""));
+  }
   async function save(close: () => void) {
     if (live.current.saving || blockedReason) return;
     setAttempted(true);
@@ -37,11 +43,18 @@ export default function LinkEditorDialog({ link, blockedReason = "", onSave, onC
     <form noValidate onSubmit={event => { event.preventDefault(); if (!closing) void save(close); }} aria-busy={saving}>
       <fieldset disabled={saving || closing} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <div className={styles.form}><div className={styles.fields}>
-        {([ ["title", "TITLE", 100], ["description", "DESCRIPTION", 300], ["url", "DESTINATION URL", 2048] ] as const).map(([key, label, max]) => <div key={key} className={styles.field}>
-          <label htmlFor={`link-${key}`}>{label}</label>{key === "description" ? <textarea id={`link-${key}`} maxLength={max} value={fields[key]} onChange={e => field(key, e.target.value)} aria-invalid={Boolean(errors[key])} aria-describedby={errors[key] ? `link-${key}-error` : undefined} />
-            : <input data-autofocus={key === "title" || undefined} id={`link-${key}`} type={key === "url" ? "url" : "text"} maxLength={max} value={fields[key]} onChange={e => field(key, e.target.value)} aria-invalid={Boolean(errors[key])} aria-describedby={errors[key] ? `link-${key}-error` : undefined} autoComplete="off" />}
-          {errors[key] && <p id={`link-${key}-error`} className={styles.error} role="alert">{errors[key]}</p>}
-        </div>)}
+        {([ ["title", "TITLE", 25], ["description", "DESCRIPTION", 50], ["url", "DESTINATION URL", 2048] ] as const).map(([key, label, max]) => {
+          const count = key === "url" ? null : [...fields[key]].length;
+          const tooLong = count !== null && count > max;
+          const feedback = errors[key] || (tooLong ? `Shorten the ${key} to ${max} characters before saving.` : "");
+          const describedBy = [count !== null && `link-${key}-count`, feedback && `link-${key}-error`].filter(Boolean).join(" ") || undefined;
+          return <div key={key} className={styles.field}>
+            <div className={styles.fieldHeader}><label htmlFor={`link-${key}`}>{label}</label>{count !== null && <span id={`link-${key}-count`} className={`${styles.counter} ${tooLong ? styles.overLimit : ""}`}>{count}/{max}</span>}</div>
+            {key === "description" ? <textarea id={`link-${key}`} value={fields[key]} onChange={e => textField(key, e.target.value, max)} aria-invalid={Boolean(feedback)} aria-describedby={describedBy} />
+              : <input data-autofocus={key === "title" || undefined} id={`link-${key}`} type={key === "url" ? "url" : "text"} maxLength={key === "url" ? max : undefined} value={fields[key]} onChange={e => key === "url" ? field(key, e.target.value) : textField(key, e.target.value, max)} aria-invalid={Boolean(feedback)} aria-describedby={describedBy} autoComplete="off" />}
+            {feedback && <p id={`link-${key}-error`} className={styles.error} role={attempted ? "alert" : undefined}>{feedback}</p>}
+          </div>;
+        })}
         <fieldset className={styles.choices}><legend className={styles.legend}>ICON</legend>{linkIcons.map(icon => <button type="button" key={icon} aria-label={`${icon} icon`} aria-pressed={fields.icon === icon} onClick={() => field("icon",icon)}><LinkIcon icon={icon} /></button>)}</fieldset>
         <LinkColorPicker value={fields.color} onChange={color => field("color", color)} />
         <label className={styles.visibility} data-pointer-focus={visibilityPointerFocus || undefined}

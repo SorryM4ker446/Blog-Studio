@@ -74,6 +74,7 @@ for (const theme of ["dark", "light"]) {
         await expect(dialog).toHaveCount(0);
       };
       for (const dismiss of ["Cancel", "Escape", "backdrop"]) {
+        await row.getByRole("button", { name: `More actions for ${link.title}` }).click();
         await row.getByRole("button", { name: "Delete", exact: true }).click();
         await expect(overlay).toHaveAttribute("data-state", "open");
         expect(await dialog.evaluate(node => node.getAnimations().some(motion => motion.effect?.getTiming().duration === 240))).toBe(true);
@@ -84,7 +85,7 @@ for (const theme of ["dark", "light"]) {
         } else if (dismiss === "Escape") await page.keyboard.press("Escape");
         else await overlay.click({ position: { x: 8, y: 8 } });
         await finishExit();
-        await expect(row.getByRole("button", { name: "Delete", exact: true })).toBeFocused();
+        await expect(row.getByRole("button", { name: `More actions for ${link.title}` })).toBeFocused();
       }
       const gate = new Promise<void>(resolve => { release = resolve; });
       let requests = 0;
@@ -94,6 +95,7 @@ for (const theme of ["dark", "light"]) {
         if (requests === 1) { await gate; return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Temporary deletion failure" }) }); }
         await route.continue();
       });
+      await row.getByRole("button", { name: `More actions for ${link.title}` }).click();
       await row.getByRole("button", { name: "Delete", exact: true }).click();
       await dialog.getByRole("button", { name: "Delete", exact: true }).click();
       await expect(dialog).toHaveAttribute("aria-busy", "true");

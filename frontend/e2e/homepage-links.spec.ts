@@ -1,9 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import path from "node:path";
 import os from "node:os";
 import { loginAdmin, expectNoOverflow, scanAccessibility } from "./support/accessibility";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 import type { HomepageLink } from "../src/lib/links";
+
+async function iconTitleCenterOffset(title: Locator) {
+  return title.evaluate(node => {
+    const icon = node.previousElementSibling!.getBoundingClientRect();
+    const text = node.getBoundingClientRect();
+    return icon.top + icon.height / 2 - (text.top + parseFloat(getComputedStyle(node).lineHeight) / 2);
+  });
+}
 
 for (const theme of ["dark", "light"]) {
   test(`link visibility hit area stays beside its text in ${theme}`, async ({ page, context }) => {
@@ -107,7 +115,7 @@ for (const theme of ["dark", "light"]) {
     expect(errors).toEqual([]);
   });
 
-  test(`link card regions stay aligned with empty and maximum-length text in ${theme}`, async ({ page, context }) => {
+  test(`link list rows stay aligned with empty and maximum-length text in ${theme}`, async ({ page, context }) => {
     await context.addCookies([{ name: "blog_theme", value: theme, url: E2E_APP_URL }]);
     const headers = await loginAdmin(page);
     const ids: number[] = [];
@@ -116,8 +124,8 @@ for (const theme of ["dark", "light"]) {
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     const samples = [
       { title: "No description", description: "", url: "https://example.com/empty", visible: true },
-      { title: "W".repeat(100), description: "w".repeat(300), url: `https://example.com/${"x".repeat(1950)}`, visible: true },
-      { title: "标题".repeat(50), description: "介绍".repeat(150), url: "https://example.com/chinese", visible: true },
+      { title: "W".repeat(25), description: "w".repeat(50), url: `https://example.com/${"x".repeat(1950)}`, visible: true },
+      { title: "标题".repeat(12), description: "介绍".repeat(25), url: "https://example.com/chinese", visible: true },
       { title: "No destination", description: "Short introduction", url: "", visible: false },
     ];
     try {
@@ -141,22 +149,31 @@ for (const theme of ["dark", "light"]) {
           url: paragraphs[1].getBoundingClientRect().top - rect.top,
           actions: node.querySelector("button")!.getBoundingClientRect().top - rect.top,
           overflow: node.scrollWidth > node.clientWidth,
+          iconOffset: (() => {
+            const icon = node.querySelector<HTMLElement>("[data-color]")!.getBoundingClientRect();
+            const title = node.querySelector<HTMLElement>("[data-color]")!.nextElementSibling!.getBoundingClientRect();
+            const description = paragraphs[0].getBoundingClientRect();
+            return icon.top + icon.height / 2 - (title.top + description.bottom) / 2;
+          })(),
         };
       }));
       const desktop = await geometry();
-      expect(desktop[0].top).toBeCloseTo(desktop[1].top, 0);
+      expect(desktop[1].top - desktop[0].top).toBeCloseTo(desktop[0].height, 0);
       for (const field of ["height", "width", "description", "url", "actions"] as const) {
         expect(Math.max(...desktop.map(row => row[field])) - Math.min(...desktop.map(row => row[field])), field).toBeLessThan(1);
       }
       expect(desktop.every(row => !row.overflow)).toBe(true);
+      expect(desktop.every(row => Math.abs(row.iconOffset) <= 1)).toBe(true);
       const longCard = page.getByRole("article", { name: samples[1].title, exact: true });
       const description = longCard.locator("p").first();
-      await expect(description).toHaveCSS("-webkit-line-clamp", "2");
-      await expect(longCard.locator("p").nth(1)).toHaveCSS("-webkit-line-clamp", "2");
+      await expect(description).toHaveCSS("text-overflow", "ellipsis");
+      await expect(description).toHaveCSS("white-space", "nowrap");
+      await expect(longCard.locator("p").nth(1)).toHaveCSS("text-overflow", "ellipsis");
       await expect(description).not.toHaveAttribute("title");
       await description.hover();
       await expect(page.getByRole("tooltip")).toHaveCount(0);
       await expect(description).not.toHaveAttribute("tabindex");
+      await longCard.getByRole("button", { name: `More actions for ${samples[1].title}` }).click();
       await longCard.getByRole("button", { name: "Edit", exact: true }).click();
       const details = page.getByRole("dialog", { name: "Edit link" });
       await expect(details.getByLabel("DESCRIPTION", { exact: true })).toHaveValue(samples[1].description);
@@ -169,11 +186,13 @@ for (const theme of ["dark", "light"]) {
         expect(Math.max(...mobile.map(row => row[field])) - Math.min(...mobile.map(row => row[field]))).toBeLessThan(1);
       }
       expect(mobile.every(row => !row.overflow)).toBe(true);
+      expect(mobile.every(row => Math.abs(row.iconOffset) <= 1)).toBe(true);
       await page.screenshot({ path: path.join(os.tmpdir(), `blog-links-aligned-mobile-${theme}.png`) });
       await page.setViewportSize({ width: 1920, height: 1080 });
       await page.goto("/");
       const gallery = page.getByRole("region", { name: "Featured links" });
       await expect(gallery.getByText("No introduction provided.")).toBeVisible();
+      expect(Math.abs(await iconTitleCenterOffset(gallery.getByText("No description", { exact: true })))).toBeLessThan(1);
       const heights = await gallery.getByRole("link").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
       expect(heights).toHaveLength(3);
       expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
@@ -184,8 +203,10 @@ for (const theme of ["dark", "light"]) {
       const preview = dialog.locator("aside");
       const previewHeight = (await preview.boundingBox())!.height;
       await expect(preview.getByText("No introduction provided.")).toBeVisible();
+      expect(Math.abs(await iconTitleCenterOffset(preview.getByText("Your link title")))).toBeLessThan(1);
       await dialog.getByLabel("TITLE", { exact: true }).fill(samples[1].title);
       await dialog.getByLabel("DESCRIPTION", { exact: true }).fill(samples[1].description);
+      expect(Math.abs(await iconTitleCenterOffset(preview.getByText(samples[1].title, { exact: true })))).toBeLessThan(1);
       expect((await preview.boundingBox())!.height).toBeCloseTo(previewHeight, 0);
       await expect(dialog.getByLabel("DESCRIPTION", { exact: true })).toHaveValue(samples[1].description);
       await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -293,7 +314,9 @@ for (const theme of ["dark", "light"]) {
       const first: HomepageLink = await (await createdResponse).json(); ids.push(first.id);
       expect(first.color).toBe(chosenColor);
       await expect(dialog).toHaveCount(0);
-      await page.getByRole("article", { name: `Links ${theme} 1`, exact: true }).getByRole("button", { name: "Edit", exact: true }).click();
+      const firstLinkRow = page.getByRole("article", { name: `Links ${theme} 1`, exact: true });
+      await firstLinkRow.getByRole("button", { name: `More actions for Links ${theme} 1` }).click();
+      await firstLinkRow.getByRole("button", { name: "Edit", exact: true }).click();
       const editDialog = page.getByRole("dialog", { name: "Edit link" });
       await editDialog.getByRole("button", { name: "Custom", exact: true }).click();
       await expect(editDialog.getByLabel("HEX", { exact: true })).toHaveValue(chosenColor);
@@ -371,10 +394,12 @@ for (const theme of ["dark", "light"]) {
       await page.setViewportSize({ width:1600,height:1000 });
       await page.goto("/editor?tab=links");
       const firstRow = page.getByRole("article", { name:`Links ${theme} 1`, exact:true });
+      await firstRow.getByRole("button", { name: `More actions for Links ${theme} 1` }).click();
       await firstRow.getByRole("button", { name:"Edit", exact:true }).click();
       await page.getByLabel("Show on homepage").uncheck();
       await page.getByRole("button", { name:"Save link", exact:true }).click();
       await expect(firstRow.getByText("Hidden", { exact:true })).toBeVisible();
+      await firstRow.getByRole("button", { name: `More actions for Links ${theme} 1` }).click();
       await firstRow.getByRole("button", { name:"Delete", exact:true }).click();
       await page.getByRole("alertdialog").getByRole("button", { name:"Delete", exact:true }).click();
       await expect(firstRow).toHaveCount(0);
@@ -391,6 +416,7 @@ test("link search, last-page deletion and direct dialog cancellation preserve na
     for(let i=1;i<=9;i++) { const r=await page.request.post(`${E2E_API_URL}/admin/links`,{headers,data:{title:`Managed ${i}`,description:"",url:"",icon:"link",color:"blue",visible:false,request_id:crypto.randomUUID()}}); expect(r.ok()).toBeTruthy(); ids.push((await r.json()).id); }
     await page.goto("/editor?tab=links&link_page=2&edit=1");
     await expect(page.getByRole("article",{name:"Managed 9",exact:true})).toBeVisible();
+    await page.getByRole("article",{name:"Managed 9",exact:true}).getByRole("button",{name:"More actions for Managed 9"}).click();
     await page.getByRole("article",{name:"Managed 9",exact:true}).getByRole("button",{name:"Delete",exact:true}).click();
     await page.getByRole("alertdialog").getByRole("button",{name:"Delete",exact:true}).click();
     await expect(page).not.toHaveURL(/link_page=/);
@@ -398,11 +424,13 @@ test("link search, last-page deletion and direct dialog cancellation preserve na
     await page.getByPlaceholder("Search links...").fill("Managed 3");
     await page.getByPlaceholder("Search links...").press("Enter");
     await expect(page.getByRole("article")).toHaveCount(1);
+    await page.getByRole("article").getByRole("button",{name:"More actions for Managed 3"}).click();
     await page.getByRole("article").getByRole("button",{name:"Edit",exact:true}).click();
     await page.getByLabel("TITLE",{exact:true}).fill("Unsaved link title");
     await page.getByRole("button",{name:"Cancel",exact:true}).click();
     await expect(page.getByRole("dialog",{name:"Edit link"})).toHaveCount(0);
     await expect(page.getByRole("alertdialog",{name:"Leave this editor?"})).toHaveCount(0);
+    await page.getByRole("article").getByRole("button",{name:"More actions for Managed 3"}).click();
     await page.getByRole("article").getByRole("button",{name:"Edit",exact:true}).click();
     await expect(page.getByLabel("TITLE",{exact:true})).toHaveValue("Managed 3");
     await page.getByLabel("TITLE",{exact:true}).fill("Discard with Escape");
@@ -429,7 +457,9 @@ test("a conflicting link edit retains the draft and invalidates the list for the
     await page.goto("/editor?tab=links");
     const changed = await page.request.put(`${E2E_API_URL}/admin/links/${link.id}`, { headers, data: { ...fields, title: "Updated elsewhere", version: link.version } });
     expect(changed.ok()).toBeTruthy();
-    await page.getByRole("article", { name: "Original link", exact: true }).getByRole("button", { name: "Edit", exact: true }).click();
+    const originalRow = page.getByRole("article", { name: "Original link", exact: true });
+    await originalRow.getByRole("button", { name: "More actions for Original link" }).click();
+    await originalRow.getByRole("button", { name: "Edit", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Edit link" });
     await dialog.getByLabel("TITLE", { exact: true }).fill("Unsaved local draft");
     const response = page.waitForResponse(r => r.url().endsWith(`/api/admin/links/${link.id}`) && r.request().method() === "PUT");
@@ -527,7 +557,7 @@ for (const theme of ["dark", "light"]) {
     try {
       for (let i = 1; i <= 3; i++) {
         const response = await page.request.post(`${E2E_API_URL}/admin/links`, { headers, data: {
-          title: `Stable ${i}`, description: i === 1 ? "A longer description that wraps naturally inside the card." : "Short description",
+          title: `Stable ${i}`, description: i === 1 ? "A description that wraps inside the card." : "Short description",
           url: "", icon: "link", color: "blue", visible: false, request_id: crypto.randomUUID(),
         } });
         expect(response.ok()).toBeTruthy(); ids.push((await response.json()).id);

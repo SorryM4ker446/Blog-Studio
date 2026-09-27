@@ -9,7 +9,9 @@ describe("homepage link fields", () => {
   });
   it("keeps descriptions optional and enforces field bounds", () => {
     expect(validateLink(valid)).toEqual({ title:"",description:"",url:"" });
-    expect(validateLink({...valid,title:"x".repeat(101)}).title).not.toBe("");
-    expect(validateLink({...valid,description:"x".repeat(301)}).description).not.toBe("");
+    expect(validateLink({...valid,title:"字".repeat(25),description:"😀".repeat(50)})).toEqual({ title:"",description:"",url:"" });
+    expect(validateLink({...valid,title:"字".repeat(26)}).title).not.toBe("");
+    expect(validateLink({...valid,description:"😀".repeat(51)}).description).not.toBe("");
+    expect(validateLink({...valid,title:"x".repeat(25) + " "}).title).not.toBe("");
   });
 });

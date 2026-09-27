@@ -1,0 +1,45 @@
+.row {
+  position: relative;
+}
+
+.row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--row-glow-width, min(42%, 22rem));
+  background: radial-gradient(ellipse 100% 42% at left center, color-mix(in srgb, var(--accent-blue) 10%, transparent), transparent 85%);
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+  pointer-events: none;
+}
+
+.row::after {
+  content: "";
+  position: absolute;
+  top: calc(50% - 16px);
+  left: 0;
+  width: 2px;
+  height: 32px;
+  border-radius: 2px;
+  background: var(--accent-blue);
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+  pointer-events: none;
+}
+
+.active::before,
+.active::after,
+.row:has([data-order-editing="true"])::before,
+.row:has([data-order-editing="true"])::after { opacity: 1; }
+
+@media (hover: hover) {
+  .row:hover:not(:has([role="group"]:hover))::before,
+  .row:hover:not(:has([role="group"]:hover))::after { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row::before,
+  .row::after { transition: none; }
+}

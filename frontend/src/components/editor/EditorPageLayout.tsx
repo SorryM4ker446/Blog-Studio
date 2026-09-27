@@ -6,6 +6,6 @@ export default function EditorPageLayout({ children, count, pages, resource }: {
 }) {
   const pageSize = resource === "links" ? 8 : 10;
   const slots = pages > 1 ? pageSize : Math.min(pageSize, Math.max(1, count));
-  const style = Object.fromEntries([1, 2, 3, 4, 5].map(columns => [`--rows-${columns}`, Math.ceil(slots / columns)])) as CSSProperties;
+  const style = { "--rows-1": slots } as CSSProperties;
   return <div className={styles.layout} data-editor-layout={resource} style={style}>{children}</div>;
 }
