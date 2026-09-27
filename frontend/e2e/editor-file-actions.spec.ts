@@ -49,6 +49,14 @@ test("file rows show readable types and compact animated actions", async ({ page
     const rowIndicatorOpacity = () => row.evaluate(node => getComputedStyle(node, "::after").opacity);
     const rowWashOpacity = () => row.evaluate(node => getComputedStyle(node, "::before").opacity);
     const normalMoreBackground = await more.evaluate(node => getComputedStyle(node).backgroundColor);
+    const expandedMoreBackground = await more.evaluate(node => {
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--bg-hover)";
+      document.body.append(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    });
     expect(await rowIndicatorOpacity()).toBe("0");
     expect(await rowWashOpacity()).toBe("0");
     const box = await more.boundingBox();
@@ -66,12 +74,14 @@ test("file rows show readable types and compact animated actions", async ({ page
     await expect.poll(rowIndicatorOpacity).toBe("1");
     await expect.poll(rowWashOpacity).toBe("1");
     expect(await row.evaluate(node => getComputedStyle(node, "::after").width)).toBe("2px");
-    await expect.poll(() => more.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(normalMoreBackground);
+    await expect(more).toHaveCSS("background-color", expandedMoreBackground);
     await menu.hover();
     await expect.poll(rowIndicatorOpacity).toBe("1");
     await more.click();
     await expect(menu).toHaveCount(0);
     await expect(row.locator('[role="group"]')).toHaveCSS("visibility", "hidden");
+    await page.getByRole("heading", { name: "Content Editor" }).hover();
+    await expect(more).toHaveCSS("background-color", normalMoreBackground);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await more.click();
     await expect(row.getByRole("group", { name: "Actions for Actions note" })).toHaveCSS("opacity", "1");

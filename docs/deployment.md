@@ -30,6 +30,8 @@ The backend also exposes Prometheus data at `/internal/metrics` only on its priv
 - Enough durable disk space for PostgreSQL, uploads, Caddy certificate state, container images, and retained backups.
 - An off-host, encrypted destination for copies of verified backup bundles.
 
+The backend stages multipart uploads in the private `.health/multipart` directory on the uploads volume. Allow roughly twice the maximum file size in free space per concurrent upload while the final copy is written. See [file storage](file-storage.md) for cleanup and capacity details.
+
 Caddy obtains and renews public certificates automatically when `SITE_ADDRESS` is a public hostname and ports 80 and 443 are reachable. Its `caddy_data` and `caddy_config` volumes must remain persistent.
 
 ## Prepare configuration and secrets

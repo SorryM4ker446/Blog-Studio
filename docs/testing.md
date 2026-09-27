@@ -81,7 +81,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Playwright builds the standalone frontend and starts isolated servers on ports `3100` and `18080`; it does not reuse development servers. Tests run with one worker. The desktop `chromium` project runs all applicable workflows; `mobile-chromium` selects `mobile.spec.ts`, `accessibility.spec.ts` and `keyboard.spec.ts` at a 375px viewport. Individual cases also exercise other widths.
+Playwright builds the standalone frontend in `.next-e2e` and starts isolated servers on ports `3100` and `18080`; the separate build directory prevents a concurrently running `next dev` server from changing its static assets. It does not reuse development servers. Tests run with one worker. The desktop `chromium` project runs all applicable workflows; `mobile-chromium` selects `mobile.spec.ts`, `accessibility.spec.ts` and `keyboard.spec.ts` at a 375px viewport. Individual cases also exercise other widths.
 
 For a focused run:
 
@@ -105,7 +105,7 @@ Search checks cover summary-only SQL/JSON, protected article details, exact tota
 
 Migration tests cover fixed historical schemas, bounded backfill, unchanged article content/timestamps, extension and permission failures, rollback/retry and concurrent migration locking. The backup drill uses real PostgreSQL 18 `pg_dump`/`pg_restore`, disposable source and `_restore` databases, and uploaded files. It checks checksums, restored indexes/triggers, Links and storage reconciliation. Matching client tools are required when `TEST_DB_DSN` is configured.
 
-File tests cover content/extension mismatches, size limits, safe storage keys, path confinement, symlinks, attachment headers, referenced-file protection, deletion compensation and reconciliation. Browser workflows exercise upload, metadata editing, preview, search and deletion through the actual API.
+File tests cover content/extension mismatches, size limits, multipart temporary storage and cleanup, disk-write failures, safe storage keys, path confinement, symlinks, attachment headers, referenced-file protection, deletion compensation and reconciliation. Browser workflows exercise upload, metadata editing, preview, search and deletion through the actual API.
 
 ### Article editing and recovery
 

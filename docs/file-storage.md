@@ -11,7 +11,7 @@ MAX_UPLOAD_BYTES=1073741824
 
 `UPLOAD_DIR` may be relative to the backend process or absolute. Every read, write, quarantine, restore, and scan operation is confined to this directory. Symbolic links and nested storage keys are not treated as regular stored content.
 
-`MAX_UPLOAD_BYTES` defaults to 1 GiB (1,073,741,824 bytes) and accepts values from 1 byte through 1 GiB. The backend limits the complete multipart request and independently limits bytes written to disk. Managed uploads also reject larger files before sending them.
+`MAX_UPLOAD_BYTES` defaults to 1 GiB (1,073,741,824 bytes) and accepts values from 1 byte through 1 GiB. The backend limits the complete multipart request and independently limits bytes written to disk. Managed uploads also reject larger files before sending them. The backend places multipart temporary files in the private `.health/multipart` directory inside `UPLOAD_DIR`, rather than the container's memory-backed `/tmp`. It verifies this directory at startup and removes temporary files left by an interrupted process. The storage health report and backup archive exclude this private directory.
 
 Container deployments read `MAX_UPLOAD_BYTES` from the host's `deploy/.env`. Automatic releases preserve that file, so an existing lower value must be changed there to `1073741824` before the new limit takes effect. The same applies to older `HTTP_READ_TIMEOUT` and `HTTP_WRITE_TIMEOUT` overrides when large uploads need more time.
 
@@ -61,7 +61,7 @@ The response lists database records whose content is missing and stored content 
 
 ## Operational notes
 
-- A 1 GiB multipart upload may temporarily occupy about 1 GiB in the system temporary directory in addition to its final copy in `UPLOAD_DIR`. Provision free disk space for concurrent uploads on both volumes.
+- A 1 GiB multipart upload may occupy about 1 GiB in `.health/multipart` while the final copy is written into `UPLOAD_DIR`. Allow at least twice the file size in free space on the upload volume per concurrent upload, plus room for existing files and backups. The temporary copy is not included in backup bundles; a restart removes interrupted temporary files.
 - The default HTTP read and write timeouts are 30 minutes to allow large uploads over slower connections. Existing `HTTP_READ_TIMEOUT` and `HTTP_WRITE_TIMEOUT` environment overrides may need increasing; reverse proxies must also allow the request body and duration.
 - Keep `UPLOAD_DIR` outside publicly served frontend directories.
 - Give the backend process read and write access only to that directory.

@@ -222,6 +222,9 @@ test("link order numbers swap across pages and validate the requested position",
     await page.getByRole("heading", { name: "Content Editor" }).click();
     await expect.poll(() => samePage.evaluate(node => node.getAnimations().some(animation => animation.playState === "paused"))).toBe(true);
     await expect.poll(() => samePageTarget.evaluate(node => node.getAnimations().some(animation => animation.playState === "paused"))).toBe(true);
+    const unaffectedNumber = page.getByRole("article", { name: `${prefix}-2`, exact: true }).getByRole("button", { name: `Change position of ${prefix}-2, currently 2` });
+    await expect(unaffectedNumber).toBeDisabled();
+    await expect(unaffectedNumber).toHaveCSS("opacity", "1");
     await expect(page.getByRole("article").first()).toHaveAttribute("aria-label", `${prefix}-1`);
     expect(await samePage.evaluate(node => (node.getAnimations()[0].effect as KeyframeEffect).getKeyframes().at(-1)!.transform)).toBe("translateY(12px)");
     expect(await samePageTarget.evaluate(node => (node.getAnimations()[0].effect as KeyframeEffect).getKeyframes().at(-1)!.transform)).toBe("translateY(-12px)");

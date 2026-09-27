@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"blog-backend/internal/config"
@@ -49,6 +50,17 @@ func run(ctx context.Context) error {
 	}()
 	if _, err := filestore.NewLocalStore(cfg.UploadDir); err != nil {
 		return fmt.Errorf("initialize file storage: %w", err)
+	}
+	tempDir, err := filestore.PrepareMultipartTempDir(cfg.UploadDir)
+	if err != nil {
+		return fmt.Errorf("initialize multipart temporary storage: %w", err)
+	}
+	tempVariable := "TMPDIR"
+	if runtime.GOOS == "windows" {
+		tempVariable = "TMP"
+	}
+	if err := os.Setenv(tempVariable, tempDir); err != nil {
+		return fmt.Errorf("configure multipart temporary storage: %w", err)
 	}
 
 	healthChecker := health.NewChecker(config.DB, cfg.UploadDir, cfg.HealthCheckTimeout)

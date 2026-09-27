@@ -63,6 +63,9 @@ for (const resource of ["posts", "files"] as const) {
     await page.addInitScript(() => {
       const frames: { page: string | null; height: number; scroll: number }[] = [];
       Object.assign(window, { hydrationFrames: frames });
+      window.addEventListener("blog:initial-view-ready", () => {
+        Object.assign(window, { initialViewReady: true });
+      }, { once: true });
       const sample = () => {
         const result = document.querySelector("[data-result-page]");
         if (result) frames.push({ page: result.getAttribute("data-result-page"), height: result.parentElement!.getBoundingClientRect().height, scroll: document.querySelector(".content-scroll")!.scrollTop });
@@ -83,6 +86,7 @@ for (const resource of ["posts", "files"] as const) {
       expect(serverHeight).toBeGreaterThan(card!.height * 3);
       await expect(page.getByRole("button", { name: "Page 100, current page" })).toBeAttached();
     } finally { release(); }
+    await page.waitForFunction(() => (window as unknown as { initialViewReady?: boolean }).initialViewReady === true);
     await page.getByRole("button", { name: "Switch to Light Mode" }).click();
     await expect(page.getByRole("button", { name: "Switch to Dark Mode" })).toBeVisible();
     expect(await page.locator("[data-list-layout]").evaluate(node => node.getBoundingClientRect().height)).toBeCloseTo(serverHeight, 0);

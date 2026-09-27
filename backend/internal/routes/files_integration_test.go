@@ -11,9 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
+	"blog-backend/internal/filestore"
 	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"blog-backend/internal/searchtext"
@@ -261,6 +263,73 @@ func TestFileUploadStorageAndServingSecurity(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(uploadRoot, record.Name)); !os.IsNotExist(err) {
 		t.Fatalf("deleted content still exists: %v", err)
 	}
+}
+
+func TestLargeFileUploadUsesTemporaryStorageAndReportsFailures(t *testing.T) {
+	uploadRoot := t.TempDir()
+	t.Setenv("UPLOAD_DIR", uploadRoot)
+	t.Setenv("MAX_UPLOAD_BYTES", fmt.Sprint(40<<20))
+	tempDir, err := filestore.PrepareMultipartTempDir(uploadRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tempVariable := "TMPDIR"
+	if runtime.GOOS == "windows" {
+		tempVariable = "TMP"
+	}
+	t.Setenv(tempVariable, tempDir)
+	if filepath.Clean(os.TempDir()) != filepath.Clean(tempDir) {
+		t.Fatalf("multipart temporary directory = %q, want %q", os.TempDir(), tempDir)
+	}
+	db := requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+	createTestUser(t, db, "large-file-admin", "correct-password-123", "admin")
+	router := SetupRouter()
+	auth := loginAs(t, router, "large-file-admin", "correct-password-123")
+	content := bytes.Repeat([]byte("a"), 33<<20)
+	upload := performFileUpload(t, router, "large.txt", content, auth, false)
+	if upload.Code != http.StatusCreated {
+		t.Fatalf("large upload status=%d body=%s", upload.Code, upload.Body.String())
+	}
+	entries, err := os.ReadDir(tempDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("multipart temporary files remain after upload: entries=%v error=%v", entries, err)
+	}
+	oversized := performFileUpload(t, router, "too-large.txt", bytes.Repeat([]byte("a"), 41<<20), auth, false)
+	requireAPIError(t, oversized.Code, oversized.Body.Bytes(), http.StatusRequestEntityTooLarge, "file_too_large")
+	entries, err = os.ReadDir(tempDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("multipart temporary files remain after rejected upload: entries=%v error=%v", entries, err)
+	}
+	var wrongFieldBody bytes.Buffer
+	wrongFieldWriter := multipart.NewWriter(&wrongFieldBody)
+	wrongFieldPart, err := wrongFieldWriter.CreateFormFile("other", "another.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wrongFieldPart.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := wrongFieldWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	wrongFieldRequest := httptest.NewRequest(http.MethodPost, "/api/admin/files", &wrongFieldBody)
+	wrongFieldRequest.Header.Set("Content-Type", wrongFieldWriter.FormDataContentType())
+	for _, cookie := range auth.cookies {
+		wrongFieldRequest.AddCookie(cookie)
+	}
+	wrongFieldRequest.Header.Set("X-CSRF-Token", auth.csrfToken)
+	wrongFieldResponse := httptest.NewRecorder()
+	router.ServeHTTP(wrongFieldResponse, wrongFieldRequest)
+	requireAPIError(t, wrongFieldResponse.Code, wrongFieldResponse.Body.Bytes(), http.StatusBadRequest, "missing_file")
+	entries, err = os.ReadDir(tempDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("multipart temporary files remain after invalid upload: entries=%v error=%v", entries, err)
+	}
+
+	t.Setenv(tempVariable, filepath.Join(t.TempDir(), "missing"))
+	failure := performFileUpload(t, router, "another.txt", content, auth, false)
+	requireAPIError(t, failure.Code, failure.Body.Bytes(), http.StatusInternalServerError, "storage_error")
 }
 
 func TestFileStorageHealthAndPathConfinement(t *testing.T) {
