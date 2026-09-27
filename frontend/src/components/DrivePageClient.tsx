@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { FileRecord } from "@/lib/api";
 import { getFiles, searchResources } from "@/lib/api";
 import { readResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib/resource-query";
+import { submitSearchFromTop } from "@/lib/navigation-entry";
 import { useScopeTransition } from "@/lib/use-scope-transition";
 import { useResourcePage } from "@/lib/use-resource-page";
 import SearchInput from "@/components/SearchInput";
@@ -44,8 +45,10 @@ export default function DrivePageClient({ initialState }: { initialState: DriveP
   function handleSearch(value: string) {
     setAnimatePages(true);
     const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "files"), query: value.trim(), page: 1 };
-    writeResourceQuery("/drive", target);
-    void run(target);
+    submitSearchFromTop(() => {
+      writeResourceQuery("/drive", target);
+      void run(target);
+    });
   }
   function handlePageChange(page: number) {
     setAnimatePages(true);

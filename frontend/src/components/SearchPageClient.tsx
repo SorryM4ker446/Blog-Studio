@@ -13,6 +13,7 @@ import { useSearchPage } from "@/lib/use-search-page";
 import { useScopeTransition } from "@/lib/use-scope-transition";
 import { loadSearchResults, type SearchResults } from "@/lib/search-results";
 import { readSearchQuery, writeSearchQuery, type SearchQuery } from "@/lib/search-query";
+import { submitSearchFromTop } from "@/lib/navigation-entry";
 import type { SearchScope } from "@/lib/resource-query";
 import FileCard from "@/components/files/FileCard";
 import { FilePreviewDialog } from "@/components/files/FileDialogs";
@@ -60,7 +61,7 @@ export default function SearchPageClient({ initialState }: { initialState: Searc
     void run(target);
   }
   function submitSearch(value: string) {
-    navigate({ ...readSearchQuery(new URLSearchParams(window.location.search)), query: value.trim(), postPage: 1, filePage: 1 });
+    submitSearchFromTop(() => navigate({ ...readSearchQuery(new URLSearchParams(window.location.search)), query: value.trim(), postPage: 1, filePage: 1 }));
   }
   function changeFilter(patch: Partial<SearchQuery>) {
     const target = { ...readSearchQuery(new URLSearchParams(window.location.search)), ...patch, postPage: 1, filePage: 1 };

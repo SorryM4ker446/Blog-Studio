@@ -8,6 +8,7 @@ import { getPostTimeline, getPosts, searchResources, getCategories } from "@/lib
 import type { PostSummary } from "@/lib/api";
 import Link from "next/link";
 import { readResourceQuery, writeResourceQuery, type ResourceQuery } from "@/lib/resource-query";
+import { submitSearchFromTop } from "@/lib/navigation-entry";
 import { useScopeTransition } from "@/lib/use-scope-transition";
 import { useResourcePage } from "@/lib/use-resource-page";
 import SearchInput from "@/components/SearchInput";
@@ -52,8 +53,10 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
   function handleSearch(value: string) {
     setAnimateChanges(true);
     const target = { ...readResourceQuery(new URLSearchParams(window.location.search), "posts"), query: value.trim(), page: 1 };
-    writeResourceQuery("/posts", target);
-    void run(target);
+    submitSearchFromTop(() => {
+      writeResourceQuery("/posts", target);
+      void run(target);
+    });
   }
   function handlePageChange(page: number) {
     setAnimateChanges(true);

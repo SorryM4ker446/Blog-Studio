@@ -1,6 +1,7 @@
 "use client";
 
 import { formatDate } from "@/lib/display-date";
+import { submitSearchFromTop } from "@/lib/navigation-entry";
 import { useMemo, useState } from "react";
 import { useScopeTransition } from "@/lib/use-scope-transition";
 import type { ResourceQuery } from "@/lib/resource-query";
@@ -123,6 +124,14 @@ export default function EditorListView(controls: EditorListViewProps) {
   const { displayed: props, ref, changing } = useScopeTransition(value, controls.activeTab, requestedLoading,
     { query: controls.activeTab === "links" ? controls.links.query : controls.searchQuery, categoryId: controls.activeTab === "posts" ? controls.categoryId : "" }, animateCriteria && !controls.restoring);
   function changeTab(tab: EditorTab) { setOpenActions(null); setAnimateCriteria(true); controls.onTabChange(tab); }
+  function submitSearch(query: string) {
+    setOpenActions(null);
+    setAnimateCriteria(true);
+    submitSearchFromTop(() => {
+      if (controls.activeTab === "links") controls.links.search(query);
+      else controls.onSearch(query);
+    });
+  }
   const loading = props.activeTab === "posts" ? props.postsLoading : props.filesLoading;
   const error = props.activeTab === "posts" ? props.postsError : props.filesError;
   const hasItems = props.activeTab === "posts" ? props.posts.length > 0 : props.files.length > 0;
@@ -150,7 +159,7 @@ export default function EditorListView(controls: EditorListViewProps) {
             ]}
             onChange={category => { setOpenActions(null); setAnimateCriteria(true); controls.onCategoryChange(category); }}
           />}
-          <SearchInput variant="editor" placeholder={`Search ${controls.activeTab}...`} onSearch={query => { setOpenActions(null); setAnimateCriteria(true); if (controls.activeTab === "links") controls.links.search(query); else controls.onSearch(query); }} value={controls.activeTab === "links" ? controls.links.query : controls.searchQuery} />
+          <SearchInput variant="editor" placeholder={`Search ${controls.activeTab}...`} onSearch={submitSearch} value={controls.activeTab === "links" ? controls.links.query : controls.searchQuery} />
           {controls.activeTab === "links" ? controls.links.toolbar : <button type="button" onClick={controls.activeTab === "posts" ? controls.onNewPost : controls.onUploadFile} className="editor-primary-action">
             {controls.activeTab === "posts" ? <><PlusIcon size={16} /> New Post</> : <><UploadIcon size={16} /> Upload</>}
           </button>}
