@@ -1,12 +1,6 @@
 .link {
-  position: relative;
   display: block;
   text-decoration: none;
-}
-
-.link:hover,
-.link:focus-visible {
-  z-index: 2;
 }
 
 .link:focus-visible {
@@ -16,104 +10,104 @@
 }
 
 .link .card {
+  display: grid;
+  grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+  align-items: center;
+  gap: 1.5rem;
   height: 5.125rem;
   padding: 1rem 1.5rem;
 }
 
-.tooltip {
-  position: absolute;
-  z-index: 3;
-  top: calc(100% + 0.45rem);
-  left: 3.7rem;
+.primary {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  min-width: 0;
+}
+
+.primary:only-child { grid-column: 1 / -1; }
+
+.details {
+  flex: 1;
+  min-width: 0;
+}
+
+.meta { margin-top: 0.3rem; }
+
+.summary {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  width: min(38rem, calc(100% - 4.45rem));
-  max-height: min(24rem, 55dvh, var(--tooltip-available-space, 24rem));
-  padding: 0.9rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 32%, var(--border-color));
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  box-shadow: 0 14px 36px rgb(0 0 0 / 28%), 0 0 0 1px color-mix(in srgb, var(--accent-blue) 7%, transparent);
-  color: var(--text-secondary);
+  justify-content: center;
+  gap: 0.15rem;
+  min-width: 0;
+  height: 3rem;
+  margin: 0;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border-color);
+  overflow: hidden;
   opacity: 0;
   visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-0.35rem) scale(0.985);
-  transform-origin: top left;
-  transition: opacity 180ms ease, transform 220ms cubic-bezier(.22, 1, .36, 1), visibility 180ms;
+  transition: opacity 180ms ease-out, visibility 180ms;
 }
 
-.tooltip::before {
-  position: absolute;
-  top: -0.35rem;
-  left: 1.2rem;
-  width: 0.65rem;
-  height: 0.65rem;
-  border-top: 1px solid color-mix(in srgb, var(--accent-blue) 32%, var(--border-color));
-  border-left: 1px solid color-mix(in srgb, var(--accent-blue) 32%, var(--border-color));
-  background: var(--bg-surface);
-  content: "";
-  transform: rotate(45deg);
-}
-
-.tooltip::after {
-  position: absolute;
-  top: -0.45rem;
-  right: 0;
-  left: 0;
-  height: 0.45rem;
-  content: "";
-}
-
-.link[data-tooltip-placement="above"] .tooltip {
-  top: auto;
-  bottom: calc(100% + 0.45rem);
-  transform-origin: bottom left;
-  transform: translateY(0.35rem) scale(0.985);
-}
-
-.link[data-tooltip-placement="above"] .tooltip::before {
-  top: auto;
-  bottom: -0.35rem;
-  transform: rotate(225deg);
-}
-
-.link[data-tooltip-placement="above"] .tooltip::after {
-  top: auto;
-  bottom: -0.45rem;
-}
-
-.link:hover .tooltip,
-.link:focus-visible .tooltip {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-
-.tooltipLabel {
-  color: var(--accent-blue);
-  font-size: 0.7rem;
+.summaryLabel {
+  color: color-mix(in srgb, var(--text-muted) 80%, var(--text-primary));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.625rem;
   font-weight: 600;
+  line-height: 1;
   letter-spacing: 0.08em;
 }
 
-.tooltipText {
+.summaryText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   overflow-wrap: anywhere;
-  overflow-y: auto;
-  min-height: 0;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
+  color: color-mix(in srgb, var(--text-primary) 70%, var(--text-secondary));
+  font-size: 0.8rem;
+  line-height: 1.3;
 }
 
-@media (max-width: 600px) {
-  .link .card { padding-inline: 1rem; }
-  .tooltip { left: 0.75rem; width: calc(100% - 1.5rem); }
+.link:hover .summary,
+.link:focus-visible .summary {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (max-width: 700px) {
+  .link .card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.1rem;
+    padding: 0.35rem 1rem;
+  }
+
+  .primary { gap: 0.9rem; }
+  .meta { margin-top: 0.12rem; }
+
+  .summary {
+    display: block;
+    margin-left: calc(20px + 0.9rem);
+    height: auto;
+    padding: 0;
+    border-left: 0;
+  }
+
+  .summaryLabel { display: none; }
+
+  .summaryText {
+    display: block;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    line-height: 1.25;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tooltip,
-  .link[data-tooltip-placement="above"] .tooltip { transition: none; transform: none; }
+  .summary { transition: none; }
 }

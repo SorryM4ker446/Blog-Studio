@@ -27,20 +27,6 @@ export interface PostsPageInitialState {
   error: string;
 }
 
-function positionPostTooltip(link: HTMLAnchorElement) {
-  const tooltip = link.querySelector<HTMLElement>('[role="tooltip"]');
-  if (!tooltip) return;
-  const card = link.getBoundingClientRect();
-  const scrollArea = link.closest(".content-scroll")?.getBoundingClientRect();
-  const visibleTop = Math.max(0, scrollArea?.top ?? 0);
-  const visibleBottom = Math.min(window.innerHeight, scrollArea?.bottom ?? window.innerHeight);
-  const below = visibleBottom - card.bottom - 8;
-  const above = card.top - visibleTop - 8;
-  const placement = below < 160 && above > below ? "above" : "below";
-  link.dataset.tooltipPlacement = placement;
-  link.style.setProperty("--tooltip-available-space", `${Math.max(0, placement === "above" ? above : below)}px`);
-}
-
 export default function PostsPageClient({ initialState }: { initialState: PostsPageInitialState }) {
   const [animateChanges, setAnimateChanges] = useState(false);
   const searchParams = useSearchParams();
@@ -137,78 +123,66 @@ export default function PostsPageClient({ initialState }: { initialState: PostsP
         >
           {posts.map((post: PostSummary) => (
             <Link key={post.id} href={`/posts/${post.id}`} className={styles.link}
-              aria-label={post.title} aria-describedby={post.summary?.trim() ? `post-summary-${post.id}` : undefined}
-              onPointerEnter={(event) => positionPostTooltip(event.currentTarget)}
-              onFocus={(event) => positionPostTooltip(event.currentTarget)}>
-              <div
-                className={`ai-card ${styles.card}`}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                }}
-              >
-                <div
-                  className="card-icon post-list-icon"
-                  style={{
-                    marginRight: "1.2rem",
-                    flexShrink: 0,
-                  }}
-                >
-                  <FileTextIcon size={14} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h4
-                    style={{
-                      margin: 0,
-                      fontWeight: 500,
-                      fontSize: "1.05rem",
-                      color: "var(--text-primary)",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {post.title}
-                  </h4>
-                  <div
-                    style={{
-                      fontSize: "0.82rem",
-                      color: "var(--text-muted)",
-                      marginTop: "0.3rem",
-                      display: "flex",
-                      gap: "0.8rem",
-                      flexWrap: "nowrap",
-                      alignItems: "center"
-                    }}
-                    >
-                      <span style={{ flexShrink: 0 }}>
-                      {getPostTimeline(post).label} on{" "}
-                      {formatDate(getPostTimeline(post).timestamp)}
-                    </span>
-                    <span
+              aria-label={post.title} aria-describedby={post.summary?.trim() ? `post-summary-${post.id}` : undefined}>
+              <div className={`ai-card ${styles.card}`}>
+                <div className={styles.primary}>
+                  <div className="card-icon post-list-icon">
+                    <FileTextIcon size={14} />
+                  </div>
+                  <div className={styles.details}>
+                    <h4
                       style={{
-                        background: post.category_id == null ? "rgba(128,128,128,0.15)" : "rgba(109, 214, 140, 0.12)",
-                        color: post.category_id == null ? "var(--text-muted)" : "var(--accent-green)",
-                        padding: "2px 8px",
-                        borderRadius: "4px",
-                        fontSize: "0.75rem",
-                        minWidth: 0,
+                        margin: 0,
+                        fontWeight: 500,
+                        fontSize: "1.05rem",
+                        color: "var(--text-primary)",
+                        whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
                       }}
                     >
-                      {post.category_id == null ? "无标签" : (post.category ? post.category.name : "Uncategorized")}
-                    </span>
+                      {post.title}
+                    </h4>
+                    <div
+                      className={styles.meta}
+                      style={{
+                        fontSize: "0.82rem",
+                        color: "var(--text-muted)",
+                        display: "flex",
+                        gap: "0.8rem",
+                        flexWrap: "nowrap",
+                        alignItems: "center"
+                      }}
+                    >
+                      <span style={{ flexShrink: 0 }}>
+                        {getPostTimeline(post).label} on{" "}
+                        {formatDate(getPostTimeline(post).timestamp)}
+                      </span>
+                      <span
+                        style={{
+                          background: post.category_id == null ? "rgba(128,128,128,0.15)" : "rgba(109, 214, 140, 0.12)",
+                          color: post.category_id == null ? "color-mix(in srgb, var(--text-muted) 80%, var(--text-primary))" : "var(--accent-green)",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          fontSize: "0.75rem",
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {post.category_id == null ? "无标签" : (post.category ? post.category.name : "Uncategorized")}
+                      </span>
+                    </div>
                   </div>
                 </div>
+                {post.summary?.trim() && (
+                  <p id={`post-summary-${post.id}`} className={styles.summary}>
+                    <span className={styles.summaryLabel} aria-hidden="true">INTRODUCTION</span>
+                    <span className={styles.summaryText}>{post.summary}</span>
+                  </p>
+                )}
               </div>
-              {post.summary?.trim() && (
-                <span id={`post-summary-${post.id}`} role="tooltip" className={styles.tooltip} onClick={(event) => event.preventDefault()}>
-                  <span className={styles.tooltipLabel}>Introduction</span>
-                  <span className={styles.tooltipText}>{post.summary}</span>
-                </span>
-              )}
             </Link>
           ))}
         </div>

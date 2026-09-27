@@ -23,6 +23,8 @@ The public `GET /api/categories` response contains only categories with at least
 
 Search retains existing results while loading and blocks repeated pagination clicks. All Posts, Cloud Drive and advanced search replace outgoing results before showing incoming results; filter changes transition the list and pagination together. Outgoing results are inactive during transitions; filters remain available. New selections cancel obsolete transitions, failures offer retry, and reduced motion skips animation.
 
+All Posts cards keep the same height with or without an introduction. Nonempty introductions appear inside the card on hover or keyboard focus, to the right of the title on wide screens and below it on narrow screens. The visual preview is limited to two lines on wide screens and one line on narrow screens; the complete introduction remains in the card's accessible description.
+
 Advanced search places arrows beside each section at widths of at least 1100px and below it on narrower screens. All Posts and Cloud Drive always use bottom pagination. Content Editor reserves full-page space for multi-page lists, including a short last page after reload or resize.
 
 Unavailable categories remain in the URL and request until changed. The selector shows `Unavailable category` without revealing a private name; choosing `All categories` clears the filter and resets the page.
