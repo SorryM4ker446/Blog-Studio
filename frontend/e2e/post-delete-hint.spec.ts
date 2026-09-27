@@ -28,6 +28,14 @@ for (const theme of ["dark", "light"]) test(`post actions open from the More con
     const otherIndicatorOpacity = () => otherRow.evaluate(node => getComputedStyle(node, "::after").opacity);
     const normalOtherTitleColor = await otherTitle.evaluate(node => getComputedStyle(node).color);
     const normalMoreBackground = await more.evaluate(node => getComputedStyle(node).backgroundColor);
+    const expandedMoreBackground = await more.evaluate(node => {
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--bg-hover)";
+      document.body.append(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    });
     expect(await rowIndicatorOpacity()).toBe("0");
     expect(await rowWashOpacity()).toBe("0");
     await more.hover();
@@ -54,7 +62,7 @@ for (const theme of ["dark", "light"]) test(`post actions open from the More con
     await expect(more).toHaveAttribute("aria-expanded", "true");
     await expect.poll(() => row.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(normalRowBackground);
     await expect.poll(rowIndicatorOpacity).toBe("1");
-    await expect.poll(() => more.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(normalMoreBackground);
+    await expect(more).toHaveCSS("background-color", expandedMoreBackground);
     await otherRow.getByRole("button", { name: `Open ${otherPostTitle}` }).hover();
     await expect.poll(() => otherRow.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(normalOtherBackground);
     await expect.poll(otherIndicatorOpacity).toBe("1");

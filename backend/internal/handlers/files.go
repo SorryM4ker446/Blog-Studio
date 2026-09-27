@@ -87,17 +87,31 @@ func UploadFile(c *gin.Context) {
 	maxUploadBytes := config.Current().MaxUploadBytes
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadBytes+multipartOverheadAllowance)
 	file, header, err := c.Request.FormFile("file")
+	multipartForm := c.Request.MultipartForm
+	defer func() {
+		if file != nil {
+			if closeErr := file.Close(); closeErr != nil {
+				observability.FromGin(c).WarnContext(c.Request.Context(), "close uploaded source failed", "error", closeErr)
+			}
+		}
+		if multipartForm != nil {
+			if removeErr := multipartForm.RemoveAll(); removeErr != nil {
+				observability.FromGin(c).WarnContext(c.Request.Context(), "multipart temporary cleanup failed", "error", removeErr)
+			}
+		}
+	}()
 	if err != nil {
 		if isRequestTooLarge(err) {
 			apiresponse.Error(c, http.StatusRequestEntityTooLarge, "file_too_large", "File exceeds the configured upload limit")
 			return
 		}
+		var pathError *os.PathError
+		if errors.As(err, &pathError) {
+			apiresponse.Error(c, http.StatusInternalServerError, "storage_error", "Temporary upload storage is unavailable")
+			return
+		}
 		apiresponse.Error(c, http.StatusBadRequest, "missing_file", "No valid file was provided")
 		return
-	}
-	defer file.Close()
-	if c.Request.MultipartForm != nil {
-		defer c.Request.MultipartForm.RemoveAll()
 	}
 
 	if header.Size == 0 {

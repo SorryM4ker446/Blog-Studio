@@ -64,6 +64,13 @@ func TestCreateAndVerifyBundle(t *testing.T) {
 			t.Fatalf("write upload %q: %v", name, err)
 		}
 	}
+	multipartDir := filepath.Join(uploadDir, ".health", "multipart")
+	if err := os.MkdirAll(multipartDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(multipartDir, "multipart-interrupted"), []byte("incomplete"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	dsn := "host=database.invalid user=test password=not-a-real-secret dbname=backup_test"
 	runner := &fakePostgresRunner{t: t, databaseDSN: dsn, databaseName: "backup_test"}
 	createdAt := time.Date(2026, time.August, 26, 1, 2, 3, 0, time.UTC)

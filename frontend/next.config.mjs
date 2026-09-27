@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  ...(process.env.BLOG_STUDIO_E2E_BUILD === "1" ? { distDir: ".next-e2e" } : {}),
   images: {
     remotePatterns: [
       {

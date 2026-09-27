@@ -57,13 +57,14 @@ export default defineConfig({
       },
     },
     {
-      command: "npm run build && node -e \"const fs=require('node:fs');fs.cpSync('public','.next/standalone/public',{recursive:true});fs.cpSync('.next/static','.next/standalone/.next/static',{recursive:true})\" && node .next/standalone/server.js",
+      command: "npm run build && node -e \"const fs=require('node:fs');fs.cpSync('public','.next-e2e/standalone/public',{recursive:true});fs.cpSync('.next-e2e/static','.next-e2e/standalone/.next-e2e/static',{recursive:true})\" && node .next-e2e/standalone/server.js",
       cwd: __dirname,
       url: E2E_APP_URL,
       reuseExistingServer: false,
       timeout: 180_000,
       env: {
         ...process.env,
+        BLOG_STUDIO_E2E_BUILD: "1",
         NEXT_PUBLIC_API_BASE_URL: E2E_API_URL,
         API_INTERNAL_BASE_URL: E2E_API_URL,
         HOSTNAME: "127.0.0.1",
