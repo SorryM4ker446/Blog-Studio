@@ -7,7 +7,7 @@ import { readPage } from "@/lib/resource-query";
 import EditorPageLayout from "@/components/editor/EditorPageLayout";
 import PaginatedResults from "@/components/PaginatedResults";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
-import { InboxIcon, EditIcon, TrashIcon } from "@/components/Icons";
+import { InboxIcon, EditIcon, PlusIcon, TrashIcon } from "@/components/Icons";
 import LinkGrid from "./LinkGrid";
 import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 import LinkEditorDialog from "./LinkEditorDialog";
@@ -108,7 +108,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   return {
     query, loading, error, count: resolved ? filtered.length : null,
     search: (value: string) => navigate(value.trim(), 1),
-    toolbar: <button type="button" className="editor-primary-action" disabled={resolved && links.length >= 100} onClick={() => { setEditing({link:null}); }}>+ New Link</button>,
+    toolbar: <button type="button" className="editor-primary-action" disabled={resolved && links.length >= 100} onClick={() => { setEditing({link:null}); }}><PlusIcon size={16} /> New Link</button>,
     content: <>
     {error && <ErrorState title="Links could not be updated" message={error} onRetry={refresh} retrying={loading} />}
     {loading && !resolved && <p className={styles.hint} role="status">Loading links…</p>}

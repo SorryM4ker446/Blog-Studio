@@ -34,7 +34,7 @@ it.each([{ links: initial }, { links: [] }])("reuses the resolved list, includin
   view.rerender(<Harness links={links} />);
   expect(getAdminLinks).not.toHaveBeenCalled();
   expect(screen.getByTestId("loading")).toHaveTextContent("false");
-  expect(screen.getByRole("button", { name: "+ New Link" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "New Link" })).toBeEnabled();
   expect(screen.queryAllByRole("article")).toHaveLength(links.length);
 });
 
@@ -47,8 +47,8 @@ it("allows a draft during ordering, blocks submission and preserves it until the
   fireEvent.click(move);
   fireEvent.click(move);
   expect(moveLink).toHaveBeenCalledOnce();
-  expect(screen.getByRole("button", { name: "+ New Link" })).toBeEnabled();
-  fireEvent.click(screen.getByRole("button", { name: "+ New Link" }));
+  expect(screen.getByRole("button", { name: "New Link" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "New Link" }));
   const dialog = screen.getByRole("dialog", { name: "New link" });
   fireEvent.change(within(dialog).getByLabelText("TITLE"), { target: { value: "Link 3" } });
   fireEvent.click(within(dialog).getByLabelText("Show on homepage"));
@@ -80,7 +80,7 @@ it("invalidates the list after a failed save so re-entering can recover current 
   vi.mocked(createLink).mockRejectedValue(new Error("Save could not be confirmed"));
   vi.mocked(getAdminLinks).mockResolvedValue([...initial, link(3)]);
   const view = render(<Harness />);
-  fireEvent.click(screen.getByRole("button", { name: "+ New Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "New Link" }));
   fireEvent.change(screen.getByLabelText("TITLE"), { target: { value: "Unconfirmed draft" } });
   fireEvent.click(screen.getByLabelText("Show on homepage"));
   fireEvent.click(screen.getByRole("button", { name: "Save link" }));
@@ -97,7 +97,7 @@ it("ignores an aborted read after tab cancellation and resolves the next entry",
   const old = deferred<HomepageLink[]>(), next = deferred<HomepageLink[]>();
   vi.mocked(getAdminLinks).mockReturnValueOnce(old.promise).mockReturnValueOnce(next.promise);
   const view = render(<Harness links={[]} error="Initial read failed" />);
-  expect(screen.getByRole("button", { name: "+ New Link" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "New Link" })).toBeEnabled();
   const signal = vi.mocked(getAdminLinks).mock.calls[0][0]!;
   view.rerender(<Harness active={false} links={[]} error="Initial read failed" />);
   expect(signal.aborted).toBe(true);
@@ -115,7 +115,7 @@ it("retries a failed initial read and blocks saving an incomplete list without d
   vi.mocked(getAdminLinks).mockRejectedValueOnce(new Error("Read unavailable")).mockResolvedValueOnce([]);
   render(<Harness links={[]} error="Initial read failed" />);
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Read unavailable"));
-  fireEvent.click(screen.getByRole("button", { name: "+ New Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "New Link" }));
   expect(screen.getByRole("button", { name: "Save link" })).toBeDisabled();
   expect(screen.getByText("Close this dialog and retry loading links before saving.")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -133,7 +133,7 @@ it("refreshes after a failed reorder and leaves draft input usable while refresh
   fireEvent.click(screen.getByRole("button", { name: "Move Link 1 later" }));
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Order changed elsewhere"));
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-  fireEvent.click(screen.getByRole("button", { name: "+ New Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "New Link" }));
   fireEvent.change(screen.getByLabelText("TITLE"), { target: { value: "Retained draft" } });
   expect(screen.getByRole("button", { name: "Save link" })).toBeDisabled();
   await act(async () => read.resolve(initial));
@@ -146,7 +146,7 @@ it("rechecks the link limit when an in-flight reorder completes with a fuller li
   vi.mocked(moveLink).mockReturnValue(pending.promise);
   render(<Harness />);
   fireEvent.click(screen.getByRole("button", { name: "Move Link 1 later" }));
-  fireEvent.click(screen.getByRole("button", { name: "+ New Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "New Link" }));
   await act(async () => pending.resolve(Array.from({ length: 100 }, (_, i) => link(i + 1))));
   expect(screen.getByRole("button", { name: "Save link" })).toBeDisabled();
   expect(screen.getByText(/You can have up to 100 links/)).toBeVisible();

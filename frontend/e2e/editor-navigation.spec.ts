@@ -54,7 +54,7 @@ test("editor URLs restore saved articles and new drafts through refresh and hist
     expect(new URL(page.url()).searchParams.get("edit")).toBe(String(published.id));
     await page.getByRole("button", { name: "Back to content list" }).click();
 
-    await page.getByRole("button", { name: "+ New Post" }).click();
+    await page.getByRole("button", { name: "New Post" }).click();
     expect(new URL(page.url()).searchParams.get("edit")).toBe("new");
     await page.reload();
     await expect(page.getByRole("heading", { name: "New Post", exact: true })).toBeVisible();

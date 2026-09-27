@@ -9,7 +9,7 @@ import type { Category, FileRecord, PostSummary } from "@/lib/api";
 import SearchInput from "@/components/SearchInput";
 import PaginatedResults from "@/components/PaginatedResults";
 import FileCard, { EditActionButton } from "@/components/files/FileCard";
-import { InboxIcon, UploadIcon } from "@/components/Icons";
+import { InboxIcon, PlusIcon, UploadIcon } from "@/components/Icons";
 import { EmptyState, ErrorState } from "@/components/ui/AsyncState";
 import EditorSelect from "@/components/editor/EditorSelect";
 import EditorPageLayout from "./EditorPageLayout";
@@ -152,9 +152,9 @@ export default function EditorListView(controls: EditorListViewProps) {
             ]}
             onChange={category => { setAnimateCriteria(true); controls.onCategoryChange(category); }}
           />}
-          <SearchInput variant="editor" placeholder={`Search ${controls.activeTab}...`} onSearch={query => { setAnimateCriteria(true); if (controls.activeTab === "links") controls.links.search(query); else controls.onSearch(query); }} style={{ width: "220px" }} value={controls.activeTab === "links" ? controls.links.query : controls.searchQuery} />
+          <SearchInput variant="editor" placeholder={`Search ${controls.activeTab}...`} onSearch={query => { setAnimateCriteria(true); if (controls.activeTab === "links") controls.links.search(query); else controls.onSearch(query); }} value={controls.activeTab === "links" ? controls.links.query : controls.searchQuery} />
           {controls.activeTab === "links" ? controls.links.toolbar : <button type="button" onClick={controls.activeTab === "posts" ? controls.onNewPost : controls.onUploadFile} className="editor-primary-action">
-            {controls.activeTab === "posts" ? "+ New Post" : <><UploadIcon size={16} /> Upload File</>}
+            {controls.activeTab === "posts" ? <><PlusIcon size={16} /> New Post</> : <><UploadIcon size={16} /> Upload</>}
           </button>}
         </div>
       </div>

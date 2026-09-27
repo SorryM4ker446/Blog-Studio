@@ -204,7 +204,7 @@ test("administrator can draft, publish, and log out", async ({ page, request }) 
   )).toBeTruthy();
   page.off("request", trackBrowserShellRequests);
 
-  await page.getByRole("button", { name: "+ New Post" }).click();
+  await page.getByRole("button", { name: "New Post" }).click();
   await page.getByLabel("POST TITLE").fill(postTitle);
   await page.getByLabel("INTRODUCTION").fill("Automated workflow summary");
   await page.locator(".custom-editor-wrapper textarea").fill("# Automated workflow\n\nCreated by Playwright.");
@@ -334,8 +334,8 @@ test("administrator can publish an uploaded image and safely remove it after ref
   const unique = Date.now();
   const postTitle = `E2E image lifecycle ${unique}`;
   const imageName = `e2e-image-${unique}.png`;
-  const displayName = `Launch image ${unique} with a long display name that must not overlap file actions.png`;
-  const updatedDisplayName = `Updated launch image ${unique} with a long display name that remains safely truncated.png`;
+  const displayName = `Image ${unique}`;
+  const updatedDisplayName = `Revised ${unique}`;
   const fileDescription = `Public image metadata ${unique}`;
   const imageAlt = `Uploaded image ${unique}`;
 
@@ -363,7 +363,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
     "rgb(95, 99, 104) rgb(24, 25, 26)",
   );
   await page.getByRole("tab", { name: /Files \(/ }).click();
-  await page.getByRole("button", { name: "Upload File" }).click();
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
   const uploadDialog = page.getByRole("dialog", { name: "Upload a file" });
   await expect(page.locator("body")).not.toHaveClass(/theme-light/);
   await expect(uploadDialog).toHaveCSS("background-color", "rgb(29, 30, 31)");
@@ -371,7 +371,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
     "background-color",
     "rgb(20, 21, 22)",
   );
-  await expect(uploadDialog.getByRole("button", { name: "Upload file" })).toHaveCSS(
+  await expect(uploadDialog.getByRole("button", { name: "Upload", exact: true })).toHaveCSS(
     "color",
     "rgb(16, 17, 20)",
   );
@@ -394,7 +394,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   });
   await uploadDialog.getByRole("textbox", { name: /Display name/ }).fill(displayName);
   await uploadDialog.getByRole("textbox", { name: /Description/ }).fill(fileDescription);
-  await uploadDialog.getByRole("button", { name: "Upload file" }).click();
+  await uploadDialog.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(uploadDialog).toHaveCount(0);
   await expect(page.getByText(displayName, { exact: true })).toBeVisible();
   await expect(page.getByText(fileDescription, { exact: true })).toBeVisible();
@@ -593,7 +593,7 @@ test("administrator can publish an uploaded image and safely remove it after ref
   await expect(postsTab).toHaveAttribute("data-stability-marker", "preserved");
   page.off("request", trackRepeatedListRequests);
   await expect(page.getByPlaceholder("Search posts...")).toHaveValue("");
-  await page.getByRole("button", { name: "+ New Post" }).click();
+  await page.getByRole("button", { name: "New Post" }).click();
   await page.getByLabel("POST TITLE").fill(postTitle);
   await page.getByLabel("INTRODUCTION").fill("Image lifecycle verification");
   await page.locator(".custom-editor-wrapper textarea").fill(`![${imageAlt}](${imageViewURL})`);

@@ -14,7 +14,7 @@ for (const theme of ["dark", "light"]) {
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     await page.goto("/editor?tab=links");
     await expect(page).toHaveTitle("Blog Studio");
-    await page.getByRole("button", { name: "+ New Link", exact: true }).click();
+    await page.getByRole("button", { name: "New Link", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "New link" });
     const checkbox = dialog.getByRole("checkbox", { name: "Show on homepage" });
     const label = dialog.locator("label").filter({ has: page.getByRole("checkbox", { name: "Show on homepage" }) });
@@ -178,7 +178,7 @@ for (const theme of ["dark", "light"]) {
       expect(heights).toHaveLength(3);
       expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
       await page.goto("/editor?tab=links");
-      await page.getByRole("button", { name: "+ New Link", exact: true }).click();
+      await page.getByRole("button", { name: "New Link", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "New link" });
       await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))));
       const preview = dialog.locator("aside");
@@ -212,7 +212,7 @@ for (const theme of ["dark", "light"]) {
       await page.goto("/editor?tab=links");
       await expect(page).toHaveTitle("Blog Studio");
       await expect(page.getByRole("tab", { name: /^Links/ })).toHaveAttribute("aria-selected", "true");
-      await page.getByRole("button", { name: "+ New Link", exact: true }).click();
+      await page.getByRole("button", { name: "New Link", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "New link" });
       await dialog.getByRole("button", { name: "Save link", exact: true }).click();
       await expect(dialog.getByText("Enter a link title.")).toBeVisible();
@@ -303,7 +303,7 @@ for (const theme of ["dark", "light"]) {
         expect(response.ok()).toBeTruthy(); ids.push((await response.json()).id);
       }
       await expect(page.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "+ New Link", exact: true })).toHaveClass("editor-primary-action");
+      await expect(page.getByRole("button", { name: "New Link", exact: true })).toHaveClass("editor-primary-action");
       await page.getByRole("tab", { name: /^Files/ }).click();
       await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "editor-files-tab");
       await page.getByRole("tab", { name: /^Links/ }).click();
@@ -496,7 +496,7 @@ for (const reducedMotion of [false, true]) {
       await page.getByRole("tab", { name: /^Links/ }).click();
       await expect(panel).toHaveAttribute("aria-labelledby", "editor-links-tab");
       await expect(panel).toHaveAttribute("aria-busy", "false");
-      await expect(page.getByRole("button", { name: "+ New Link", exact: true })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "New Link", exact: true })).toBeEnabled();
       await expect(page.getByText("Loading links…", { exact: true })).toHaveCount(0);
       await page.getByRole("tab", { name: /^Posts/ }).click();
       await expect(panel).toHaveAttribute("aria-labelledby", "editor-posts-tab");
@@ -555,7 +555,7 @@ for (const theme of ["dark", "light"]) {
       await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-busy", "false");
       await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished.catch(() => {}))));
       expect(reads).toBe(0);
-      const newLink = page.getByRole("button", { name: "+ New Link", exact: true });
+      const newLink = page.getByRole("button", { name: "New Link", exact: true });
       const appearance = (node: HTMLElement | SVGElement) => {
         const css = getComputedStyle(node);
         return { opacity: css.opacity, background: css.backgroundColor, color: css.color, border: css.borderColor };

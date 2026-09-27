@@ -12,7 +12,7 @@ for (const entry of ["direct", "list"]) test(`creating a draft from ${entry} pre
   expect(login.ok()).toBeTruthy();
   const headers = { "X-CSRF-Token": (await login.json()).csrf_token };
   await page.goto(entry === "direct" ? "/editor?edit=new" : "/editor");
-  if (entry === "list") await page.getByRole("button", { name: "+ New Post" }).click();
+  if (entry === "list") await page.getByRole("button", { name: "New Post" }).click();
   await page.getByRole("textbox", { name: "Post title" }).fill("First save continuity");
   const textarea = page.locator(".custom-editor-wrapper textarea");
   await textarea.fill("Keep this editor mounted throughout the first save.");

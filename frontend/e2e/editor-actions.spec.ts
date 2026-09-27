@@ -22,12 +22,21 @@ for (const theme of ["dark", "light"]) {
     try {
       await page.goto("/editor?tab=links");
       await expect(page).toHaveTitle("Blog Studio");
+      let toolbarSize: { primaryWidth: number; primaryHeight: number; searchWidth: number; searchHeight: number } | null = null;
       for (const resource of ["posts", "files", "links"]) {
         await page.getByRole("tab", { name: new RegExp(`^${resource}`, "i") }).click();
         await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", `editor-${resource}-tab`);
         const primary = page.locator(".editor-list-actions .editor-primary-action");
         const search = page.locator(".editor-search-control");
-        expect(Math.abs((await primary.boundingBox())!.height - (await search.boundingBox())!.height)).toBeLessThanOrEqual(1);
+        const primaryBox = (await primary.boundingBox())!;
+        const searchBox = (await search.boundingBox())!;
+        const size = { primaryWidth: primaryBox.width, primaryHeight: primaryBox.height, searchWidth: searchBox.width, searchHeight: searchBox.height };
+        if (toolbarSize) expect(size).toEqual(toolbarSize);
+        else toolbarSize = size;
+        expect(Math.abs(size.primaryHeight - size.searchHeight)).toBeLessThanOrEqual(1);
+        await expect(primary).toHaveText(resource === "files" ? "Upload" : resource === "posts" ? "New Post" : "New Link");
+        await expect(primary.locator("svg")).toHaveAttribute("width", "16");
+        await expect(search.locator("svg")).toHaveAttribute("width", "16");
         await expect(primary).toHaveCSS("border-radius", "7px");
         await expect(search.getByRole("button", { name: "Submit search" })).toBeVisible();
       }

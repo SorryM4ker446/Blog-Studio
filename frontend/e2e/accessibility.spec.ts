@@ -62,7 +62,7 @@ for (const theme of ["dark", "light"]) {
       await scanAccessibility(page, info, "leave-dialog");
       await page.getByRole("button", { name: "Leave editor", exact: true }).press("Enter");
       await page.getByRole("tab", { name: /Files/ }).press("Enter");
-      await page.getByRole("button", { name: "Upload File", exact: true }).press("Enter");
+      await page.getByRole("button", { name: "Upload", exact: true }).press("Enter");
       await expect(page.getByRole("dialog")).toBeVisible();
       await scanAccessibility(page, info, "upload-dialog");
     } finally {

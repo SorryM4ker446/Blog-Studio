@@ -423,13 +423,15 @@ a {
   align-items: center;
   gap: 10px;
 }
+.editor-list-actions .editor-search-control { width: 220px; height: 42px; }
 
 .editor-primary-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-width: 104px;
+  width: 124px;
+  min-width: 124px;
   min-height: 42px;
   height: 42px;
   padding: 0 18px;

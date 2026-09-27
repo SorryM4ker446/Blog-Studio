@@ -26,7 +26,7 @@ SVG and HTML documents, script or executable extensions, empty files, unsupporte
 
 ## File metadata and previews
 
-Administrators provide a required display name and an optional description during a managed upload. Display names are limited to 255 characters and descriptions to 500 characters. Existing records are migrated with their original filename as the display name.
+Administrators provide a required display name and an optional description during a managed upload. Managed display names are limited to 25 characters and descriptions to 100 characters. The original filename remains available for downloads and type validation. Internal editor-image uploads retain the 255-character filename limit because they do not use the managed metadata form. Existing records were migrated with their original filename as the display name. Records with longer metadata remain readable, but their values must be shortened to the new limits before saving file details.
 
 Display metadata can be changed without renaming the stored object or changing the original download filename:
 
@@ -34,7 +34,7 @@ Display metadata can be changed without renaming the stored object or changing t
 PUT /api/admin/files/:id
 ```
 
-Public Drive, advanced search, and home-page search match only the effective file name. A custom display name supersedes the original filename; uploads without a custom name use the original filename as their display name. Public search never matches descriptions. Administrator search uses the same effective-name rule and additionally matches descriptions. Selecting a file in Drive, advanced search, or the administrator list opens the same details dialog. Validated images render through the hardened view endpoint; formats that are always served as attachments show metadata and a download action instead of attempting an unsafe inline preview.
+Public Drive, advanced search, and home-page search match only the effective file name. A custom display name supersedes the original filename; uploads without a custom name use the original filename as their display name when it fits the 25-character managed limit. Public search never matches descriptions. Administrator search uses the same effective-name rule and additionally matches descriptions. Selecting a file in Drive, advanced search, or the administrator list opens the same details dialog. Validated images render through the hardened view endpoint; formats that are always served as attachments show metadata and a download action instead of attempting an unsafe inline preview.
 
 ## Serving rules
 

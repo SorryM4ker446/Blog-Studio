@@ -13,6 +13,18 @@ import { getFileLabel } from "./FileCard";
 import styles from "./FileDialogs.module.css";
 
 const acceptedFileTypes = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.csv,.json,.zip,.doc,.xls,.ppt,.docx,.xlsx,.pptx";
+const displayNameLimit = 25;
+const descriptionLimit = 100;
+
+function characterCount(value: string) {
+  return Array.from(value).length;
+}
+
+function limitMetadataInput(value: string, previous: string, maximum: number) {
+  const characters = Array.from(value);
+  if (characters.length <= maximum || (characterCount(previous) > maximum && characters.length < characterCount(previous))) return value;
+  return characters.slice(0, maximum).join("");
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -137,6 +149,8 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
   const [dragging, setDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const nameTooLong = characterCount(displayName) > displayNameLimit;
+  const descriptionTooLong = characterCount(description) > descriptionLimit;
 
   function chooseFile(file: File | null) {
     if (!file) return;
@@ -146,7 +160,7 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
   }
 
   async function submit(close: () => void) {
-    if (!selectedFile || !displayName.trim() || saving) return;
+    if (!selectedFile || !displayName.trim() || nameTooLong || descriptionTooLong || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -178,9 +192,9 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
             type="button"
             className={`${styles.button} ${styles.primary}`}
             onClick={() => void submit(close)}
-            disabled={!selectedFile || !displayName.trim() || saving || closing}
+            disabled={!selectedFile || !displayName.trim() || nameTooLong || descriptionTooLong || saving || closing}
           >
-            {saving ? "Uploading…" : "Upload file"}
+            {saving ? "Uploading…" : "Upload"}
           </button>
         </>
       }
@@ -232,31 +246,32 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
         <label className={styles.field}>
           <span className={styles.labelRow}>
             <span className={styles.label}>Display name</span>
-            <span className={styles.counter}>{displayName.length}/255</span>
+            <span className={`${styles.counter} ${nameTooLong ? styles.overLimit : ""}`}>{characterCount(displayName)}/{displayNameLimit}</span>
           </span>
           <input
             className={styles.input}
             data-autofocus
             value={displayName}
-            onChange={(event) => setDisplayName(event.target.value.slice(0, 255))}
+            onChange={(event) => setDisplayName(previous => limitMetadataInput(event.target.value, previous, displayNameLimit))}
             placeholder="File name shown in Drive"
-            maxLength={255}
+            aria-invalid={nameTooLong || undefined}
             disabled={saving}
           />
           <span className={styles.helper}>The original filename remains unchanged for downloads and type validation.</span>
+          {nameTooLong && <span className={styles.overLimit}>Shorten the display name to 25 characters before uploading.</span>}
         </label>
 
         <label className={styles.field}>
           <span className={styles.labelRow}>
             <span className={styles.label}>Description</span>
-            <span className={styles.counter}>{description.length}/500</span>
+            <span className={`${styles.counter} ${descriptionTooLong ? styles.overLimit : ""}`}>{characterCount(description)}/{descriptionLimit}</span>
           </span>
           <textarea
             className={styles.textarea}
             value={description}
-            onChange={(event) => setDescription(event.target.value.slice(0, 500))}
+            onChange={(event) => setDescription(previous => limitMetadataInput(event.target.value, previous, descriptionLimit))}
             placeholder="What is this file for?"
-            maxLength={500}
+            aria-invalid={descriptionTooLong || undefined}
             disabled={saving}
           />
         </label>
@@ -277,9 +292,11 @@ export function FileEditDialog({ file, onClose, onSave }: FileEditDialogProps) {
   const [description, setDescription] = useState(() => file.description || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const nameTooLong = characterCount(displayName) > displayNameLimit;
+  const descriptionTooLong = characterCount(description) > descriptionLimit;
 
   async function submit(close: () => void) {
-    if (!displayName.trim() || saving) return;
+    if (!displayName.trim() || nameTooLong || descriptionTooLong || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -311,7 +328,7 @@ export function FileEditDialog({ file, onClose, onSave }: FileEditDialogProps) {
             type="button"
             className={`${styles.button} ${styles.primary}`}
             onClick={() => void submit(close)}
-            disabled={!displayName.trim() || saving || closing}
+            disabled={!displayName.trim() || nameTooLong || descriptionTooLong || saving || closing}
           >
             {saving ? "Saving…" : "Save changes"}
           </button>
@@ -322,31 +339,33 @@ export function FileEditDialog({ file, onClose, onSave }: FileEditDialogProps) {
         <label className={styles.field}>
           <span className={styles.labelRow}>
             <span className={styles.label}>Display name</span>
-            <span className={styles.counter}>{displayName.length}/255</span>
+            <span className={`${styles.counter} ${nameTooLong ? styles.overLimit : ""}`}>{characterCount(displayName)}/{displayNameLimit}</span>
           </span>
           <input
             className={styles.input}
             data-autofocus
             value={displayName}
-            onChange={(event) => setDisplayName(event.target.value.slice(0, 255))}
-            maxLength={255}
+            onChange={(event) => setDisplayName(previous => limitMetadataInput(event.target.value, previous, displayNameLimit))}
+            aria-invalid={nameTooLong || undefined}
             disabled={saving}
           />
           <span className={styles.helper}>Changing this label does not rename the stored file or alter its download type.</span>
+          {nameTooLong && <span className={styles.overLimit}>Shorten the display name to 25 characters before saving.</span>}
         </label>
         <label className={styles.field}>
           <span className={styles.labelRow}>
             <span className={styles.label}>Description</span>
-            <span className={styles.counter}>{description.length}/500</span>
+            <span className={`${styles.counter} ${descriptionTooLong ? styles.overLimit : ""}`}>{characterCount(description)}/{descriptionLimit}</span>
           </span>
           <textarea
             className={styles.textarea}
             value={description}
-            onChange={(event) => setDescription(event.target.value.slice(0, 500))}
-            maxLength={500}
+            onChange={(event) => setDescription(previous => limitMetadataInput(event.target.value, previous, descriptionLimit))}
+            aria-invalid={descriptionTooLong || undefined}
             placeholder="Add context for readers"
             disabled={saving}
           />
+          {descriptionTooLong && <span className={styles.overLimit}>Shorten the description to 100 characters before saving.</span>}
         </label>
         <p className={styles.error} role="alert" aria-live="polite">{error}</p>
       </div>

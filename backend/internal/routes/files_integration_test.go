@@ -144,6 +144,10 @@ func TestFileUploadStorageAndServingSecurity(t *testing.T) {
 	if textRecord.DisplayName != "Release notes" || textRecord.Description != "Public launch documentation" || textRecord.OrigName != "notes.txt" {
 		t.Fatalf("uploaded metadata = %#v", textRecord)
 	}
+	tooLongUploadName := performFileUploadWithMetadata(t, router, "notes.txt", []byte("safe notes"), strings.Repeat("名", 26), "", auth, false)
+	requireAPIError(t, tooLongUploadName.Code, tooLongUploadName.Body.Bytes(), http.StatusBadRequest, "invalid_display_name")
+	tooLongUploadDescription := performFileUploadWithMetadata(t, router, "notes.txt", []byte("safe notes"), "Valid name", strings.Repeat("介", 101), auth, false)
+	requireAPIError(t, tooLongUploadDescription.Code, tooLongUploadDescription.Body.Bytes(), http.StatusBadRequest, "invalid_description")
 	publicDisplayNameSearch := performJSONRequest(t, router, http.MethodGet, "/api/search?q=release%20notes&scope=files", nil, nil, false)
 	if publicDisplayNameSearch.Code != http.StatusOK || !strings.Contains(publicDisplayNameSearch.Body.String(), `"display_name":"Release notes"`) {
 		t.Fatalf("public display-name search status=%d body=%s", publicDisplayNameSearch.Code, publicDisplayNameSearch.Body.String())
@@ -178,11 +182,23 @@ func TestFileUploadStorageAndServingSecurity(t *testing.T) {
 		"description":  "invalid",
 	}, auth, true)
 	requireAPIError(t, invalidUpdate.Code, invalidUpdate.Body.Bytes(), http.StatusBadRequest, "invalid_display_name")
+	longName := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/files/%d", textRecord.ID), map[string]any{
+		"display_name": strings.Repeat("名", 26),
+		"description":  "Valid description",
+	}, auth, true)
+	requireAPIError(t, longName.Code, longName.Body.Bytes(), http.StatusBadRequest, "invalid_display_name")
 	longDescription := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/files/%d", textRecord.ID), map[string]any{
 		"display_name": "Valid name",
-		"description":  strings.Repeat("x", 501),
+		"description":  strings.Repeat("介", 101),
 	}, auth, true)
 	requireAPIError(t, longDescription.Code, longDescription.Body.Bytes(), http.StatusBadRequest, "invalid_description")
+	atLimits := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/files/%d", textRecord.ID), map[string]any{
+		"display_name": strings.Repeat("名", 25),
+		"description":  strings.Repeat("介", 100),
+	}, auth, true)
+	if atLimits.Code != http.StatusOK {
+		t.Fatalf("file metadata limits rejected valid characters: status=%d body=%s", atLimits.Code, atLimits.Body.String())
+	}
 	updated := performJSONRequest(t, router, http.MethodPut, fmt.Sprintf("/api/admin/files/%d", textRecord.ID), map[string]any{
 		"display_name": "Updated release notes",
 		"description":  "A concise public description",
