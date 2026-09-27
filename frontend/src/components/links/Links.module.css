@@ -49,12 +49,12 @@
 .orderNumber:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 .orderNumber:disabled { cursor: default; }
 .orderNumber[data-dimmed="true"] { opacity: .45; }
-.orderInput { visibility: hidden; opacity: 0; transform: translateY(3px) scale(.94); pointer-events: none; border-width: 2px; border-color: var(--border-color); background: var(--bg-base); color: var(--text-primary); transition: border-color 140ms ease, opacity 160ms ease, transform 160ms ease, visibility 0s linear 160ms; }
+.orderInput { visibility: hidden; opacity: 0; transform: translateY(3px) scale(.94); pointer-events: none; border-width: 2px; border-color: var(--border-color); background: var(--bg-base); color: var(--text-primary); transition: border-color 200ms ease-out, box-shadow 200ms ease-out, opacity 160ms ease, transform 160ms ease, visibility 0s linear 160ms; }
 .orderInput:focus-visible { outline: none !important; }
-.orderInput:focus { border-color: var(--text-muted) !important; box-shadow: none !important; }
+.orderInput:focus { border-color: var(--text-muted) !important; box-shadow: 0 0 0 2px transparent; }
 .orderNumberSlot[data-order-editing="true"] .orderNumber { visibility: hidden; opacity: 0; transform: translateY(-3px) scale(.94); pointer-events: none; transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease, visibility 0s linear 160ms; }
-.orderNumberSlot[data-order-editing="true"] .orderInput { visibility: visible; opacity: 1; transform: none; pointer-events: auto; transition: border-color 140ms ease, opacity 160ms ease, transform 160ms ease, visibility 0s; }
-.orderInput[aria-invalid="true"] { border-color: var(--accent-red) !important; }
+.orderNumberSlot[data-order-editing="true"] .orderInput { visibility: visible; opacity: 1; transform: none; pointer-events: auto; transition: border-color 200ms ease-out, box-shadow 200ms ease-out, opacity 160ms ease, transform 160ms ease, visibility 0s; }
+.orderInput[aria-invalid="true"] { border-color: var(--accent-red) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-red) 14%, transparent); }
 .moveButton { display: inline-flex; flex: 0 0 26px; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); font: inherit; font-size: 0.72rem; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
 .moveButton:hover:not(:disabled) { border-color: var(--border-color); background: var(--bg-hover); color: var(--text-primary); }
 .moveButton:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }

@@ -20,28 +20,30 @@ import styles from "./Links.module.css";
 function OrderNumber({ link, position, total, disabled, dimmed, onMove }: { link: HomepageLink; position: number; total: number; disabled: boolean; dimmed: boolean; onMove: (position: number) => void }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(position));
-  const [invalid, setInvalid] = useState(false);
+  const [emptySubmitted, setEmptySubmitted] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const settled = useRef(false);
   const restoreFocus = useRef(false);
+  const target = Number(value);
+  const validTarget = /^[0-9]+$/.test(value) && Number.isInteger(target) && target >= 1 && target <= total;
+  const invalid = editing && (value === "" ? emptySubmitted : !validTarget);
   useEffect(() => {
     if (editing) { input.current?.focus(); input.current?.select(); }
     else if (restoreFocus.current) { button.current?.focus(); restoreFocus.current = false; }
   }, [editing]);
-  function start() { settled.current = false; setValue(String(position)); setInvalid(false); setEditing(true); }
+  function start() { settled.current = false; setValue(String(position)); setEmptySubmitted(false); setEditing(true); }
   function commit() {
     if (settled.current) return;
-    const target = Number(value);
-    if (!Number.isInteger(target) || target < 1 || target > total) { setInvalid(true); return; }
+    if (!validTarget) { if (value === "") setEmptySubmitted(true); return; }
     settled.current = true;
-    setEditing(false); setInvalid(false);
+    setEditing(false); setEmptySubmitted(false);
     if (target !== position) onMove(target);
   }
-  function cancel(restore = false) { settled.current = true; restoreFocus.current = restore; setEditing(false); setInvalid(false); }
+  function cancel(restore = false) { settled.current = true; restoreFocus.current = restore; setEditing(false); setEmptySubmitted(false); }
   return <span className={styles.orderNumberSlot} data-order-editing={editing || undefined}>
     <button ref={button} type="button" className={styles.orderNumber} disabled={disabled || editing} data-dimmed={dimmed || undefined} aria-label={`Change position of ${link.title}, currently ${position}`} title="Change position" onClick={start}>{String(position).padStart(2, "0")}</button>
-    <input ref={input} className={styles.orderInput} type="text" inputMode="numeric" pattern="[0-9]*" disabled={!editing} value={value} aria-label={`New position for ${link.title}, from 1 to ${total}`} aria-invalid={invalid} onChange={event => { setValue(event.target.value); setInvalid(false); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commit(); } else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(true); } }} onBlur={() => { if (settled.current) return; if (/^[0-9]+$/.test(value) && Number(value) >= 1 && Number(value) <= total) commit(); else cancel(); }} />
+    <input ref={input} className={styles.orderInput} type="text" inputMode="numeric" pattern="[0-9]*" disabled={!editing} value={value} aria-label={`New position for ${link.title}, from 1 to ${total}`} aria-invalid={invalid} onChange={event => { setValue(event.target.value); setEmptySubmitted(false); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commit(); } else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(true); } }} onBlur={() => { if (settled.current) return; if (validTarget) commit(); else cancel(); }} />
   </span>;
 }
 
