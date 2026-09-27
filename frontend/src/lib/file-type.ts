@@ -31,3 +31,8 @@ export function getFileTypeLabel(filename: string, mimeType: string): string {
   if (mime.startsWith("text/")) return "Text document";
   return "Other file";
 }
+
+export function getSelectedFileTypeLabel(filename: string, mimeType: string): string {
+  const extension = filename.split(".").pop()?.toLowerCase() || "";
+  return typesByExtension[extension]?.label || getFileTypeLabel(filename, mimeType);
+}

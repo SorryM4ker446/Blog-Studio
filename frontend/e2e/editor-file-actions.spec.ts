@@ -1,6 +1,33 @@
 import { expect, test } from "@playwright/test";
+import os from "node:os";
+import path from "node:path";
 import { loginAdmin } from "./support/accessibility";
 import { E2E_API_URL } from "./support/test-env";
+
+test("selected file types use supported extensions before upload", async ({ page }) => {
+  await loginAdmin(page);
+  await page.goto("/editor?tab=files");
+  await expect(page.getByRole("heading", { name: "Content Editor" })).toBeVisible();
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Upload a file" });
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: "assets.zip",
+    mimeType: "application/x-zip-compressed",
+    buffer: Buffer.from("archive"),
+  });
+  await expect(dialog.getByText("7 B · ZIP archive")).toBeVisible();
+  await expect(dialog.getByText(/Other file/)).toHaveCount(0);
+  await expect(dialog).toHaveCSS("opacity", "1");
+  await page.screenshot({ path: path.join(os.tmpdir(), "blog-editor-zip-selection.png") });
+  await dialog.getByRole("button", { name: "Replace" }).click();
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: "data.csv",
+    mimeType: "application/vnd.ms-excel",
+    buffer: Buffer.from("a,b"),
+  });
+  await expect(dialog.getByText("3 B · CSV data")).toBeVisible();
+  await page.screenshot({ path: path.join(os.tmpdir(), "blog-editor-csv-selection.png") });
+});
 
 test("file rows show readable types and compact animated actions", async ({ page }) => {
   const headers = await loginAdmin(page);
@@ -13,6 +40,8 @@ test("file rows show readable types and compact animated actions", async ({ page
   try {
     await page.goto("/editor?tab=files");
     const row = page.locator(`[data-file-id="${file.id}"]`);
+    await expect(row.getByText("No description provided.", { exact: true })).toBeVisible();
+    await expect(row.getByText("actions-note.txt", { exact: true })).toHaveCount(0);
     await expect(row.getByText("Text document", { exact: true })).toBeVisible();
     await expect(row.getByText("text/plain", { exact: true })).toHaveCount(0);
     const more = row.getByRole("button", { name: "More actions for Actions note" });

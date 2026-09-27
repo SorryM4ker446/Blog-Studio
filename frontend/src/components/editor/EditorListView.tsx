@@ -93,7 +93,7 @@ function FileRow({ file, onPreview, onEdit, onDelete, actionsOpen, onToggleActio
   actionsOpen: boolean; onToggleActions: () => void; onCloseActions: () => void;
 }) {
   const label = getFileLabel(file);
-  const description = file.description || (label === file.orig_name ? "No description provided." : file.orig_name);
+  const description = file.description.trim() || "No description provided.";
   return <article className={`${styles.row} ${highlightStyles.row} ${actionsOpen ? highlightStyles.active : ""}`} data-file-id={file.id}>
     <button type="button" className={styles.main} onClick={onPreview} aria-label={`Preview ${label}`}>
       <span className={styles.title}>{label}</span>

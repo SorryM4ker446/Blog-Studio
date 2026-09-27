@@ -79,3 +79,16 @@ it("rejects a file above 1 GiB before upload and accepts one at the limit", asyn
   expect(within(dialog).getByRole("alert")).toBeEmptyDOMElement();
   expect(within(dialog).getByRole("button", { name: "Upload" })).toBeEnabled();
 });
+
+it("labels selected files by their extensions when browser MIME types differ", () => {
+  render(<FileUploadDialog open onClose={vi.fn()} onUpload={vi.fn()} />);
+  const input = document.querySelector('input[type="file"]')!;
+  const chosen = new File(["archive"], "assets.zip", { type: "application/x-zip-compressed" });
+  fireEvent.change(input, { target: { files: [chosen] } });
+
+  const dialog = screen.getByRole("dialog", { name: "Upload a file" });
+  expect(within(dialog).getByText("7 B · ZIP archive")).toBeVisible();
+  fireEvent.change(input, { target: { files: [new File(["a,b"], "data.csv", { type: "application/vnd.ms-excel" })] } });
+  expect(within(dialog).getByText("3 B · CSV data")).toBeVisible();
+  expect(within(dialog).queryByText(/Other file/)).not.toBeInTheDocument();
+});

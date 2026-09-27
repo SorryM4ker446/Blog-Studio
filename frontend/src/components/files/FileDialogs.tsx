@@ -10,7 +10,7 @@ import type { FileMutationResult, FileRecord } from "@/lib/api";
 import { getDownloadUrl, getFileViewUrl } from "@/lib/api";
 import { DownloadIcon, EditIcon, FileTextIcon, UploadIcon } from "@/components/Icons";
 import { formatFileSize, getFileLabel } from "./FileCard";
-import { getFileTypeLabel } from "@/lib/file-type";
+import { getFileTypeLabel, getSelectedFileTypeLabel } from "@/lib/file-type";
 import { MAX_UPLOAD_BYTES } from "@/lib/file-upload";
 import styles from "./FileDialogs.module.css";
 
@@ -209,7 +209,7 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
             <span className={styles.selectedIcon}><FileTextIcon size={18} /></span>
             <span className={styles.selectedMeta}>
               <span className={styles.selectedName}>{selectedFile.name}</span>
-              <span className={styles.selectedSize}>{formatFileSize(selectedFile.size)} · {getFileTypeLabel(selectedFile.name, selectedFile.type)}</span>
+              <span className={styles.selectedSize}>{formatFileSize(selectedFile.size)} · {getSelectedFileTypeLabel(selectedFile.name, selectedFile.type)}</span>
             </span>
             <button type="button" className={styles.replaceButton} onClick={() => inputRef.current?.click()} disabled={saving}>
               Replace

@@ -144,6 +144,8 @@ describe("EditorListView", () => {
     expect(screen.getByRole("tab", { name: "Files (3)" })).toBeVisible();
     expect(screen.queryByText(/Files \(…\)/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview Architecture diagram" })).toBeVisible();
+    expect(screen.getByText("No description provided.")).toBeVisible();
+    expect(screen.queryByText("diagram.png")).not.toBeInTheDocument();
     expect(screen.getByText("PNG image")).toBeVisible();
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("navigation", { name: "Pagination" })).toBeVisible();
