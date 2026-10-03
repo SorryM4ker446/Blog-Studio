@@ -34,16 +34,18 @@ import { navigationRevision } from "@/lib/navigation-entry";
 import { requestEditorNavigation } from "@/lib/editor-navigation";
 import { useEditorRecovery } from "@/lib/use-editor-recovery";
 import RecoveryNotice from "@/components/editor/RecoveryNotice";
+import EditorRecoveryLayout from "@/components/editor/EditorRecoveryLayout";
 import { useResourcePage } from "@/lib/use-resource-page";
 import type { HomepageLink } from "@/lib/links";
-import useLinksManager from "@/components/links/LinksManager";
+import useLinksManager from "@/components/links/use-links-manager";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
 import PostEditorForm from "@/components/editor/PostEditorForm";
 import type MarkdownEditor from "@/components/editor/MarkdownEditor";
 import PostDetailLoader from "@/components/editor/PostDetailLoader";
 import EditorViewTransition from "@/components/editor/EditorViewTransition";
-import { animateCreatedListRow, animateDeletedListRow, captureDeletedListRow, captureListRows, type DeletedListSnapshot, type ListRowsSnapshot } from "@/components/editor/list-row-motion";
+import { captureDeletedListRow, captureListRows } from "@/components/editor/list-row-motion";
+import { useEditorListMotion } from "@/components/editor/use-editor-list-motion";
 import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
@@ -135,36 +137,10 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const files = fileResource.restoring ? [] : fileData;
   const postsLoading = postResource.loading;
   const filesLoading = fileResource.loading;
-  const pendingListDeletion = useRef<{ type: "post" | "file"; snapshot: DeletedListSnapshot; data: PostSummary[] | FileRecord[] } | null>(null);
-  const listDeletionMotion = useRef<(() => void) | null>(null);
-  const pendingCreatedPostId = useRef<number | null>(null);
-  const postListBeforeCreate = useRef<ListRowsSnapshot | null>(null);
-  const pendingCreatedFile = useRef<{ id: number; snapshot: ListRowsSnapshot | null; data: FileRecord[] } | null>(null);
-  const listCreationMotion = useRef<(() => void) | null>(null);
-  useLayoutEffect(() => {
-    if (urlTab !== "posts" || editTarget !== null || pendingCreatedPostId.current === null) return;
-    const id = pendingCreatedPostId.current;
-    pendingCreatedPostId.current = null;
-    listCreationMotion.current?.();
-    listCreationMotion.current = animateCreatedListRow(
-      document.querySelector<HTMLElement>('[data-editor-list][data-resource="posts"]'), id, postPage, postListBeforeCreate.current, "fade");
-    postListBeforeCreate.current = null;
-  }, [urlTab, editTarget, postData, postPage]);
-  useLayoutEffect(() => {
-    const pending = pendingListDeletion.current;
-    if (!pending) return;
-    const data = pending.type === "post" ? postData : fileData;
-    const error = pending.type === "post" ? postsError : filesError;
-    if (data === pending.data && !error) return;
-    pendingListDeletion.current = null;
-    listDeletionMotion.current?.();
-    if (!error && !data.some((item) => String(item.id) === pending.snapshot.deletedId)) {
-      listDeletionMotion.current = animateDeletedListRow(pending.snapshot, pending.type === "post" ? postPage : filePage);
-    }
-  }, [postData, fileData, postPage, filePage, postsError, filesError]);
-  useEffect(() => () => { listDeletionMotion.current?.(); listCreationMotion.current?.(); }, []);
-  useEffect(() => { listDeletionMotion.current?.(); listDeletionMotion.current = null; pendingListDeletion.current = null; }, [urlTab, editTarget]);
-  useEffect(() => { if (urlTab !== "posts") pendingCreatedPostId.current = null; }, [urlTab]);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const { pendingListDeletion, pendingCreatedPostId, postListBeforeCreate, pendingCreatedFile } = useEditorListMotion({
+    urlTab, editTarget, postData, fileData, postPage, filePage, postsError, filesError, uploadDialogOpen,
+  });
   const [hasShownList, setHasShownList] = useState(editTarget === null);
   if (editTarget === null && !hasShownList) setHasShownList(true);
   const [detailError, setDetailError] = useState("");
@@ -216,6 +192,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     onRestore: copy => {
       setEditTitle(copy.fields.title); setEditSummary(copy.fields.summary);
       setEditContent(copy.fields.content); setEditCategoryId(copy.fields.category_id);
+      setSaveMessage("Draft restored");
       if (editingPost && copy.version !== editingPost.version) {
         setLatestPost(editingPost); setConflict(true);
         setEditingPost({ ...editingPost, ...copy.baseline, version: copy.version! });
@@ -223,19 +200,8 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     },
   });
 
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const [metadataFile, setMetadataFile] = useState<FileRecord | null>(null);
-  useLayoutEffect(() => {
-    if (uploadDialogOpen || !pendingCreatedFile.current) return;
-    const pending = pendingCreatedFile.current;
-    if (pending.data === fileData && !filesError) return;
-    pendingCreatedFile.current = null;
-    listCreationMotion.current?.();
-    if (!filesError) listCreationMotion.current = animateCreatedListRow(
-      document.querySelector<HTMLElement>('[data-editor-list][data-resource="files"]'), pending.id, filePage, pending.snapshot);
-  }, [uploadDialogOpen, fileData, filePage, filesError]);
-
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     type: DeleteType;
@@ -421,7 +387,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
   async function handleSave(action: PostAction = "save") {
     if (postToLoad || saveOperationRef.current || conflict || recovery.checking || recovery.copies.length) return;
-    if (action === "save" && editingPost && !dirty && !saveMessage.startsWith("❌")) return;
+    if (action === "save" && editingPost && !dirty) return;
     const errors = validatePostFields(currentSnapshot);
     if (action !== "unpublish" && Object.values(errors).some(Boolean)) {
       setValidationAttempted(true);
@@ -498,6 +464,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       if (!category) return "Failed to create category.";
       setCategories((current) => [...current, category]);
       setEditCategoryId(category.id);
+      setSaveMessage("");
       notifyUpdate();
       return null;
     } catch (error) {
@@ -561,6 +528,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       } else {
         const deleted = await deleteCategory(id);
         if (!deleted) throw new Error("Failed to delete category.");
+        if (editCategoryId === id || editingPost?.category_id === id) setSaveMessage("");
         if (editCategoryId === id) setEditCategoryId(0);
         setCategories((current) => current.filter((category) => category.id !== id));
         setEditingPost((current) => current?.category_id === id ? { ...current, category_id: null } : current);
@@ -675,9 +643,11 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
             : <p role="status">Loading article…</p>}
         </section>
       ) : (
-        <div className="editor-detail-frame">
-        <RecoveryNotice copies={recovery.copies} error={recovery.error}
+        <EditorRecoveryLayout checking={recovery.checking} owner={user?.id}>
+        <div data-editor-notice="recovery">
+        <RecoveryNotice copies={recovery.copies} checking={recovery.checking} error={recovery.error} conflict={conflict}
           onRestore={recovery.restore} onDiscard={recovery.discard} onContinue={recovery.continueWithoutRestoring} />
+        </div>
         <PostEditorForm
           MarkdownComponent={preparedEditor?.component}
           validationAttempted={validationAttempted}
@@ -690,7 +660,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           action={saveAction}
           conflict={conflict}
           recoveryPending={recovery.checking || recovery.copies.length > 0 || (editTarget === "new" && !draftId)}
-          recoveryChecking={recovery.checking}
+          recoveryChecking={recovery.checking || (editTarget === "new" && !draftId)}
           latestPost={latestPost}
           loadingLatest={loadingLatest}
           latestError={latestError}
@@ -714,10 +684,10 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           categoriesError={categoriesError}
           saving={saving}
           saveMessage={saveMessage}
-          onTitleChange={setEditTitle}
-          onSummaryChange={setEditSummary}
-          onContentChange={setEditContent}
-          onCategoryChange={setEditCategoryId}
+          onTitleChange={(value) => { setEditTitle(value); setSaveMessage(""); }}
+          onSummaryChange={(value) => { setEditSummary(value); setSaveMessage(""); }}
+          onContentChange={(value) => { setEditContent(value); setSaveMessage(""); }}
+          onCategoryChange={(value) => { setEditCategoryId(value); setSaveMessage(""); }}
           onBack={closeEditor}
           onSave={handleSave}
           onCreateCategory={handleCreateCategory}
@@ -726,7 +696,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           onRetryCategories={() => void loadCategories()}
           onImageUpload={handleImageUpload}
         />
-        </div>
+        </EditorRecoveryLayout>
       )}
       </EditorViewTransition>
       {urlTab === "links" && linkResource.dialogs}

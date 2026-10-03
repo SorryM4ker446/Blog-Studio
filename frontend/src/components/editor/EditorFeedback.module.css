@@ -6,6 +6,40 @@
   font-family: var(--font-family);
 }
 .panel { padding: 24px; margin: 0 0 28px; }
+.recoveryShell {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-bottom: 28px;
+  transition: grid-template-rows 220ms ease-in-out 120ms, margin-bottom 220ms ease-in-out 120ms;
+}
+.recoveryShell[data-leaving="true"] { grid-template-rows: 0fr; margin-bottom: 0; }
+.recoveryShell[data-loading="true"] { display: none; }
+.recoveryShell[data-loading="true"] [data-recovery-copy] { display: none; }
+@starting-style {
+  .recoveryShell:not([data-loading="true"]) .panel { opacity: 0; }
+}
+.recoveryShell[data-handoff="true"] { transition-delay: 0ms; transition-duration: 340ms; transition-timing-function: cubic-bezier(.2,.8,.2,1); }
+.recoveryClip { min-height: 0; overflow: hidden; }
+.recoveryClip .panel { margin: 0; transition: opacity 120ms ease-out; }
+.recoveryShell[data-leaving="true"] .panel { opacity: 0; }
+.conflictExitShell {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-bottom: 28px;
+  transition: grid-template-rows 220ms ease-in-out 120ms, margin-bottom 220ms ease-in-out 120ms;
+}
+.conflictExitShell:not([data-leaving="true"]) {
+  transition: grid-template-rows 340ms cubic-bezier(.2,.8,.2,1), margin-bottom 340ms cubic-bezier(.2,.8,.2,1);
+}
+@starting-style {
+  .conflictExitShell:not([data-leaving="true"]) { grid-template-rows: 0fr; margin-bottom: 0; }
+  .conflictExitShell:not([data-leaving="true"]) .panel { opacity: 0; transform: translateY(6px); }
+}
+.conflictExitShell[data-leaving="true"] { grid-template-rows: 0fr; margin-bottom: 0; }
+.conflictExitClip { min-height: 0; overflow: hidden; }
+.conflictExitClip .panel { margin: 0; transition: opacity 120ms ease-out; }
+.conflictExitShell:not([data-leaving="true"]) .panel { transition: opacity 220ms ease-out 80ms, transform 340ms cubic-bezier(.2,.8,.2,1); }
+.conflictExitShell[data-leaving="true"] .panel { opacity: 0; }
 .panelHeader { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .icon {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -41,14 +75,30 @@
 .hint { margin: 16px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.7; }
 .panelFooter { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; }
 .error { color: var(--accent-red); font-size: 13px; line-height: 1.7; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-surface); }
-.dialog { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; padding: 0; box-shadow: var(--file-dialog-shadow); }
-.dialog::backdrop { background: var(--file-dialog-overlay); }
+.recoveryStatusSlot { display: grid; grid-template-rows: 0fr; margin-bottom: 0; transition: grid-template-rows 150ms ease-in-out 140ms, margin-bottom 150ms ease-in-out 140ms; }
+.recoveryStatusSlot[data-visible="true"] { grid-template-rows: 1fr; margin-bottom: 16px; transition-delay: 0ms; }
+.recoveryStatusClip { min-height: 0; overflow: hidden; }
+.recoveryStatus { margin: 0; color: var(--accent-red); font-size: 12px; line-height: 1.5; animation: recoveryStatusIn 220ms ease-out both; }
+.recoveryStatusSlot[data-visible="false"] .recoveryStatus { animation: recoveryStatusOut 140ms ease-out both; }
+@keyframes recoveryStatusIn { from { opacity: 0; transform: translateX(-3px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes recoveryStatusOut { from { opacity: 1; } to { opacity: 0; } }
+.dialog { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; padding: 0; box-shadow: var(--file-dialog-shadow); animation: editorLeaveDialogIn 200ms cubic-bezier(.2,.8,.2,1) both; }
+.dialog::backdrop { background: var(--file-dialog-overlay); animation: editorLeaveBackdropIn 200ms ease-out both; }
+.dialog[data-closing="true"] { animation: editorLeaveDialogOut 150ms ease-in both; }
+.dialog[data-closing="true"]::backdrop { animation: editorLeaveBackdropOut 150ms ease-in both; }
+@keyframes editorLeaveDialogIn { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes editorLeaveDialogOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(4px) scale(.99); } }
+@keyframes editorLeaveBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes editorLeaveBackdropOut { from { opacity: 1; } to { opacity: 0; } }
 .dialogContent { padding: 28px; }
 .dialogContent > .icon { margin-bottom: 22px; }
 .dialogContent > .title { font-size: 23px; margin-bottom: 14px; }
 .dialogContent > .hint { border-top: 1px solid var(--border-color); padding-top: 16px; }
+.dialogWarning { margin: 17px 0 0; padding-top: 15px; border-top: 1px solid var(--border-color); color: var(--accent-red); font-size: 12px; line-height: 1.55; }
 .dialogActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; }
+.dialogActionsWithWarning { margin-top: 20px; }
 .dialogActions > .button { min-height: 40px; padding-inline: 16px; }
+.dialogActions > .button:disabled { cursor: default; }
 @media (max-width: 600px) {
   .panel { padding: 18px; }
   .panelHeader { flex-wrap: wrap; gap: 10px; }
@@ -57,7 +107,11 @@
   .dialogContent { padding: 24px; }
   .dialogActions { flex-wrap: wrap; }
 }
-@media (prefers-reduced-motion: reduce) { .button { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .recoveryShell[data-handoff="true"], .conflictExitShell:not([data-leaving="true"]), .conflictExitShell:not([data-leaving="true"]) .panel { transition: none; }
+  .button, .recoveryShell, .recoveryClip .panel, .conflictExitShell, .conflictExitClip .panel, .recoveryStatusSlot { transition: none; }
+  .recoveryStatus, .recoveryStatusSlot[data-visible="false"] .recoveryStatus, .dialog, .dialog::backdrop, .dialog[data-closing="true"], .dialog[data-closing="true"]::backdrop { animation: none; }
+}
 
 .recoveryActions { display: flex; flex-wrap: wrap; gap: 8px; }
 
@@ -75,7 +129,7 @@
 .conflictFooter .hint { margin: 0; max-width: 34rem; }
 .replaceAction { flex-shrink: 0; background: var(--bg-base); color: var(--accent-red); border-color: color-mix(in srgb, var(--accent-red) 35%, var(--border-color)); }
 .replaceAction:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-red) 8%, var(--bg-base)); border-color: var(--accent-red); }
-.conflictToolbar .button:disabled { opacity: .65; }
+.conflictToolbar .button:disabled { opacity: 1; }
 .conflictFooter .button:disabled { opacity: 1; }
 @media (max-width: 600px) {
   .conflictMetadata, .conflictFooter { flex-direction: column; gap: 10px; }

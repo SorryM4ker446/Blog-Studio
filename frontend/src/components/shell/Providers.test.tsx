@@ -1,7 +1,9 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InitialAppShellState } from "@/lib/app-shell-state";
-import { Providers, SidebarContent, SidebarFooter, useSidebar } from "./Providers";
+import { Providers } from "./Providers";
+import { SidebarContent, SidebarFooter } from "./Sidebar";
+import { useSidebar } from "@/context/SidebarContext";
 
 const { getCategoriesMock, replaceMock, navigationState } = vi.hoisted(() => ({
   getCategoriesMock: vi.fn(),
@@ -130,6 +132,67 @@ describe("sidebar first render state", () => {
     expect(screen.queryByRole("link", { name: /TypeScript/ })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Go/ })).toHaveTextContent("5");
   });
+
+  it("shares refreshes with a later-mounted mobile sidebar and retains both lists during an outage", async () => {
+    getCategoriesMock.mockResolvedValueOnce([{ id: 2, name: "Go", post_count: 7 }]);
+    const content = (mobile: boolean) => <Providers initialAppShellState={initialState} initialSidebarPostsExpanded>
+      <SidebarContent />{mobile && <SidebarContent expanded />}
+    </Providers>;
+    const view = render(content(false));
+    await act(async () => { window.dispatchEvent(new Event("blog:refresh-sidebar")); });
+    view.rerender(content(true));
+    expect(screen.getAllByRole("link", { name: /Go/ })).toHaveLength(2);
+    expect(getCategoriesMock).toHaveBeenCalledTimes(1);
+    getCategoriesMock.mockRejectedValueOnce(new Error("Offline"));
+    await act(async () => { window.dispatchEvent(new Event("blog:refresh-sidebar")); });
+    expect(getCategoriesMock).toHaveBeenCalledTimes(2);
+    for (const link of screen.getAllByRole("link", { name: /Go/ })) expect(link).toHaveTextContent("7");
+  });
+
+  it("makes one initial fallback read for both sidebars and ignores a superseded failure", async () => {
+    let rejectOld!: (error: Error) => void;
+    getCategoriesMock.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectOld = reject; }))
+      .mockResolvedValueOnce([{ id: 2, name: "Go", post_count: 6 }]);
+    render(<Providers initialAppShellState={{ ...initialState, categoriesResolved: false }} initialSidebarPostsExpanded>
+      <SidebarContent /><SidebarContent expanded />
+    </Providers>);
+    await waitFor(() => expect(getCategoriesMock).toHaveBeenCalledTimes(1));
+    await act(async () => { window.dispatchEvent(new Event("blog:refresh-sidebar")); });
+    await act(async () => rejectOld(new Error("Late outage")));
+    expect(getCategoriesMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryAllByRole("link", { name: /TypeScript/ })).toHaveLength(0);
+    for (const link of screen.getAllByRole("link", { name: /Go/ })) expect(link).toHaveTextContent("6");
+  });
+
+  it("keeps each sidebar's category expansion local while sharing the category data", () => {
+    render(<Providers initialAppShellState={initialState}>
+      <SidebarContent /><SidebarContent expanded />
+    </Providers>);
+    const toggles = screen.getAllByRole("button", { name: "Toggle categories" });
+    fireEvent.click(toggles[0]);
+    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
+    expect(toggles[1]).toHaveAttribute("aria-expanded", "false");
+    expect(document.cookie).toContain("sidebar_posts_expanded=true");
+    expect(getCategoriesMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores pending responses from an unmounted provider and removes its refresh listener", async () => {
+    let resolveOld!: (value: typeof initialState.categories) => void;
+    getCategoriesMock.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
+    const previous = render(<Providers initialAppShellState={initialState} initialSidebarPostsExpanded>
+      <SidebarContent />
+    </Providers>);
+    fireEvent(window, new Event("blog:refresh-sidebar"));
+    previous.unmount();
+    render(<Providers initialAppShellState={initialState} initialSidebarPostsExpanded><SidebarContent /></Providers>);
+    await act(async () => resolveOld([{ id: 2, name: "Go", post_count: 99 }]));
+    expect(screen.getByRole("link", { name: /Go/ })).toHaveTextContent("3");
+    getCategoriesMock.mockResolvedValueOnce([{ id: 2, name: "Go", post_count: 8 }]);
+    await act(async () => { window.dispatchEvent(new Event("blog:refresh-sidebar")); });
+    expect(getCategoriesMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("link", { name: /Go/ })).toHaveTextContent("8");
+  });
+
   beforeEach(() => {
     getCategoriesMock.mockReset();
     navigationState.pathname = "/";

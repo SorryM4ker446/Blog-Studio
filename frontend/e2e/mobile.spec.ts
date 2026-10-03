@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { E2E_APP_URL } from "./support/test-env";
-import { expectNoOverflow, loginAdmin, scanAccessibility } from "./support/accessibility";
+import { expectNoOverflow, scanAccessibility } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 
 test("mobile navigation traps focus, preserves desktop cookies and closes only after committed navigation", async ({ page, context }, info) => {
   await context.addCookies([{ name: "sidebar_collapsed", value: "true", url: E2E_APP_URL }]);

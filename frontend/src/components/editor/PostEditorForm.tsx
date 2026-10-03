@@ -5,7 +5,7 @@ import { formatDateTime } from "@/lib/display-date";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { ClipboardEvent, FormEvent } from "react";
+import { useState, type AnimationEvent, type ClipboardEvent, type FormEvent, type ReactNode, type TransitionEvent } from "react";
 import type { Category, PostDetail } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
 import { createMarkdownParser } from "@/lib/markdown";
@@ -74,9 +74,6 @@ const labelStyle = {
 export default function PostEditorForm(props: PostEditorFormProps) {
   const MdEditor = props.MarkdownComponent ?? LazyMdEditor;
   const errors = props.validationAttempted ? validatePostFields(props) : { title: "", summary: "", content: "" };
-  const failed = props.saveMessage.startsWith("❌");
-  const saveFeedbackTone = failed ? "error" : props.saveMessage.startsWith("✅") ? "success" : "info";
-  const saveFeedbackText = props.saveMessage.replace(/^[✅❌]\s*/u, "");
   const params = useSearchParams();
   const returnTo = `/editor?${params.toString()}`;
 
@@ -118,8 +115,11 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </div>
       </div>
 
-      <div className="editor-save-state" role="status">
-        <span>{props.saving ? "Saving changes…" : props.recoveryChecking ? "Checking browser recovery…" : props.recoveryPending ? "Choose a recovery option above" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}</span>
+      <div className="editor-save-state" role="status" aria-busy={props.recoveryChecking}
+        aria-label={props.recoveryChecking ? "Checking editor state" : undefined}>
+        <span data-loading={Boolean(props.recoveryChecking)}>
+          {props.saving ? "Saving changes…" : !props.recoveryChecking && props.recoveryPending ? "Editing paused · Browser recovery" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}
+        </span>
         {props.editingPost?.status === "published" && <Link className="editor-view-link" href={`/posts/${props.editingPost.id}?returnTo=${encodeURIComponent(returnTo)}`} aria-disabled={props.saving}
           onNavigate={(event) => { if (props.saving) event.preventDefault(); else props.onViewArticle(); }}>
           <span>View article</span>
@@ -129,6 +129,8 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </Link>}
       </div>
       {props.sessionExpired && <p role="alert">Your edits are still here. <a href="/login?redirect=%2Feditor" target="_blank" rel="noopener noreferrer">Sign in in a new tab</a>, then return here and try again.</p>}
+      <div data-editor-notice="conflict">
+      <CollapsingConflictPanel open={props.conflict}>
       {props.conflict && <section className={`${feedback.panel} ${feedback.conflictPanel}`} aria-label="Article version conflict" aria-busy={props.loadingLatest}>
         <div className={feedback.panelHeader}>
           <span className={feedback.icon} aria-hidden="true">
@@ -141,7 +143,8 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         <p className={feedback.description}>Your edits are still editable below. Review the saved version, then choose which content to continue with. Keeping your edits does not merge changes from the server.</p>
         <div className={feedback.conflictToolbar}>
           <span className={feedback.timestamp}>Saving and publishing are paused until this conflict is resolved.</span>
-          <button type="button" className={`${feedback.button} ${feedback.secondary}`} onClick={props.onLoadLatest} disabled={props.loadingLatest}>{props.loadingLatest ? "Loading…" : (props.latestPost ? "Refresh saved version" : "Review saved version")}</button>
+          <button type="button" className={`${feedback.button} ${feedback.secondary}`} onClick={props.onLoadLatest} disabled={props.loadingLatest}>{props.latestPost ? "Refresh saved version" : "Review saved version"}</button>
+          <span className="sr-only" role="status">{props.loadingLatest ? "Loading saved version…" : ""}</span>
         </div>
         {props.latestError && <p className={feedback.error} role="alert">{props.latestError}</p>}
         {props.latestPost && <div className={feedback.conflictPreview}>
@@ -159,6 +162,8 @@ export default function PostEditorForm(props: PostEditorFormProps) {
           </div>
         </div>}
       </section>}
+      </CollapsingConflictPanel>
+      </div>
       <fieldset className="editor-form-surface" disabled={props.saving || props.recoveryPending} inert={props.saving || props.recoveryPending}>
         <div style={{ marginBottom: "2rem" }}>
           <label htmlFor="post-title" style={labelStyle}>POST TITLE</label>
@@ -218,20 +223,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         <div>
           <div className="editor-content-heading">
             <label htmlFor="post-markdown_md" id="post-content-label" style={{ ...labelStyle, marginBottom: 0 }}>CONTENT (MARKDOWN) · REQUIRED</label>
-            {props.saveMessage && (
-              <div
-                id="post-save-message"
-                role={failed ? "alert" : "status"}
-                aria-live={failed ? "assertive" : "polite"}
-                className="editor-save-message"
-                data-tone={saveFeedbackTone}
-              >
-                <span className="editor-save-message-icon" aria-hidden="true">
-                  {saveFeedbackTone === "success" ? <CheckIcon size={13} /> : saveFeedbackTone === "error" ? "!" : "i"}
-                </span>
-                <span>{saveFeedbackText}</span>
-              </div>
-            )}
+            <SaveFeedback message={props.saveMessage} />
           </div>
             <div
               className="custom-editor-wrapper"
@@ -259,6 +251,78 @@ export default function PostEditorForm(props: PostEditorFormProps) {
       </fieldset>
     </form>
   );
+}
+
+function CollapsingConflictPanel({ open, children }: { open: boolean; children: ReactNode }) {
+  const [presentation, setPresentation] = useState({ source: open, visible: open, leaving: false, content: children });
+  if (open !== presentation.source) {
+    const reduceMotion = !open && typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    setPresentation({ source: open, visible: open || !reduceMotion, leaving: !open && !reduceMotion, content: open ? children : presentation.content });
+  } else if (open && children !== presentation.content) {
+    setPresentation({ ...presentation, content: children });
+  }
+
+  function finishExit(event: TransitionEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows" || open) return;
+    setPresentation(current => current.source ? current : { ...current, visible: false, leaving: false, content: null });
+  }
+
+  if (!presentation.visible) return null;
+  return <div className={feedback.conflictExitShell} data-conflict-shell data-leaving={presentation.leaving}
+    aria-hidden={presentation.leaving} inert={presentation.leaving} onTransitionEnd={finishExit}>
+    <div className={feedback.conflictExitClip}>{open ? children : presentation.content}</div>
+  </div>;
+}
+
+function SaveFeedback({ message }: { message: string }) {
+  const [feedback, setFeedback] = useState({ input: message, displayed: message, leaving: false });
+  if (message !== feedback.input) {
+    const reduceMotion = !message && typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    setFeedback({
+      input: message,
+      displayed: message || (reduceMotion ? "" : feedback.displayed),
+      leaving: !message && Boolean(feedback.displayed) && !reduceMotion,
+    });
+  }
+  const { displayed, leaving } = feedback;
+
+  function finishExit(event: TransitionEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows" || message) return;
+    setFeedback(current => current.input ? current : { ...current, displayed: "", leaving: false });
+  }
+
+  function finishExitWithoutCollapse(event: AnimationEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || event.animationName !== "editorSaveFeedbackOut" || message) return;
+    const slot = event.currentTarget.closest(".editor-save-feedback-slot");
+    if (slot?.getAnimations({ subtree: false }).length) return;
+    setFeedback(current => current.input ? current : { ...current, displayed: "", leaving: false });
+  }
+
+  const failed = displayed.startsWith("❌");
+  const tone = failed ? "error" : displayed.startsWith("✅") ? "success" : "info";
+  const text = displayed.replace(/^[✅❌]\s*/u, "");
+
+  return <div className="editor-save-feedback-slot" data-visible={Boolean(displayed) && !leaving} onTransitionEnd={finishExit}>
+    <div className="editor-save-feedback-inner">
+      {displayed && <div
+        key={displayed}
+        id="post-save-message"
+        role={failed ? "alert" : "status"}
+        aria-live={failed ? "assertive" : "polite"}
+        aria-hidden={leaving || undefined}
+        className="editor-save-message"
+        data-tone={tone}
+        onAnimationEnd={finishExitWithoutCollapse}
+      >
+        <span className="editor-save-message-icon" aria-hidden="true">
+          {tone === "success" ? <CheckIcon size={13} /> : tone === "error" ? "!" : "i"}
+        </span>
+        <span>{text}</span>
+      </div>}
+    </div>
+  </div>;
 }
 
 function FieldError({ id, message }: { id: string; message: string }) {

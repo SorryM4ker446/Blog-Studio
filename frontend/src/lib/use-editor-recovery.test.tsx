@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { recoveryStorage, RECOVERY_TTL, type RecoveryCopy } from "./editor-recovery-store";
 import { useEditorRecovery, type RecoveryInput } from "./use-editor-recovery";
-import { preserveExpiredEditor } from "./editor-navigation";
+import { answerNavigationPrompt, getNavigationPrompt, preserveExpiredEditor, requestEditorNavigation } from "./editor-navigation";
 
 const baseline = { title: "Saved", summary: "", content: "Saved body", category_id: 0 };
 const fields = { ...baseline, content: "Recovered body" };
@@ -13,7 +13,7 @@ afterEach(() => vi.unstubAllGlobals());
 async function seed() {
   const now = Date.now();
   const copy: RecoveryCopy = { id: "source", format: 1, userId: 1, tab: "another-tab", target: "post:7", version: 1, baseline, fields, updatedAt: now, expiresAt: now + RECOVERY_TTL };
-  await recoveryStorage.put(await recoveryStorage.start(1), copy); return copy;
+  await recoveryStorage.put(await recoveryStorage.start(1), copy); return { ...copy, createdAt: now };
 }
 it("offers recovery without restoring or writing before an explicit choice", async () => {
   const copy = await seed(); const onRestore = vi.fn();
@@ -25,9 +25,44 @@ it("offers recovery without restoring or writing before an explicit choice", asy
   rerender({ ...initial, onRestore, dirty: true, fields });
   await act(async () => result.current.flush());
   const copies = await recoveryStorage.list(1, "post:7");
-  expect(copies).toHaveLength(2); expect(new Set(copies.map(row => row.id)).size).toBe(2);
+  expect(copies).toEqual([copy]);
   await act(async () => result.current.clear());
   expect(await recoveryStorage.list(1, "post:7")).toEqual([copy]);
+});
+it("writes a new copy after adopting a newer server version, then reuses it on an unchanged restore", async () => {
+  const source = await seed();
+  const first = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: initial });
+  await waitFor(() => expect(first.result.current.copies).toHaveLength(1));
+  act(() => first.result.current.restore(source));
+  first.rerender({ ...initial, dirty: true, fields });
+  await act(() => first.result.current.flush());
+  expect(await recoveryStorage.list(1, "post:7")).toHaveLength(1);
+  first.rerender({ ...initial, dirty: true, fields, version: 2 });
+  await act(() => first.result.current.flush());
+  const rows = await recoveryStorage.list(1, "post:7");
+  expect(rows).toHaveLength(2);
+  const newer = rows.find(row => row.id !== source.id)!;
+  expect(newer.version).toBe(2);
+  first.unmount();
+
+  const second = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: { ...initial, version: 2 } });
+  await waitFor(() => expect(second.result.current.copies).toHaveLength(2));
+  act(() => second.result.current.restore(newer));
+  second.rerender({ ...initial, version: 2, dirty: true, fields });
+  await act(() => second.result.current.flush());
+  expect(await recoveryStorage.list(1, "post:7")).toHaveLength(2);
+});
+it("preserves new edits as a separate copy after restoring an older one", async () => {
+  const source = await seed();
+  const view = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: initial });
+  await waitFor(() => expect(view.result.current.copies).toHaveLength(1));
+  act(() => view.result.current.restore(source));
+  view.rerender({ ...initial, dirty: true, fields: { ...fields, content: "Edited after restore" } });
+  await act(() => view.result.current.flush());
+  const rows = await recoveryStorage.list(1, "post:7");
+  expect(rows).toHaveLength(2);
+  expect(rows.find(row => row.id === source.id)?.fields.content).toBe("Recovered body");
+  expect(rows.find(row => row.id !== source.id)?.fields.content).toBe("Edited after restore");
 });
 it("discards selected records without changing the server baseline or calling restore", async () => {
   await seed(); const onRestore = vi.fn();
@@ -206,4 +241,47 @@ it("reports discarded malformed copies but ignores discovery failures after unmo
   const pending = renderHook(() => useEditorRecovery(initial));
   pending.unmount();
   await act(async () => reject(new Error("Late failure")));
+});
+
+it("keeps departure blocked after a failed recovery write and clears the warning when retry succeeds", async () => {
+  const view = renderHook(() => useEditorRecovery({ ...initial, dirty: true, fields }));
+  await waitFor(() => expect(view.result.current.checking).toBe(false));
+  vi.spyOn(recoveryStorage, "put").mockRejectedValueOnce(new Error("Storage full"));
+  const proceed = vi.fn();
+  expect(requestEditorNavigation("/posts", proceed)).toBe(false);
+  expect(getNavigationPrompt()?.error).toBe("");
+  await act(() => answerNavigationPrompt(true));
+  expect(proceed).not.toHaveBeenCalled();
+  expect(getNavigationPrompt()).toMatchObject({ busy: false, error: expect.stringContaining("could not be saved") });
+  expect(view.result.current.error).toContain("full or unavailable");
+  await act(() => answerNavigationPrompt(false));
+  expect(requestEditorNavigation("/posts", proceed)).toBe(false);
+  expect(getNavigationPrompt()?.error).toContain("full or unavailable");
+  await act(() => answerNavigationPrompt(true));
+  expect(proceed).toHaveBeenCalledOnce();
+  expect(getNavigationPrompt()).toBeNull();
+  expect(view.result.current.error).toBe("");
+  expect((await recoveryStorage.list(1, "post:7"))[0].fields).toEqual(fields);
+});
+
+it("restores a different new draft without replacing its source and removes only the current copy when edits revert", async () => {
+  vi.stubGlobal("BroadcastChannel", undefined);
+  const now = Date.now();
+  const source: RecoveryCopy = { id: "closed-draft", format: 1, userId: 1, tab: "another-tab", target: "new:original",
+    version: null, baseline, fields, updatedAt: now, expiresAt: now + RECOVERY_TTL };
+  await recoveryStorage.put(await recoveryStorage.start(1), source);
+  const onRestore = vi.fn();
+  const input = { ...initial, target: "new:current", version: null, onRestore };
+  const view = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: input });
+  await waitFor(() => expect(view.result.current.copies).toHaveLength(1));
+  act(() => view.result.current.restore(view.result.current.copies[0]));
+  expect(onRestore).toHaveBeenCalledWith(expect.objectContaining({ id: source.id }));
+  view.rerender({ ...input, dirty: true, fields });
+  await act(() => view.result.current.flush());
+  expect(await recoveryStorage.list(1, "new:current")).toEqual([expect.objectContaining({ fields, target: "new:current" })]);
+  expect(await recoveryStorage.list(1, "new:original")).toEqual([expect.objectContaining({ id: source.id, fields })]);
+  view.rerender({ ...input, dirty: false, fields: baseline });
+  await act(() => view.result.current.flush());
+  expect(await recoveryStorage.list(1, "new:current")).toEqual([]);
+  expect(await recoveryStorage.list(1, "new:original")).toEqual([expect.objectContaining({ id: source.id, fields })]);
 });

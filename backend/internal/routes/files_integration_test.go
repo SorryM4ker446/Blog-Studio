@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -14,15 +15,174 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"blog-backend/internal/filestore"
 	"blog-backend/internal/httpcache"
 	"blog-backend/internal/models"
 	"blog-backend/internal/searchtext"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 const routeTestPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+func TestFileDeletionReferenceMatching(t *testing.T) {
+	uploadRoot := t.TempDir()
+	t.Setenv("UPLOAD_DIR", uploadRoot)
+	db := requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+	createTestUser(t, db, "reference-matching-admin", "correct-password-123", "admin")
+	router := SetupRouter()
+	auth := loginAs(t, router, "reference-matching-admin", "correct-password-123")
+	for _, test := range []struct {
+		name, content, summary, setting, status string
+		referenced                              bool
+	}{
+		{name: "unreferenced"},
+		{name: "draft-content", content: "![file](/api/files/%d/view)", status: "draft", referenced: true},
+		{name: "published-content", content: "https://example.test/api/files/%d/download", status: "published", referenced: true},
+		{name: "summary-only", summary: "/api/files/%d/view", referenced: true},
+		{name: "setting-only", setting: "/api/files/%d/download", referenced: true},
+		{name: "multiple-references", content: "/api/files/%d/view", summary: "/api/files/%d/download", setting: "/api/files/%d/view", referenced: true},
+		{name: "different-id", content: "/api/files/%d0/view", summary: "/api/files/%d0/download", setting: "/api/files/%d0/view"},
+		{name: "missing-trailing-slash", content: "/api/files/%d", summary: "/api/files/%d", setting: "/api/files/%d"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			upload := performFileUpload(t, router, "reference.txt", []byte("Reference matching"), auth, false)
+			if upload.Code != http.StatusCreated {
+				t.Fatalf("upload status = %d", upload.Code)
+			}
+			var file models.File
+			if err := json.Unmarshal(upload.Body.Bytes(), &file); err != nil {
+				t.Fatal(err)
+			}
+			format := func(value string) string {
+				if value == "" {
+					return ""
+				}
+				return fmt.Sprintf(value, file.ID)
+			}
+			post := models.Post{Title: test.name, Slug: test.name, Status: test.status,
+				Content: format(test.content), Summary: format(test.summary)}
+			if post.Content == "" {
+				post.Content = "An article without a file reference."
+			}
+			if post.Status == "published" {
+				published := time.Now().UTC()
+				post.PublishedAt = &published
+			}
+			post.SearchText = searchtext.Extract(post.Content)
+			if err := db.Create(&post).Error; err != nil {
+				t.Fatal(err)
+			}
+			setting := models.Setting{Key: "file_reference_" + test.name, Value: format(test.setting)}
+			if err := db.Create(&setting).Error; err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := db.Delete(&post).Error; err != nil {
+					t.Error(err)
+				}
+				if err := db.Delete(&setting).Error; err != nil {
+					t.Error(err)
+				}
+			})
+			// Compare the observable deletion contract with the previous count-based predicate.
+			fragment := fmt.Sprintf("%%/api/files/%d/%%", file.ID)
+			var posts, settings int64
+			if err := db.Model(&models.Post{}).Where("content LIKE ? OR summary LIKE ?", fragment, fragment).Count(&posts).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Model(&models.Setting{}).Where("value LIKE ?", fragment).Count(&settings).Error; err != nil {
+				t.Fatal(err)
+			}
+			if (posts > 0 || settings > 0) != test.referenced {
+				t.Fatal("reference fixture does not match the previous predicate")
+			}
+			var stored models.File
+			if err := db.First(&stored, file.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			result := performJSONRequest(t, router, http.MethodDelete, fmt.Sprintf("/api/admin/files/%d", file.ID), nil, auth, true)
+			if test.referenced {
+				requireAPIError(t, result.Code, result.Body.Bytes(), http.StatusConflict, "file_in_use")
+				if err := db.First(&models.File{}, file.ID).Error; err != nil {
+					t.Fatalf("referenced record was not preserved: %v", err)
+				}
+				if _, err := os.Stat(filepath.Join(uploadRoot, stored.Name)); err != nil {
+					t.Fatalf("referenced content was not preserved: %v", err)
+				}
+			} else {
+				if result.Code != http.StatusOK {
+					t.Fatalf("unreferenced deletion status = %d", result.Code)
+				}
+				if err := db.First(&models.File{}, file.ID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+					t.Fatalf("unreferenced record was not removed: %v", err)
+				}
+				if _, err := os.Stat(filepath.Join(uploadRoot, stored.Name)); !os.IsNotExist(err) {
+					t.Fatalf("unreferenced content was not removed: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestFileReferenceLookupFailurePreservesRecordAndContent(t *testing.T) {
+	uploadRoot := t.TempDir()
+	t.Setenv("UPLOAD_DIR", uploadRoot)
+	db := requireTestDatabase(t)
+	gin.SetMode(gin.TestMode)
+	createTestUser(t, db, "reference-admin", "correct-password-123", "admin")
+	router := SetupRouter()
+	auth := loginAs(t, router, "reference-admin", "correct-password-123")
+	for _, table := range []string{"posts", "settings"} {
+		t.Run(table, func(t *testing.T) {
+			upload := performFileUpload(t, router, "reference.txt", []byte("Reference lookup failure"), auth, false)
+			if upload.Code != http.StatusCreated {
+				t.Fatalf("upload status = %d", upload.Code)
+			}
+			var file models.File
+			if err := json.Unmarshal(upload.Body.Bytes(), &file); err != nil {
+				t.Fatal(err)
+			}
+			var stored models.File
+			if err := db.First(&stored, file.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			const callback = "fail_file_reference_lookup"
+			injected := false
+			if err := db.Callback().Row().Before("gorm:row").Register(callback, func(tx *gorm.DB) {
+				if strings.Contains(tx.Statement.SQL.String(), "SELECT EXISTS") && strings.Contains(tx.Statement.SQL.String(), `FROM "`+table+`"`) {
+					injected = true
+					tx.AddError(errors.New("injected reference lookup failure"))
+				}
+			}); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { db.Callback().Row().Remove(callback) })
+			endpoint := fmt.Sprintf("/api/admin/files/%d", file.ID)
+			failed := performJSONRequest(t, router, http.MethodDelete, endpoint, nil, auth, true)
+			requireAPIError(t, failed.Code, failed.Body.Bytes(), http.StatusInternalServerError, "database_error")
+			if !injected {
+				t.Fatal("reference query was not exercised")
+			}
+			if err := db.First(&models.File{}, file.ID).Error; err != nil {
+				t.Fatalf("file record was not preserved: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(uploadRoot, stored.Name)); err != nil {
+				t.Fatalf("file content was not preserved: %v", err)
+			}
+			if err := db.Callback().Row().Remove(callback); err != nil {
+				t.Fatal(err)
+			}
+			retry := performJSONRequest(t, router, http.MethodDelete, endpoint, nil, auth, true)
+			if retry.Code != http.StatusOK {
+				t.Fatalf("delete retry status = %d", retry.Code)
+			}
+		})
+	}
+}
 
 func performFileUpload(t *testing.T, router http.Handler, filename string, content []byte, auth *requestAuth, system bool) *httptest.ResponseRecorder {
 	return performFileUploadWithMetadata(t, router, filename, content, "", "", auth, system)

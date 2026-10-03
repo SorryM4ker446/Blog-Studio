@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
-import { loginAdmin, expectNoOverflow, scanAccessibility } from "./support/accessibility";
+import { expectNoOverflow, scanAccessibility } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 
 for (const theme of ["dark", "light"]) {
@@ -50,14 +51,23 @@ for (const theme of ["dark", "light"]) {
         })).toBe(true);
       }
       const beforeRefresh = await appearance();
+      const refresh = panel.getByRole("button", { name: "Refresh saved version", exact: true });
+      const refreshAppearance = () => refresh.evaluate(button => ({
+        label: button.textContent,
+        opacity: getComputedStyle(button).opacity,
+        width: button.getBoundingClientRect().width,
+      }));
+      const beforeRefreshButton = await refreshAppearance();
       let releaseRefresh!: () => void;
       const refreshGate = new Promise<void>(resolve => { releaseRefresh = resolve; });
       await page.route(`**/api/admin/posts/${post.id}`, async route => {
         await refreshGate;
         await route.continue();
       }, { times: 1 });
-      await panel.getByRole("button", { name: "Refresh saved version" }).click();
+      await refresh.click();
       try {
+        await expect(refresh).toBeDisabled();
+        expect(await refreshAppearance()).toEqual(beforeRefreshButton);
         await expect(choices.nth(0)).toBeDisabled();
         await expect(choices.nth(1)).toBeDisabled();
         expect(await appearance()).toEqual(beforeRefresh);
@@ -66,6 +76,7 @@ for (const theme of ["dark", "light"]) {
       await expect(choices.nth(0)).toBeEnabled();
       await expect(choices.nth(1)).toBeEnabled();
       expect(await appearance()).toEqual(beforeRefresh);
+      expect(await refreshAppearance()).toEqual(beforeRefreshButton);
       await panel.scrollIntoViewIfNeeded();
       await scanAccessibility(page, info, `conflict-${theme}`);
       await page.screenshot({ path: path.join(os.tmpdir(), `blog-editor-conflict-${theme}.png`) });
@@ -75,7 +86,12 @@ for (const theme of ["dark", "light"]) {
       await scanAccessibility(page, info, `conflict-mobile-${theme}`);
       await page.screenshot({ path: path.join(os.tmpdir(), `blog-editor-conflict-mobile-${theme}.png`) });
       await panel.getByRole("button", { name: "Keep my edits and continue" }).click();
+      const conflictShell = page.locator("[data-conflict-shell]");
+      await expect(conflictShell).toHaveAttribute("data-leaving", "true");
+      await expect(conflictShell).toHaveAttribute("aria-hidden", "true");
+      await expect(conflictShell).toHaveAttribute("inert", "");
       await expect(panel).toHaveCount(0);
+      await expect(conflictShell).toHaveCount(0);
       await expect(content).toHaveValue("My unsaved text");
       const reviewed = await update.json();
       const concurrent = await page.request.put(`${E2E_API_URL}/admin/posts/${post.id}`, { headers, data: { title: reviewed.title, content: "Another remote edit", version: reviewed.version } });
@@ -95,7 +111,9 @@ for (const theme of ["dark", "light"]) {
       await page.getByRole("button", { name: "Save", exact: true }).click();
       await panel.getByRole("button", { name: "Review saved version" }).click();
       await panel.getByRole("button", { name: "Discard my edits and use latest" }).click();
+      await expect(conflictShell).toHaveAttribute("data-leaving", "true");
       await expect(panel).toHaveCount(0);
+      await expect(conflictShell).toHaveCount(0);
       await expect(content).toHaveValue(/New server content/);
       await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
       expect(errors).toEqual([]);

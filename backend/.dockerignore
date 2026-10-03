@@ -5,6 +5,10 @@ uploads/
 bin/
 dist/
 vendor/
+.local-tests/
+.codex-runtime/
+AGENTS.md
+CLAUDE.md
 *.log
 *.exe
 *_test.go

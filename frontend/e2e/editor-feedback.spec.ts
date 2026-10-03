@@ -61,6 +61,8 @@ for (const theme of ["dark", "light"]) {
       const dialog = page.getByRole("alertdialog", { name: "Leave this editor?" });
       await expect(dialog).toBeVisible();
       expect(await dialog.evaluate(element => element.matches(":modal"))).toBe(true);
+      expect(await dialog.evaluate(element => getComputedStyle(element).animationName)).toContain("editorLeaveDialogIn");
+      expect(await dialog.evaluate(element => getComputedStyle(element, "::backdrop").animationName)).toContain("editorLeaveBackdropIn");
       const stay = dialog.getByRole("button", { name: "Stay in editor" });
       const leave = dialog.getByRole("button", { name: "Leave editor", exact: true });
       if (theme === "light") {
@@ -78,8 +80,22 @@ for (const theme of ["dark", "light"]) {
       await page.keyboard.press("Tab"); await expect(leave).toBeFocused();
       await page.keyboard.press("Tab"); await expect(stay).toBeFocused();
       await page.screenshot({ path: testInfo.outputPath("leave-confirmation.png") });
+      await dialog.evaluate(element => {
+        const states: string[] = [];
+        const cursors: string[][] = [];
+        (window as Window & { __closingStates?: string[] }).__closingStates = states;
+        (window as Window & { __closingCursors?: string[][] }).__closingCursors = cursors;
+        new MutationObserver(() => {
+          states.push(element.getAttribute("data-closing") || "");
+          if (element.getAttribute("data-closing") === "true") {
+            cursors.push(Array.from(element.querySelectorAll("button")).map(button => getComputedStyle(button).cursor));
+          }
+        }).observe(element, { attributes: true, attributeFilter: ["data-closing"] });
+      });
       await page.keyboard.press("Escape");
       await expect(dialog).toHaveCount(0);
+      expect(await page.evaluate(() => (window as Window & { __closingStates?: string[] }).__closingStates)).toContain("true");
+      expect(await page.evaluate(() => (window as Window & { __closingCursors?: string[][] }).__closingCursors)).toContainEqual(["default", "default"]);
       await expect(back).toBeFocused();
       await expect(page).toHaveURL(url);
       await expect(page.getByLabel("POST TITLE")).toHaveValue(title);

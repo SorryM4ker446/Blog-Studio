@@ -14,8 +14,11 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => navigationState.searchParams,
 }));
 
-vi.mock("./Providers", () => ({
+vi.mock("@/context/SidebarContext", () => ({
   useSidebar: () => ({ isCollapsed: false, toggleSidebar: vi.fn() }),
+}));
+
+vi.mock("./Sidebar", () => ({
   SidebarContent: () => <nav>Sidebar content</nav>,
   SidebarFooter: () => <footer>Sidebar footer</footer>,
 }));
@@ -24,7 +27,7 @@ vi.mock("./TopBar", () => ({
   default: () => <header>Top bar</header>,
 }));
 
-vi.mock("./Icons", () => ({
+vi.mock("@/components/Icons", () => ({
   TriangleIcon: () => <span>Toggle icon</span>,
   StudioLogo: () => <span>Studio logo</span>,
 }));
@@ -179,11 +182,12 @@ describe("ClientLayout route transitions", () => {
     expect(readNavigationEntry()?.scroll).toBe(320);
   });
 
-  it("restores a reload before paint without triggering entry animation", () => {
+  it("resets a reload to the top before paint without triggering entry animation", () => {
     vi.spyOn(performance, "getEntriesByType").mockReturnValue([{ type: "reload" } as PerformanceNavigationTiming]);
     saveEntryScroll(280);
     render(<ClientLayout><p>Reloaded content</p></ClientLayout>);
-    expect(document.querySelector(".content-scroll")).toHaveProperty("scrollTop", 280);
+    expect(document.querySelector(".content-scroll")).toHaveProperty("scrollTop", 0);
+    expect(readNavigationEntry()?.scroll).toBe(0);
     expect(screen.getByText("Reloaded content").parentElement).not.toHaveClass("route-transition-active");
   });
 

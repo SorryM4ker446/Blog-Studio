@@ -70,6 +70,10 @@ npm run test:unit:watch
 
 Vitest and React Testing Library cover pure data transformations and focused client-component behavior in a `jsdom` environment. Browser-dependent layout, computed styles, file downloads, image loading, navigation, and complete user workflows remain Playwright responsibilities.
 
+Server read tests launch Node with React's server condition and render through Next.js's bundled server renderer. They verify request-scoped deduplication, Cookie and timeout isolation, overlapping render isolation, fresh reads and recovery in subsequent renders, and HTTP/parse/timeout failures. Identical reads share their success or failure result within one render; the next render reads again. Sidebar tests mount desktop and mobile consumers together to verify a single refresh owner, independent expansion, late responses, unmount cleanup and retained data during outages.
+
+Identity checks use delayed responses to verify login, confirmed logout, cross-tab logout, session expiry and overlapping queries. Older successes and failures must not replace the current identity or end a newer query's loading state. Recovery Hook tests exercise failed departure writes, warning retention and successful retry, plus restoring a different new draft without replacing its source copy.
+
 Run `npm run test:coverage` to generate HTML, LCOV and Istanbul reports in `frontend/coverage`. See [quality gates](quality-gates.md) for enforced thresholds and [coverage measurements](coverage-baseline.md) for historical comparisons. Browser execution is not included in unit coverage.
 
 ## Browser workflow test
@@ -82,6 +86,8 @@ npm run test:e2e
 ```
 
 Playwright builds the standalone frontend in `.next-e2e` and starts isolated servers on ports `3100` and `18080`; the separate build directory prevents a concurrently running `next dev` server from changing its static assets. It does not reuse development servers. Tests run with one worker. The desktop `chromium` project runs all applicable workflows; `mobile-chromium` selects `mobile.spec.ts`, `accessibility.spec.ts` and `keyboard.spec.ts` at a 375px viewport. Individual cases also exercise other widths.
+
+Shell navigation, article publication, file-reference workflows and Markdown toolbar validation have separate specs. Homepage link workflows remain in `homepage-links.spec.ts`. Shared authentication, article creation and file interaction helpers live in `e2e/support`; transition and failure assertions remain in the scenarios that exercise them.
 
 For a focused run:
 
@@ -109,11 +115,13 @@ File tests cover content/extension mismatches, size limits, multipart temporary 
 
 ### Article editing and recovery
 
-Component and browser tests cover direct editor URLs, failed detail reads, retry, versioned saves/publication, duplicate submission, stale responses, two-tab conflicts and session expiry. Conflict review preserves local input and requires an explicit choice against the reviewed server version; a later concurrent update must conflict again.
+Component and browser tests cover direct editor URLs, failed detail reads, retry, versioned saves/publication, duplicate submission, stale responses, two-tab conflicts and session expiry. Conflict review preserves local input and requires an explicit choice against the reviewed server version; a later concurrent update must conflict again. Browser checks also cover a steady Refresh button during loading and the review card's exit after either choice.
 
 First-save and document-refresh checks retain the form, fields and Markdown preview through saved-ID adoption and hydration. English/Chinese browser contexts check toolbar locale changes without replacing the editor. Include a development-server browser check when changing this lifecycle: development hydration diagnostics can expose mismatches not reported the same way in production.
 
-Recovery tests use the real IndexedDB adapter with fake-indexeddb for validation, ownership, expiry, bounds, storage denial, queued writes and logout invalidation. Chromium covers reload, browser restart, duplicated tabs, explicit restore/discard/keep, failed cleanup, navigation cancellation and native unload prompts. Restoring a copy must not write an article to the server. See [editor behavior and recovery limits](editor.md).
+Recovery-layout checks sample continuous frames on desktop and at 375px, reloading both near the recovery notice and farther down the editor. Controlled slow IndexedDB discovery must keep the recovery heading mounted, its opacity, titles, dates, count and paused status stable, and reset scroll to the top without skeletons. Titles include quotes, markup characters and backslashes to exercise presentation escaping. Status-refresh checks cover saved drafts, published articles, empty and unsaved new drafts, and unavailable browser storage. During discovery the row displays its server-known status without a skeleton; it retains its height and published article link position and continues reporting edits and saves. A previously unseen browser copy changes the status once when discovery completes. Restore-to-conflict checks cover gradual expansion, coordinated recovery collapse, reduced motion, animated notice-space transfer on conflict reload and zero article writes. Refresh-scroll checks exercise real overflowing content, Markdown input and preview, plus the toolbar refresh animation and reduced motion. Unit checks reject stale or malformed history metadata, bound retained presentation labels, exclude article bodies, and verify cancellation and obsolete animation cleanup.
+
+Recovery tests use the real IndexedDB adapter with fake-indexeddb for validation, ownership, expiry, per-target FIFO retention including older stored copies, unchanged-restore deduplication, missing-source recovery, storage denial, queued writes and logout invalidation. Chromium covers reload, browser restart, duplicated tabs, explicit restore/discard/keep, recovery-panel exit and form movement, failed cleanup, navigation cancellation, native unload prompts, and the visible alert when the 10 MB storage limit is exceeded. A known capacity failure appears in the application leave dialog before departure and permits Leave anyway; an unexpected final-write failure first presents the warning for another choice. Repeated restore and exit without edits does not consume another copy slot, including while an old-version conflict is unresolved. After an unsaved conflict resolution, the newer copy retains the adopted version while the original stale copy still requires conflict review. Restoring a copy must not write an article to the server. See [editor behavior and recovery limits](editor.md).
 
 ### Homepage links and dialogs
 
@@ -133,7 +141,7 @@ Initial search keeps its loading status visually hidden for screen readers; resu
 
 Pagination tests check stable outgoing height, sequential result replacement and coordinated list/pagination transitions without duplicate layers or nested animations. Editor checks cover full-page spacing on short last pages, reloads and resizing, with spacing removed for single-page results. Links coverage includes filtered counts, tab resets, long content, same-page swaps, and cross-page swaps in both directions with reduced motion. Navigation checks use 991 articles/files, deep pages and repeated detail round trips with storage blocked or snapshots expired. This is a functional navigation fixture, not a performance benchmark.
 
-Frame assertions check DOM continuity, opacity, dimensions and scroll position during sidebar, save, refresh and navigation transitions. Editor list checks cover new-row entrance, existing-row movement, deletion fill, dialog exit order and reduced motion. Sampling accounts for elapsed time and existing animations; screenshots are diagnostic attachments rather than byte-equality assertions. Script-blocked reloads distinguish server rendering from hydration.
+Frame assertions check DOM continuity, opacity, dimensions and scroll position during sidebar, save, refresh and navigation transitions. Upper-sidebar samples include three populated categories and verify that readable brand/menu labels remain unclipped, the toggle follows the sidebar edge, and the footer stays anchored. Conflict reload samples verify intermediate opacity during entrance; unit coverage keeps recovery actions inactive until all layout and entrance animations finish. Editor save feedback checks entrance, exit, narrow-screen space collapse and reduced motion. Editor list checks cover new-row entrance, existing-row movement, deletion fill, dialog exit order and reduced motion. Sampling accounts for elapsed time and existing animations; screenshots are diagnostic attachments rather than byte-equality assertions. Script-blocked reloads distinguish server rendering from hydration.
 
 ## Appearance preferences
 

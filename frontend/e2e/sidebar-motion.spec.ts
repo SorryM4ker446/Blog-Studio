@@ -1,7 +1,71 @@
 import { expect, test } from "@playwright/test";
-import { loginAdmin } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { createArticle } from "./support/articles";
 import { E2E_ADMIN_PASS, E2E_ADMIN_USER, E2E_API_URL, E2E_APP_URL } from "./support/test-env";
+
+test("upper sidebar reveals readable labels and keeps its toggle on the edge through expansion and collapse", async ({ page, context }, info) => {
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  await context.addCookies([{ name: "sidebar_collapsed", value: "false", url: E2E_APP_URL },
+    { name: "sidebar_posts_expanded", value: "true", url: E2E_APP_URL }]);
+  const headers = await loginAdmin(page);
+  const categories: number[] = [];
+  const posts: number[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  try {
+    for (const name of ["Motion category A", "Motion category B", "Motion category C"]) {
+      const response = await page.request.post(`${E2E_API_URL}/admin/categories`, { headers, data: { name } });
+      expect(response.ok()).toBe(true);
+      const category = await response.json();
+      categories.push(category.id);
+      const post = await createArticle(page.request, { headers, data: { title: name, content: "Sidebar motion", category_id: category.id, status: "published" } });
+      posts.push((await post.json()).id);
+    }
+    await page.goto("/editor");
+    await expect(page.locator(".sidebar .sidebar-category-link").first()).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const evidence = await page.evaluate(async () => {
+      const sidebar = document.querySelector<HTMLElement>(".sidebar")!;
+      const toggle = sidebar.querySelector<HTMLButtonElement>(".sidebar-toggle")!;
+      const logo = sidebar.querySelector<HTMLElement>(".sidebar-logo-container")!;
+      const originalLogo = logo;
+      const originalPosts = sidebar.querySelector(".nav-posts-link");
+      const label = sidebar.querySelector<HTMLElement>('.nav-item[href="/"] .nav-item-label')!;
+      const playground = label.parentElement!;
+      const samples: { width: number; edge: number; clippedLogo: boolean; clippedLabel: boolean; footerBottom: number }[] = [];
+      const sample = () => {
+        const rowOpacity = Number(getComputedStyle(playground).opacity) * Number(getComputedStyle(label).opacity);
+        const labelRect = label.getBoundingClientRect();
+        samples.push({ width: sidebar.getBoundingClientRect().width,
+          edge: sidebar.getBoundingClientRect().right - toggle.getBoundingClientRect().right
+            - parseFloat(getComputedStyle(sidebar).borderRightWidth),
+          clippedLogo: Number(getComputedStyle(logo).opacity) > .8 && logo.scrollWidth > logo.clientWidth + 1,
+          clippedLabel: rowOpacity > .8 && (labelRect.right > playground.getBoundingClientRect().right + 1
+            || labelRect.height > playground.getBoundingClientRect().height + 1),
+          footerBottom: sidebar.querySelector('.sidebar-footer')!.getBoundingClientRect().bottom });
+      };
+      sample();
+      for (let round = 0; round < 2; round++) {
+        toggle.click();
+        const end = performance.now() + 700;
+        while (performance.now() < end) { await new Promise(requestAnimationFrame); sample(); }
+      }
+      return { samples, sameNodes: originalLogo === sidebar.querySelector(".sidebar-logo-container")
+        && originalPosts === sidebar.querySelector(".nav-posts-link") };
+    });
+    await info.attach("upper-sidebar-frames", { body: JSON.stringify(evidence), contentType: "application/json" });
+    expect(evidence.sameNodes).toBe(true);
+    expect(evidence.samples.every(sample => sample.edge >= 7.5 && sample.edge <= 10.5)).toBe(true);
+    expect(evidence.samples.some(sample => sample.width > 60 && sample.width < 230)).toBe(true);
+    expect(evidence.samples.some(sample => sample.clippedLogo || sample.clippedLabel)).toBe(false);
+    expect(Math.max(...evidence.samples.map(sample => sample.footerBottom)) - Math.min(...evidence.samples.map(sample => sample.footerBottom))).toBeLessThan(1);
+    await page.screenshot({ path: info.outputPath("upper-sidebar-expanded.png") });
+    expect(errors).toEqual([]);
+  } finally {
+    for (const id of posts) await page.request.delete(`${E2E_API_URL}/admin/posts/${id}`, { headers });
+    for (const id of categories) await page.request.delete(`${E2E_API_URL}/admin/categories/${id}`, { headers });
+  }
+});
 
 for (const theme of ["dark", "light"]) {
   test(`sidebar reversals and component reflow stay continuous in ${theme} mode`, async ({ page, context }, testInfo) => {

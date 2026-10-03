@@ -425,20 +425,20 @@ func GetFileStorageHealth(c *gin.Context) {
 
 func fileIsReferenced(fileID uint) (bool, error) {
 	fragment := fmt.Sprintf("%%/api/files/%d/%%", fileID)
-	var postCount int64
-	if err := config.DB.Model(&models.Post{}).
-		Where("content LIKE ? OR summary LIKE ?", fragment, fragment).
-		Count(&postCount).Error; err != nil {
+	var referenced bool
+	posts := config.DB.Model(&models.Post{}).Select("1").
+		Where("content LIKE ? OR summary LIKE ?", fragment, fragment)
+	if err := config.DB.Raw("SELECT EXISTS (?)", posts).Scan(&referenced).Error; err != nil {
 		return false, err
 	}
-	if postCount > 0 {
+	if referenced {
 		return true, nil
 	}
-	var settingCount int64
-	if err := config.DB.Model(&models.Setting{}).Where("value LIKE ?", fragment).Count(&settingCount).Error; err != nil {
+	settings := config.DB.Model(&models.Setting{}).Select("1").Where("value LIKE ?", fragment)
+	if err := config.DB.Raw("SELECT EXISTS (?)", settings).Scan(&referenced).Error; err != nil {
 		return false, err
 	}
-	return settingCount > 0, nil
+	return referenced, nil
 }
 
 func isRequestTooLarge(err error) bool {

@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
-import { expectNoOverflow, loginAdmin } from "./support/accessibility";
+import { expectNoOverflow } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { createArticle } from "./support/articles";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 
@@ -28,7 +29,7 @@ for (const theme of ["dark", "light"]) test(`post actions open from the More con
     const otherIndicatorOpacity = () => otherRow.evaluate(node => getComputedStyle(node, "::after").opacity);
     const normalOtherTitleColor = await otherTitle.evaluate(node => getComputedStyle(node).color);
     const normalMoreBackground = await more.evaluate(node => getComputedStyle(node).backgroundColor);
-    const expandedMoreBackground = await more.evaluate(node => {
+    const expandedMoreBackground = await more.evaluate(() => {
       const probe = document.createElement("span");
       probe.style.backgroundColor = "var(--bg-hover)";
       document.body.append(probe);

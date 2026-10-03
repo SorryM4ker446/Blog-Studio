@@ -51,6 +51,8 @@ Public Drive, advanced search, and home-page search match only the effective fil
 
 Files referenced by article content, article summaries, or settings cannot be deleted and return `409 file_in_use`. Remove the reference first, then delete the file.
 
+Reference checks use existence queries and stop after finding an article reference. Route tests compare deletion results with the previous count-based predicate, including draft and published content, summary-only and setting-only references, different IDs and incomplete path fragments. A database lookup failure returns `500 database_error` before any file content or database record is removed; deletion can be retried after the lookup recovers.
+
 Deletion first moves content to a random quarantine key. If the database delete fails, the content is restored; after a successful database delete, the quarantine copy is removed.
 
 Administrators can request a read-only reconciliation report:

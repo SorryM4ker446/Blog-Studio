@@ -9,6 +9,10 @@ test-results/
 playwright-report/
 blob-report/
 coverage/
+.local-tests/
+.codex-runtime/
+AGENTS.md
+CLAUDE.md
 *.log
 *.pem
 *.tsbuildinfo

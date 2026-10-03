@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { loginAdmin, expectNoOverflow } from "./support/accessibility";
+import { expectNoOverflow } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { E2E_API_URL } from "./support/test-env";
 import type { HomepageLink } from "../src/lib/links";
 

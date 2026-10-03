@@ -57,7 +57,7 @@ export default defineConfig({
       },
     },
     {
-      command: "npm run build && node -e \"const fs=require('node:fs');fs.cpSync('public','.next-e2e/standalone/public',{recursive:true});fs.cpSync('.next-e2e/static','.next-e2e/standalone/.next-e2e/static',{recursive:true})\" && node .next-e2e/standalone/server.js",
+      command: "npm run build && node -e \"const fs=require('node:fs');fs.cpSync('.next-e2e/static','.next-e2e/standalone/.next-e2e/static',{recursive:true})\" && node .next-e2e/standalone/server.js",
       cwd: __dirname,
       url: E2E_APP_URL,
       reuseExistingServer: false,

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
-import { loginAdmin } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { E2E_API_URL } from "./support/test-env";
 
 test("selected file types use supported extensions before upload", async ({ page }) => {
@@ -176,7 +176,7 @@ test("file rows show readable types and compact animated actions", async ({ page
     const rowIndicatorOpacity = () => row.evaluate(node => getComputedStyle(node, "::after").opacity);
     const rowWashOpacity = () => row.evaluate(node => getComputedStyle(node, "::before").opacity);
     const normalMoreBackground = await more.evaluate(node => getComputedStyle(node).backgroundColor);
-    const expandedMoreBackground = await more.evaluate(node => {
+    const expandedMoreBackground = await more.evaluate(() => {
       const probe = document.createElement("span");
       probe.style.backgroundColor = "var(--bg-hover)";
       document.body.append(probe);

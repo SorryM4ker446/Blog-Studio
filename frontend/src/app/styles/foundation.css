@@ -1,0 +1,188 @@
+:root {
+  color-scheme: dark;
+
+  --bg-sidebar: #000000;
+  --bg-base: #131314;
+  --bg-surface: #1e1f20;
+  --bg-hover: #282a2c;
+  --post-frame-bg: #03000085;
+  --nav-active: #313336;
+
+  --text-primary: #e3e3e3;
+  --text-secondary: #c4c7c5;
+  --text-muted: #a0a4a1;
+
+  --border-color: #313335;
+
+  --accent-blue: #a8c7fa;
+  --accent-green: #6dd68c;
+  --accent-yellow: #fbd284;
+  --accent-red: #f28b82;
+  --accent-contrast-text: #101114;
+  --file-card-bg: #1e1f20;
+  --file-card-hover: #26282a;
+  --file-muted-bg: #282a2c;
+  --file-dialog-bg: #1d1e1f;
+  --file-field-bg: #141516;
+  --file-preview-bg: #111213;
+  --file-preview-grid: rgba(255, 255, 255, 0.025);
+  --file-dialog-overlay: rgba(0, 0, 0, 0.68);
+  --file-dialog-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+  --file-primary-text: #101114;
+  --file-primary-hover: #b8d2fb;
+  --scrollbar-track: #18191a;
+  --scrollbar-thumb: #5f6368;
+  --scrollbar-thumb-hover: #8e918f;
+  --scrollbar-thumb-active: #a8c7fa;
+  --post-meta-rail-inset: 0.6rem;
+  --post-updated-right-offset: 5rem;
+
+  --sidebar-width: 240px;
+  --sidebar-width-collapsed: 52px;
+  --sidebar-motion-duration: 440ms;
+  --sidebar-motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 99px;
+
+  --nav-item-hover: rgba(255, 255, 255, 0.04);
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.theme-light {
+  color-scheme: light;
+
+  --bg-sidebar: #f8f9fa;
+  --bg-base: #ffffff;
+  --bg-surface: #f1f3f4;
+  --bg-hover: #e8eaed;
+  --post-frame-bg: #fbfbfc;
+  --nav-active: #e8eaed;
+
+  --text-primary: #202124;
+  --text-secondary: #5f6368;
+  --text-muted: #62686d;
+
+  --border-color: #dadce0;
+
+  --accent-blue: #1765cc;
+  --accent-green: #167533;
+  --accent-yellow: #f9ab00;
+  --accent-red: #b3261e;
+  --accent-contrast-text: #ffffff;
+  --file-card-bg: #ffffff;
+  --file-card-hover: #f7f8f9;
+  --file-muted-bg: #f3f4f5;
+  --file-dialog-bg: #ffffff;
+  --file-field-bg: #ffffff;
+  --file-preview-bg: #f6f7f8;
+  --file-preview-grid: rgba(0, 0, 0, 0.035);
+  --file-dialog-overlay: rgba(20, 20, 20, 0.44);
+  --file-dialog-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
+  --file-primary-text: #ffffff;
+  --file-primary-hover: #155fc0;
+  --scrollbar-track: #f1f3f4;
+  --scrollbar-thumb: #bdc1c6;
+  --scrollbar-thumb-hover: #9aa0a6;
+  --scrollbar-thumb-active: #1a73e8;
+  --nav-item-hover: rgba(0, 0, 0, 0.05);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  line-height: 1.5;
+  height: 100vh;
+  overflow: hidden;
+  /* The app shell owns scrolling inside the viewport. */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 2px solid var(--scrollbar-track);
+  border-radius: var(--radius-pill);
+  background: var(--scrollbar-thumb);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+input:where(:not([type]), [type="text" i], [type="search" i], [type="password" i], [type="email" i], [type="url" i], [type="tel" i], [type="number" i]),
+textarea {
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:where(:not([type]), [type="text" i], [type="search" i], [type="password" i], [type="email" i], [type="url" i], [type="tel" i], [type="number" i]):focus,
+textarea:focus {
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 0 3px rgba(168, 199, 250, 0.2);
+}
+
+body.theme-light input:where(:not([type]), [type="text" i], [type="search" i], [type="password" i], [type="email" i], [type="url" i], [type="tel" i], [type="number" i]):focus,
+body.theme-light textarea:focus {
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+}
+
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.editor-form-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+

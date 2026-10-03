@@ -64,23 +64,38 @@ export function useEditorRecovery(input: RecoveryInput) {
   const writer = useRef<RecoveryWriter | null>(null);
   const id = useRef("");
   const adopted = useRef<string[]>([]);
+  const restoredSource = useRef<string | undefined>(undefined);
   const decided = useRef(false);
   const suppress = useRef(false);
   const revoked = useRef(false);
   const mounted = useRef(false);
-  const reportError = useCallback(() => { if (mounted.current) setError("Browser recovery is unavailable or full. Keep this tab open and save your work to the server, or copy your text before leaving."); }, []);
+  const recoveryFailure = useRef(false);
+  const reportError = useCallback(() => {
+    recoveryFailure.current = true;
+    if (mounted.current) setError("Browser recovery is full or unavailable. Save to the server or copy your text.");
+  }, []);
+  const reportSuccess = useCallback(() => {
+    recoveryFailure.current = false;
+    if (mounted.current) setError(current => current.startsWith("Browser recovery is full or unavailable.") ? "" : current);
+  }, []);
   const schedule = useCallback(() => {
     const current = live.current;
-    if (!writer.current || !current.userId || !current.target || !current.ready || !current.dirty || !decided.current || suppress.current || revoked.current) return;
+    if (!writer.current || !current.userId || !current.target || !current.ready || !current.dirty || !decided.current || suppress.current || revoked.current) return false;
     const now = Date.now();
     writer.current.schedule({ id: id.current, format: 1, userId: current.userId, target: current.target, tab: tabIdentity(),
-      updatedAt: now, expiresAt: now + RECOVERY_TTL, version: current.version, baseline: current.baseline, fields: current.fields });
+      updatedAt: now, expiresAt: now + RECOVERY_TTL, version: current.version, baseline: current.baseline, fields: current.fields }, restoredSource.current);
+    return true;
   }, []);
-  const flush = useCallback(async () => { schedule(); await writer.current?.flush(); }, [schedule]);
+  const flush = useCallback(async () => {
+    if (!live.current.dirty) { await writer.current?.flush(); return true; }
+    if (!schedule()) return false;
+    return await writer.current!.flush();
+  }, [schedule]);
   const clear = useCallback(async () => {
     suppress.current = true;
     const ids = [id.current, ...adopted.current];
     adopted.current = [];
+    restoredSource.current = undefined;
     id.current = crypto.randomUUID();
     await writer.current?.clear(ids);
   }, []);
@@ -93,13 +108,13 @@ export function useEditorRecovery(input: RecoveryInput) {
     if (!input.userId || !input.target) return;
     let active = true;
     const userId = input.userId, target = input.target;
-    decided.current = false; suppress.current = false; revoked.current = false; adopted.current = [];
+    decided.current = false; suppress.current = false; revoked.current = false; adopted.current = []; restoredSource.current = undefined; recoveryFailure.current = false;
     id.current = crypto.randomUUID();
     void Promise.all([recoveryStorage.start(userId), recoveryStorage.list(userId, target.startsWith("new:") ? "new:*" : target, () => {
       if (active) setError("Some browser copies expired or could not be read and were removed. Valid copies remain available below.");
     }), claimTab()]).then(([session, rows]) => {
       if (!active || revoked.current) return;
-      writer.current = new RecoveryWriter(recoveryStorage, session, () => { if (active) reportError(); });
+      writer.current = new RecoveryWriter(recoveryStorage, session, () => { if (active) reportError(); }, () => { if (active) reportSuccess(); });
       setCopies(rows); decided.current = rows.length === 0; setChecking(false);
       schedule();
     }).catch(() => { if (active) { decided.current = true; setChecking(false); reportError(); } });
@@ -109,7 +124,7 @@ export function useEditorRecovery(input: RecoveryInput) {
       void writer.current?.flush();
       writer.current = null;
     };
-  }, [input.userId, input.target, reportError, schedule]);
+  }, [input.userId, input.target, reportError, reportSuccess, schedule]);
 
   useEffect(() => {
     if (!input.ready || !decided.current) return;
@@ -119,7 +134,9 @@ export function useEditorRecovery(input: RecoveryInput) {
 
   useEffect(() => {
     if (!input.userId || !input.target) return;
-    const unregister = registerLeaveGuard({ dirty: () => live.current.dirty, busy: () => live.current.busy, flush,
+    const unregister = registerLeaveGuard({ dirty: () => live.current.dirty, busy: () => live.current.busy,
+      flush: async () => { if (!await flush()) throw new Error("Browser recovery write failed"); },
+      warning: () => recoveryFailure.current ? "Browser recovery is full or unavailable. Save or copy your edits before leaving." : "",
       expire: async () => { await flush(); writer.current?.cancel(); suppress.current = true; } });
     const hidden = () => { if (document.visibilityState === "hidden") void flush(); };
     document.addEventListener("visibilitychange", hidden);
@@ -137,6 +154,7 @@ export function useEditorRecovery(input: RecoveryInput) {
   const restore = (copy: RecoveryCopy) => {
     // A fork owns a fresh key; it never writes into another document's copy.
     if (copy.tab === tabIdentity()) adopted.current.push(copy.id);
+    restoredSource.current = copy.target === input.target ? copy.id : undefined;
     decided.current = true;
     setCopies([]);
     input.onRestore(copy);
@@ -145,6 +163,7 @@ export function useEditorRecovery(input: RecoveryInput) {
     if (checking || revoked.current || live.current.userId !== input.userId || live.current.target !== input.target) return;
     // Existing copies remain independently recoverable, including this tab's old copy.
     adopted.current = [];
+    restoredSource.current = undefined;
     decided.current = true;
     setCopies([]);
     schedule();

@@ -88,6 +88,9 @@ vi.mock("@/components/editor/EditorListView", () => ({
 }));
 
 vi.mock("@/components/editor/EditorDeleteDialog", () => ({ default: () => null }));
+vi.mock("@/components/editor/EditorRecoveryLayout", () => ({
+  default: ({ children }: { children: import("react").ReactNode }) => <div className="editor-detail-frame">{children}</div>,
+}));
 vi.mock("@/components/editor/PostEditorForm", () => ({
   default: (props: ComponentProps<typeof PostEditorForm>) => (
     <div>
@@ -201,6 +204,10 @@ describe("Editor article detail loading", () => {
     await screen.findByText(/Draft created; publication failed/);
     expect(new URL(window.location.href).searchParams.get("edit")).toBe(String(draft.id));
     expect(screen.getByLabelText("Loaded article body")).toHaveValue(draft.content);
+    expect(screen.getByText("All changes saved")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    expect(updatePostMock).not.toHaveBeenCalled();
+    expect(publishPostMock).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByRole("button", { name: "Publish article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Publish article" }));
     await screen.findByTestId("editor-list");

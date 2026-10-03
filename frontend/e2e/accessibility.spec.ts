@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 import { createArticle } from "./support/articles";
-import { expectNoOverflow, loginAdmin, scanAccessibility } from "./support/accessibility";
+import { expectNoOverflow, scanAccessibility } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 
 for (const theme of ["dark", "light"]) {
   test(`core pages and editor dialogs have no serious accessibility violations in ${theme} theme`, async ({ page, context }, info) => {

@@ -1,8 +1,56 @@
 import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
-import { loginAdmin } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
+import { createArticle } from "./support/articles";
 import { E2E_API_URL } from "./support/test-env";
+
+test("category changes clear feedback from the previous article save", async ({ page }) => {
+  const headers = await loginAdmin(page);
+  const categoryName = `Category feedback ${crypto.randomUUID().slice(0, 8)}`;
+  const createdPost = await createArticle(page.request, {
+    headers,
+    data: { title: `Category feedback article ${Date.now()}`, content: "Initial body", status: "draft" },
+  });
+  const post = await createdPost.json();
+  let categoryId: number | null = null;
+
+  try {
+    await page.goto(`/editor?edit=${post.id}`);
+    const body = page.locator(".custom-editor-wrapper textarea");
+    await body.fill("Saved body");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.locator("#post-save-message")).toHaveText("Saved successfully!");
+
+    await page.getByRole("button", { name: "Create category" }).click();
+    await page.getByRole("textbox", { name: "Category name", exact: true }).fill(categoryName);
+    const createResponse = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/admin/categories");
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+    const response = await createResponse;
+    expect(response.ok()).toBeTruthy();
+    categoryId = (await response.json()).id;
+
+    await expect(page.getByRole("combobox", { name: "Post category" })).toContainText(categoryName);
+    await expect(page.locator(".editor-save-state > span")).toHaveText("Unsaved changes");
+    await expect(page.locator("#post-save-message")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.locator("#post-save-message")).toHaveText("Saved successfully!");
+    const categorySelect = page.getByRole("combobox", { name: "Post category" });
+    await categorySelect.click();
+    await page.getByRole("group", { name: `Manage ${categoryName}` }).getByRole("button", { name: `Delete ${categoryName}` }).click();
+    const deleteDialog = page.getByRole("alertdialog", { name: "Confirm Deletion" });
+    await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(deleteDialog).toHaveCount(0);
+    categoryId = null;
+    await expect(categorySelect).toContainText("None");
+    await expect(page.locator(".editor-save-state > span")).toHaveText("All changes saved");
+    await expect(page.locator("#post-save-message")).toHaveCount(0);
+  } finally {
+    await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers });
+    if (categoryId !== null) await page.request.delete(`${E2E_API_URL}/admin/categories/${categoryId}`, { headers });
+  }
+});
 
 test("category rename stays steady, management clears hover, and creation opens and closes smoothly", async ({ page }) => {
   const headers = await loginAdmin(page);

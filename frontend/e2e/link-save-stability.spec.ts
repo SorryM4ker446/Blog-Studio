@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loginAdmin } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { E2E_APP_URL } from "./support/test-env";
 
 for (const theme of ["dark", "light"]) {

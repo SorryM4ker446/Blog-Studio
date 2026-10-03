@@ -92,10 +92,30 @@ it("retains the first action and reports failed recovery preparation without nav
   const first = vi.fn(), second = vi.fn();
   requestEditorNavigation("/posts", first); requestEditorNavigation("/drive", second);
   await answerNavigationPrompt(true);
-  expect(getNavigationPrompt()).toMatchObject({ busy: false, error: expect.stringContaining("Could not prepare") });
+  expect(getNavigationPrompt()).toMatchObject({ busy: false, error: expect.stringContaining("Browser recovery could not be saved") });
   expect(first).not.toHaveBeenCalled();
   await answerNavigationPrompt(true);
   expect(first).toHaveBeenCalledOnce(); expect(second).not.toHaveBeenCalled();
+});
+it("warns before leaving when recovery already failed and permits an informed departure", async () => {
+  const proceed = vi.fn();
+  registerLeaveGuard({ dirty: () => true, busy: () => false,
+    warning: () => "Browser recovery is full or unavailable. Save or copy your edits before leaving.",
+    flush: vi.fn().mockRejectedValue(new Error("Quota")), expire: async () => {} });
+  expect(requestEditorNavigation("/posts", proceed)).toBe(false);
+  expect(getNavigationPrompt()).toMatchObject({ busy: false, error: expect.stringContaining("Save or copy your edits") });
+  await answerNavigationPrompt(true);
+  expect(proceed).toHaveBeenCalledOnce();
+  expect(getNavigationPrompt()).toBeNull();
+});
+it("requires a second leave choice if the final recovery write fails without an earlier warning", async () => {
+  const { flush } = protect(); flush.mockRejectedValue(new Error("Quota"));
+  const proceed = vi.fn(); requestEditorNavigation("/posts", proceed);
+  await answerNavigationPrompt(true);
+  expect(proceed).not.toHaveBeenCalled();
+  expect(getNavigationPrompt()).toMatchObject({ busy: false, error: expect.stringContaining("Save or copy your edits") });
+  await answerNavigationPrompt(true);
+  expect(proceed).toHaveBeenCalledOnce();
 });
 it("allows cancellation while recovery is flushing and ignores its late completion", async () => {
   const { flush } = protect(); let finish!: () => void;
@@ -107,6 +127,26 @@ it("allows cancellation while recovery is flushing and ignores its late completi
   expect(getNavigationPrompt()).toBeNull();
   finish(); await answer;
   expect(proceed).not.toHaveBeenCalled();
+});
+it("waits for the closing transition before navigating and cancels a stale continuation", async () => {
+  protect();
+  const proceed = vi.fn();
+  requestEditorNavigation("/posts", proceed);
+  let finish!: () => void;
+  const closing = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+  const answer = answerNavigationPrompt(true, closing);
+  await vi.waitFor(() => expect(closing).toHaveBeenCalledOnce());
+  expect(proceed).not.toHaveBeenCalled();
+  expect(getNavigationPrompt()?.busy).toBe(true);
+  finish(); await answer;
+  expect(proceed).toHaveBeenCalledOnce();
+
+  requestEditorNavigation("/posts", proceed);
+  const interrupted = answerNavigationPrompt(true, closing);
+  await vi.waitFor(() => expect(closing).toHaveBeenCalledTimes(2));
+  await answerNavigationPrompt(false);
+  finish(); await interrupted;
+  expect(proceed).toHaveBeenCalledOnce();
 });
 it("dismisses pending decisions on session expiry and confirmed logout", async () => {
   protect(); const proceed = vi.fn(); requestEditorNavigation("/posts", proceed);
