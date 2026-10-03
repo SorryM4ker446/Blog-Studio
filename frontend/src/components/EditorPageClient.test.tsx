@@ -201,6 +201,10 @@ describe("Editor article detail loading", () => {
     await screen.findByText(/Draft created; publication failed/);
     expect(new URL(window.location.href).searchParams.get("edit")).toBe(String(draft.id));
     expect(screen.getByLabelText("Loaded article body")).toHaveValue(draft.content);
+    expect(screen.getByText("All changes saved")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Save article" }));
+    expect(updatePostMock).not.toHaveBeenCalled();
+    expect(publishPostMock).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByRole("button", { name: "Publish article" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Publish article" }));
     await screen.findByTestId("editor-list");

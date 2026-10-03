@@ -216,6 +216,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     onRestore: copy => {
       setEditTitle(copy.fields.title); setEditSummary(copy.fields.summary);
       setEditContent(copy.fields.content); setEditCategoryId(copy.fields.category_id);
+      setSaveMessage("Draft restored");
       if (editingPost && copy.version !== editingPost.version) {
         setLatestPost(editingPost); setConflict(true);
         setEditingPost({ ...editingPost, ...copy.baseline, version: copy.version! });
@@ -421,7 +422,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
   async function handleSave(action: PostAction = "save") {
     if (postToLoad || saveOperationRef.current || conflict || recovery.checking || recovery.copies.length) return;
-    if (action === "save" && editingPost && !dirty && !saveMessage.startsWith("❌")) return;
+    if (action === "save" && editingPost && !dirty) return;
     const errors = validatePostFields(currentSnapshot);
     if (action !== "unpublish" && Object.values(errors).some(Boolean)) {
       setValidationAttempted(true);
@@ -498,6 +499,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       if (!category) return "Failed to create category.";
       setCategories((current) => [...current, category]);
       setEditCategoryId(category.id);
+      setSaveMessage("");
       notifyUpdate();
       return null;
     } catch (error) {
@@ -561,6 +563,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       } else {
         const deleted = await deleteCategory(id);
         if (!deleted) throw new Error("Failed to delete category.");
+        if (editCategoryId === id || editingPost?.category_id === id) setSaveMessage("");
         if (editCategoryId === id) setEditCategoryId(0);
         setCategories((current) => current.filter((category) => category.id !== id));
         setEditingPost((current) => current?.category_id === id ? { ...current, category_id: null } : current);
@@ -714,10 +717,10 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           categoriesError={categoriesError}
           saving={saving}
           saveMessage={saveMessage}
-          onTitleChange={setEditTitle}
-          onSummaryChange={setEditSummary}
-          onContentChange={setEditContent}
-          onCategoryChange={setEditCategoryId}
+          onTitleChange={(value) => { setEditTitle(value); setSaveMessage(""); }}
+          onSummaryChange={(value) => { setEditSummary(value); setSaveMessage(""); }}
+          onContentChange={(value) => { setEditContent(value); setSaveMessage(""); }}
+          onCategoryChange={(value) => { setEditCategoryId(value); setSaveMessage(""); }}
           onBack={closeEditor}
           onSave={handleSave}
           onCreateCategory={handleCreateCategory}

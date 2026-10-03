@@ -19,7 +19,7 @@ async function expectFeedbackBesideLabel(page: Page, mobile: boolean) {
   expect(positions.messageLeft).toBeGreaterThanOrEqual(positions.labelRight + 7);
 }
 
-test("save feedback stays beside the Markdown label in desktop and mobile layouts", async ({ page }, testInfo) => {
+test("save feedback enters beside the Markdown label and exits smoothly on desktop and mobile", async ({ page }, testInfo) => {
   const browserErrors: string[] = [];
   page.on("pageerror", error => browserErrors.push(error.message));
   const headers = await loginAdmin(page);
@@ -51,6 +51,9 @@ test("save feedback stays beside the Markdown label in desktop and mobile layout
     await expect(message).toHaveAttribute("role", "status");
     await expect(message).toHaveAttribute("data-tone", "success");
     await expect(message).toHaveText("Saved successfully!");
+    await expect(message).toHaveCSS("animation-name", "editorSaveFeedbackIn");
+    await expect(message).toHaveCSS("border-top-style", "none");
+    await expect(message).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expectFeedbackBesideLabel(page, false);
     expect((await heading.boundingBox())!.height).toBe(initialHeight);
     await message.scrollIntoViewIfNeeded();
@@ -59,11 +62,43 @@ test("save feedback stays beside the Markdown label in desktop and mobile layout
     await testInfo.attach("Desktop save feedback", { path: desktopScreenshot, contentType: "image/png" });
 
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => {
+      const slot = document.querySelector<HTMLElement>(".editor-save-feedback-slot")!;
+      const observed = window as typeof window & { feedbackExit?: string[] };
+      observed.feedbackExit = [];
+      new MutationObserver(() => {
+        const badge = slot.querySelector<HTMLElement>("#post-save-message");
+        observed.feedbackExit?.push(`${slot.dataset.visible}:${badge ? getComputedStyle(badge).animationName : "removed"}`);
+      }).observe(slot, { attributes: true, attributeFilter: ["data-visible"] });
+    });
     await body.fill("Edited again on mobile");
+    await expect.poll(() => page.evaluate(() => (window as typeof window & { feedbackExit?: string[] }).feedbackExit || []))
+      .toContain("false:editorSaveFeedbackOut");
     await save.click();
     await expect(message).toHaveText("Saved successfully!");
     await expectFeedbackBesideLabel(page, true);
     await expectNoOverflow(page);
+    await page.locator(".editor-save-feedback-slot").evaluate(element => Promise.all(
+      element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))));
+    const mobileHeights = await page.evaluate(() => {
+      const heading = document.querySelector<HTMLElement>(".editor-content-heading")!;
+      const heights = [heading.getBoundingClientRect().height];
+      const observer = new ResizeObserver(() => heights.push(heading.getBoundingClientRect().height));
+      observer.observe(heading);
+      (window as typeof window & { finishFeedbackCollapse?: () => number[] }).finishFeedbackCollapse = () => {
+        observer.disconnect();
+        return heights;
+      };
+      return heights;
+    });
+    expect(mobileHeights.length).toBeGreaterThan(0);
+    await body.fill("Unsaved mobile changes");
+    await expect(message).toHaveCount(0);
+    const heights = await page.evaluate(() => (window as typeof window & { finishFeedbackCollapse?: () => number[] }).finishFeedbackCollapse?.() || []);
+    expect(heights[0] - heights.at(-1)!).toBeGreaterThan(15);
+    expect(Math.max(...heights.slice(1).map((height, index) => Math.abs(height - heights[index])))).toBeLessThan(18);
+    await save.click();
+    await expect(message).toHaveText("Saved successfully!");
     await message.scrollIntoViewIfNeeded();
     const mobileScreenshot = testInfo.outputPath("mobile-save-feedback.png");
     await page.screenshot({ path: mobileScreenshot });
@@ -81,6 +116,12 @@ test("save feedback stays beside the Markdown label in desktop and mobile layout
     const lightScreenshot = testInfo.outputPath("light-save-feedback.png");
     await page.screenshot({ path: lightScreenshot });
     await testInfo.attach("Light theme save feedback", { path: lightScreenshot, contentType: "image/png" });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(message).toHaveCSS("animation-name", "none");
+    await body.fill("Edited with reduced motion");
+    await expect(message).toHaveCount(0);
+    await save.click();
+    await expect(message).toHaveCSS("animation-name", "none");
     expect(browserErrors).toEqual([]);
   } finally {
     await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers });

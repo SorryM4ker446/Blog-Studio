@@ -171,16 +171,21 @@ for (const theme of ["dark", "light"]) {
       await page.unroute(endpoint);
       await body.fill("Body A");
       await expect(page.locator(".editor-save-state > span")).toHaveText("All changes saved");
+      await expect(page.locator("#post-save-message")).toHaveCount(0);
       let retryRequests = 0;
       await page.route(endpoint, async route => {
         if (route.request().method() === "PUT") retryRequests++;
         await route.continue();
       });
       await save.click();
+      expect(retryRequests).toBe(0);
+      await expect(page.locator("#post-save-message")).toHaveCount(0);
+      await body.fill("Preserved submitted body");
+      await expect(page.locator(".editor-save-state > span")).toHaveText("Unsaved changes");
+      await save.click();
       await expect(page.locator("#post-save-message")).toHaveAttribute("role", "status");
       expect(retryRequests).toBe(1);
       await page.unroute(endpoint);
-      await body.fill("Preserved submitted body");
 
       await sidebar.evaluate(element => element.setAttribute("data-preserved", "yes"));
       const publishGate = new Promise<void>(resolve => { release = resolve; });

@@ -113,7 +113,7 @@ Component and browser tests cover direct editor URLs, failed detail reads, retry
 
 First-save and document-refresh checks retain the form, fields and Markdown preview through saved-ID adoption and hydration. English/Chinese browser contexts check toolbar locale changes without replacing the editor. Include a development-server browser check when changing this lifecycle: development hydration diagnostics can expose mismatches not reported the same way in production.
 
-Recovery tests use the real IndexedDB adapter with fake-indexeddb for validation, ownership, expiry, bounds, storage denial, queued writes and logout invalidation. Chromium covers reload, browser restart, duplicated tabs, explicit restore/discard/keep, failed cleanup, navigation cancellation and native unload prompts. Restoring a copy must not write an article to the server. See [editor behavior and recovery limits](editor.md).
+Recovery tests use the real IndexedDB adapter with fake-indexeddb for validation, ownership, expiry, bounds, storage denial, queued writes and logout invalidation. Chromium covers reload, browser restart, duplicated tabs, explicit restore/discard/keep, recovery-panel exit and form movement, failed cleanup, navigation cancellation and native unload prompts. Restoring a copy must not write an article to the server. See [editor behavior and recovery limits](editor.md).
 
 ### Homepage links and dialogs
 
@@ -133,7 +133,7 @@ Initial search keeps its loading status visually hidden for screen readers; resu
 
 Pagination tests check stable outgoing height, sequential result replacement and coordinated list/pagination transitions without duplicate layers or nested animations. Editor checks cover full-page spacing on short last pages, reloads and resizing, with spacing removed for single-page results. Links coverage includes filtered counts, tab resets, long content, same-page swaps, and cross-page swaps in both directions with reduced motion. Navigation checks use 991 articles/files, deep pages and repeated detail round trips with storage blocked or snapshots expired. This is a functional navigation fixture, not a performance benchmark.
 
-Frame assertions check DOM continuity, opacity, dimensions and scroll position during sidebar, save, refresh and navigation transitions. Editor list checks cover new-row entrance, existing-row movement, deletion fill, dialog exit order and reduced motion. Sampling accounts for elapsed time and existing animations; screenshots are diagnostic attachments rather than byte-equality assertions. Script-blocked reloads distinguish server rendering from hydration.
+Frame assertions check DOM continuity, opacity, dimensions and scroll position during sidebar, save, refresh and navigation transitions. Editor save feedback checks entrance, exit, narrow-screen space collapse and reduced motion. Editor list checks cover new-row entrance, existing-row movement, deletion fill, dialog exit order and reduced motion. Sampling accounts for elapsed time and existing animations; screenshots are diagnostic attachments rather than byte-equality assertions. Script-blocked reloads distinguish server rendering from hydration.
 
 ## Appearance preferences
 

@@ -6,6 +6,16 @@
   font-family: var(--font-family);
 }
 .panel { padding: 24px; margin: 0 0 28px; }
+.recoveryShell {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-bottom: 28px;
+  transition: grid-template-rows 220ms ease-in-out 120ms, margin-bottom 220ms ease-in-out 120ms;
+}
+.recoveryShell[data-leaving="true"] { grid-template-rows: 0fr; margin-bottom: 0; }
+.recoveryClip { min-height: 0; overflow: hidden; }
+.recoveryClip .panel { margin: 0; transition: opacity 120ms ease-out; }
+.recoveryShell[data-leaving="true"] .panel { opacity: 0; }
 .panelHeader { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .icon {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -57,7 +67,9 @@
   .dialogContent { padding: 24px; }
   .dialogActions { flex-wrap: wrap; }
 }
-@media (prefers-reduced-motion: reduce) { .button { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .button, .recoveryShell, .recoveryClip .panel { transition: none; }
+}
 
 .recoveryActions { display: flex; flex-wrap: wrap; gap: 8px; }
 

@@ -53,10 +53,40 @@ test("continuing the saved version keeps the previous browser copy recoverable",
     await expect(page.getByText("All changes saved", { exact: true })).toBeVisible();
     expect((await copies(page)).some(copy => copy.fields.content === "Previous unsaved content")).toBe(true);
     await page.reload();
+    const recoveryShell = page.locator("[data-recovery-shell]");
+    await page.evaluate(() => {
+      const form = document.querySelector<HTMLElement>(".editor-form-header")!;
+      const frame = document.querySelector<HTMLElement>(".editor-detail-frame")!;
+      const positions: number[] = [];
+      let animationFrame = 0;
+      const sample = () => {
+        positions.push(form.getBoundingClientRect().top - frame.getBoundingClientRect().top);
+        animationFrame = requestAnimationFrame(sample);
+      };
+      sample();
+      (window as typeof window & { finishRecoveryMotion?: () => number[] }).finishRecoveryMotion = () => {
+        cancelAnimationFrame(animationFrame);
+        return positions;
+      };
+    });
     await restore(page);
+    await expect(recoveryShell).toHaveAttribute("data-leaving", "true");
+    await expect(recoveryShell.locator("section")).toHaveAttribute("aria-hidden", "true");
+    await expect(recoveryShell).toHaveCount(0);
+    const positions = await page.evaluate(() =>
+      (window as typeof window & { finishRecoveryMotion?: () => number[] }).finishRecoveryMotion?.() || []);
+    expect(positions[0] - positions.at(-1)!).toBeGreaterThan(100);
+    expect(new Set(positions.map(position => Math.round(position))).size).toBeGreaterThan(3);
+    expect(Math.max(...positions.slice(1).map((position, index) => Math.abs(position - positions[index])))).toBeLessThan(120);
     await expect(body(page)).toHaveValue("Previous unsaved content");
+    const restoredFeedback = page.locator("#post-save-message");
+    await expect(restoredFeedback.locator("span").last()).toHaveText("Draft restored");
+    await expect(restoredFeedback).toHaveAttribute("role", "status");
+    await expect(restoredFeedback).toHaveAttribute("data-tone", "info");
     const saved = await page.request.get(`${E2E_API_URL}/admin/posts/${post.id}`, { headers });
     expect((await saved.json()).content).toBe("New saved content");
+    await body(page).fill("Continued editing restored draft");
+    await expect(restoredFeedback).toHaveCount(0);
   } finally { await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers }); }
 });
 
@@ -170,7 +200,9 @@ test("closed new drafts remain discoverable and duplicated tabs cannot share cop
     const opened = context.waitForEvent("page"); await reopened.evaluate(() => window.open(location.href, "_blank")); duplicate = await opened;
     duplicate.on("dialog", dialog => dialog.accept());
     await restore(duplicate);
+    await expect(duplicate.locator("#post-save-message span").last()).toHaveText("Draft restored");
     await duplicate.getByLabel("POST TITLE").fill("Independent duplicated draft"); await body(duplicate).fill("Duplicate tab copy");
+    await expect(duplicate.locator("#post-save-message")).toHaveCount(0);
     await expect.poll(async () => (await copies(reopened)).length).toBe(2);
     expect(new Set((await copies(reopened)).map(copy => copy.tab)).size).toBe(2);
     await duplicate.getByRole("button", { name: "Save", exact: true }).click();

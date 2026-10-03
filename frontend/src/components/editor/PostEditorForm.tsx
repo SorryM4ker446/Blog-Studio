@@ -5,7 +5,7 @@ import { formatDateTime } from "@/lib/display-date";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { ClipboardEvent, FormEvent } from "react";
+import { useState, type AnimationEvent, type ClipboardEvent, type FormEvent, type TransitionEvent } from "react";
 import type { Category, PostDetail } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
 import { createMarkdownParser } from "@/lib/markdown";
@@ -74,9 +74,6 @@ const labelStyle = {
 export default function PostEditorForm(props: PostEditorFormProps) {
   const MdEditor = props.MarkdownComponent ?? LazyMdEditor;
   const errors = props.validationAttempted ? validatePostFields(props) : { title: "", summary: "", content: "" };
-  const failed = props.saveMessage.startsWith("❌");
-  const saveFeedbackTone = failed ? "error" : props.saveMessage.startsWith("✅") ? "success" : "info";
-  const saveFeedbackText = props.saveMessage.replace(/^[✅❌]\s*/u, "");
   const params = useSearchParams();
   const returnTo = `/editor?${params.toString()}`;
 
@@ -218,20 +215,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         <div>
           <div className="editor-content-heading">
             <label htmlFor="post-markdown_md" id="post-content-label" style={{ ...labelStyle, marginBottom: 0 }}>CONTENT (MARKDOWN) · REQUIRED</label>
-            {props.saveMessage && (
-              <div
-                id="post-save-message"
-                role={failed ? "alert" : "status"}
-                aria-live={failed ? "assertive" : "polite"}
-                className="editor-save-message"
-                data-tone={saveFeedbackTone}
-              >
-                <span className="editor-save-message-icon" aria-hidden="true">
-                  {saveFeedbackTone === "success" ? <CheckIcon size={13} /> : saveFeedbackTone === "error" ? "!" : "i"}
-                </span>
-                <span>{saveFeedbackText}</span>
-              </div>
-            )}
+            <SaveFeedback message={props.saveMessage} />
           </div>
             <div
               className="custom-editor-wrapper"
@@ -259,6 +243,56 @@ export default function PostEditorForm(props: PostEditorFormProps) {
       </fieldset>
     </form>
   );
+}
+
+function SaveFeedback({ message }: { message: string }) {
+  const [feedback, setFeedback] = useState({ input: message, displayed: message, leaving: false });
+  if (message !== feedback.input) {
+    const reduceMotion = !message && typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    setFeedback({
+      input: message,
+      displayed: message || (reduceMotion ? "" : feedback.displayed),
+      leaving: !message && Boolean(feedback.displayed) && !reduceMotion,
+    });
+  }
+  const { displayed, leaving } = feedback;
+
+  function finishExit(event: TransitionEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows" || message) return;
+    setFeedback(current => current.input ? current : { ...current, displayed: "", leaving: false });
+  }
+
+  function finishExitWithoutCollapse(event: AnimationEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || event.animationName !== "editorSaveFeedbackOut" || message) return;
+    const slot = event.currentTarget.closest(".editor-save-feedback-slot");
+    if (slot?.getAnimations({ subtree: false }).length) return;
+    setFeedback(current => current.input ? current : { ...current, displayed: "", leaving: false });
+  }
+
+  const failed = displayed.startsWith("❌");
+  const tone = failed ? "error" : displayed.startsWith("✅") ? "success" : "info";
+  const text = displayed.replace(/^[✅❌]\s*/u, "");
+
+  return <div className="editor-save-feedback-slot" data-visible={Boolean(displayed) && !leaving} onTransitionEnd={finishExit}>
+    <div className="editor-save-feedback-inner">
+      {displayed && <div
+        key={displayed}
+        id="post-save-message"
+        role={failed ? "alert" : "status"}
+        aria-live={failed ? "assertive" : "polite"}
+        aria-hidden={leaving || undefined}
+        className="editor-save-message"
+        data-tone={tone}
+        onAnimationEnd={finishExitWithoutCollapse}
+      >
+        <span className="editor-save-message-icon" aria-hidden="true">
+          {tone === "success" ? <CheckIcon size={13} /> : tone === "error" ? "!" : "i"}
+        </span>
+        <span>{text}</span>
+      </div>}
+    </div>
+  </div>;
 }
 
 function FieldError({ id, message }: { id: string; message: string }) {
