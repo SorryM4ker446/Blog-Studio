@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { HomepageLink } from "@/lib/links";
 import { createLink, getAdminLinks, moveLink } from "@/lib/links";
-import useLinksManager from "./LinksManager";
+import useLinksManager from "./use-links-manager";
 
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(window.location.search) }));
 vi.mock("@/lib/links", async importOriginal => ({

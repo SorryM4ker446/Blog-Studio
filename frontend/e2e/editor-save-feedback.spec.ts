@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loginAdmin, expectNoOverflow } from "./support/accessibility";
+import { expectNoOverflow } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { createArticle } from "./support/articles";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 

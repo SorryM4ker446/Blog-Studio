@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loginAdmin } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { createArticle } from "./support/articles";
 import { E2E_API_URL } from "./support/test-env";
 

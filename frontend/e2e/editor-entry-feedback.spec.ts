@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 import os from "node:os";
-import { loginAdmin, expectNoOverflow, scanAccessibility } from "./support/accessibility";
+import { expectNoOverflow, scanAccessibility } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 
 for (const reducedMotion of [false, true]) {

@@ -14,8 +14,11 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => navigationState.searchParams,
 }));
 
-vi.mock("./Providers", () => ({
+vi.mock("@/context/SidebarContext", () => ({
   useSidebar: () => ({ isCollapsed: false, toggleSidebar: vi.fn() }),
+}));
+
+vi.mock("./Sidebar", () => ({
   SidebarContent: () => <nav>Sidebar content</nav>,
   SidebarFooter: () => <footer>Sidebar footer</footer>,
 }));
@@ -24,7 +27,7 @@ vi.mock("./TopBar", () => ({
   default: () => <header>Top bar</header>,
 }));
 
-vi.mock("./Icons", () => ({
+vi.mock("@/components/Icons", () => ({
   TriangleIcon: () => <span>Toggle icon</span>,
   StudioLogo: () => <span>Studio logo</span>,
 }));

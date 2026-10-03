@@ -36,14 +36,15 @@ import { useEditorRecovery } from "@/lib/use-editor-recovery";
 import RecoveryNotice from "@/components/editor/RecoveryNotice";
 import { useResourcePage } from "@/lib/use-resource-page";
 import type { HomepageLink } from "@/lib/links";
-import useLinksManager from "@/components/links/LinksManager";
+import useLinksManager from "@/components/links/use-links-manager";
 import EditorDeleteDialog from "@/components/editor/EditorDeleteDialog";
 import EditorListView, { type EditorTab } from "@/components/editor/EditorListView";
 import PostEditorForm from "@/components/editor/PostEditorForm";
 import type MarkdownEditor from "@/components/editor/MarkdownEditor";
 import PostDetailLoader from "@/components/editor/PostDetailLoader";
 import EditorViewTransition from "@/components/editor/EditorViewTransition";
-import { animateCreatedListRow, animateDeletedListRow, captureDeletedListRow, captureListRows, type DeletedListSnapshot, type ListRowsSnapshot } from "@/components/editor/list-row-motion";
+import { captureDeletedListRow, captureListRows } from "@/components/editor/list-row-motion";
+import { useEditorListMotion } from "@/components/editor/use-editor-list-motion";
 import { FileEditDialog, FilePreviewDialog, FileUploadDialog } from "@/components/files/FileDialogs";
 import { ErrorState, LoadingState } from "@/components/ui/AsyncState";
 
@@ -135,36 +136,10 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const files = fileResource.restoring ? [] : fileData;
   const postsLoading = postResource.loading;
   const filesLoading = fileResource.loading;
-  const pendingListDeletion = useRef<{ type: "post" | "file"; snapshot: DeletedListSnapshot; data: PostSummary[] | FileRecord[] } | null>(null);
-  const listDeletionMotion = useRef<(() => void) | null>(null);
-  const pendingCreatedPostId = useRef<number | null>(null);
-  const postListBeforeCreate = useRef<ListRowsSnapshot | null>(null);
-  const pendingCreatedFile = useRef<{ id: number; snapshot: ListRowsSnapshot | null; data: FileRecord[] } | null>(null);
-  const listCreationMotion = useRef<(() => void) | null>(null);
-  useLayoutEffect(() => {
-    if (urlTab !== "posts" || editTarget !== null || pendingCreatedPostId.current === null) return;
-    const id = pendingCreatedPostId.current;
-    pendingCreatedPostId.current = null;
-    listCreationMotion.current?.();
-    listCreationMotion.current = animateCreatedListRow(
-      document.querySelector<HTMLElement>('[data-editor-list][data-resource="posts"]'), id, postPage, postListBeforeCreate.current, "fade");
-    postListBeforeCreate.current = null;
-  }, [urlTab, editTarget, postData, postPage]);
-  useLayoutEffect(() => {
-    const pending = pendingListDeletion.current;
-    if (!pending) return;
-    const data = pending.type === "post" ? postData : fileData;
-    const error = pending.type === "post" ? postsError : filesError;
-    if (data === pending.data && !error) return;
-    pendingListDeletion.current = null;
-    listDeletionMotion.current?.();
-    if (!error && !data.some((item) => String(item.id) === pending.snapshot.deletedId)) {
-      listDeletionMotion.current = animateDeletedListRow(pending.snapshot, pending.type === "post" ? postPage : filePage);
-    }
-  }, [postData, fileData, postPage, filePage, postsError, filesError]);
-  useEffect(() => () => { listDeletionMotion.current?.(); listCreationMotion.current?.(); }, []);
-  useEffect(() => { listDeletionMotion.current?.(); listDeletionMotion.current = null; pendingListDeletion.current = null; }, [urlTab, editTarget]);
-  useEffect(() => { if (urlTab !== "posts") pendingCreatedPostId.current = null; }, [urlTab]);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const { pendingListDeletion, pendingCreatedPostId, postListBeforeCreate, pendingCreatedFile } = useEditorListMotion({
+    urlTab, editTarget, postData, fileData, postPage, filePage, postsError, filesError, uploadDialogOpen,
+  });
   const [hasShownList, setHasShownList] = useState(editTarget === null);
   if (editTarget === null && !hasShownList) setHasShownList(true);
   const [detailError, setDetailError] = useState("");
@@ -224,19 +199,8 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
     },
   });
 
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const [metadataFile, setMetadataFile] = useState<FileRecord | null>(null);
-  useLayoutEffect(() => {
-    if (uploadDialogOpen || !pendingCreatedFile.current) return;
-    const pending = pendingCreatedFile.current;
-    if (pending.data === fileData && !filesError) return;
-    pendingCreatedFile.current = null;
-    listCreationMotion.current?.();
-    if (!filesError) listCreationMotion.current = animateCreatedListRow(
-      document.querySelector<HTMLElement>('[data-editor-list][data-resource="files"]'), pending.id, filePage, pending.snapshot);
-  }, [uploadDialogOpen, fileData, filePage, filesError]);
-
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     type: DeleteType;

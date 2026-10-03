@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { SidebarContent, SidebarFooter } from "./Providers";
+import { SidebarContent, SidebarFooter } from "./Sidebar";
 
 export default function MobileNavigation() {
   const pathname = usePathname();

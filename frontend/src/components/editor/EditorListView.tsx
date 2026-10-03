@@ -19,7 +19,7 @@ import EditorPageLayout from "./EditorPageLayout";
 import styles from "./EditorListView.module.css";
 import highlightStyles from "./EditorRowHighlight.module.css";
 
-import type useLinksManager from "@/components/links/LinksManager";
+import type useLinksManager from "@/components/links/use-links-manager";
 import EditorResourceTabs, { EditorHeading, type EditorTab } from "./EditorResourceTabs";
 export type { EditorTab } from "./EditorResourceTabs";
 

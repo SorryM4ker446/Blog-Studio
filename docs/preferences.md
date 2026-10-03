@@ -13,6 +13,8 @@ Values are case-sensitive. Missing or invalid values use the listed defaults, ev
 
 Opening a selected category can still expand its navigation group for that route. Collapsing the sidebar hides the group while retaining its expanded preference.
 
+Desktop and mobile navigation share one category snapshot and refresh listener. Opening the mobile drawer uses the current snapshot without starting another read. Each navigation instance retains its own expansion controls. A failed refresh preserves the last successful categories, and superseded responses cannot replace newer data.
+
 Storage exceptions cannot interrupt appearance controls. If cookie writes are rejected or silently ignored, changes remain usable in the current page, but a reload uses whatever valid cookies the browser actually sends, or the defaults. No localStorage fallback is attempted. Other open tabs keep their current in-memory appearance until reloaded; no live cross-tab preference synchronization is promised.
 
 Old `blog_theme` and `sidebar_collapsed` localStorage entries are left untouched and ignored. Authentication still attempts to remove obsolete `blog_token` and `blog_user` entries while containing storage errors. Unrelated storage is not cleared. Scroll restoration uses per-entry browser history metadata, and [article recovery](editor.md#browser-recovery-copies) continues using IndexedDB with its own retention and logout rules. Appearance changes never clear recovery copies.

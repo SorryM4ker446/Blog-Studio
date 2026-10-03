@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 const DEFAULT_API_BASE = "http://localhost:8080/api";
 const DEFAULT_REQUEST_TIMEOUT_MS = 2_000;
 
@@ -40,22 +42,26 @@ export async function requestServerJSON<T = unknown>(
     timeoutMs?: number;
   } = {},
 ): Promise<ServerJSONResult<T>> {
+  return readServerJSON(path, options.cookieHeader || "", options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) as Promise<ServerJSONResult<T>>;
+}
+
+const readServerJSON = cache(async (path: string, cookieHeader: string, timeoutMs: number): Promise<ServerJSONResult> => {
   const headers = new Headers({ Accept: "application/json" });
-  if (options.cookieHeader) {
-    headers.set("Cookie", options.cookieHeader);
+  if (cookieHeader) {
+    headers.set("Cookie", cookieHeader);
   }
 
   try {
     const response = await fetch(`${getServerAPIBase()}${path}`, {
       cache: "no-store",
       headers,
-      signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       return { ok: false, status: response.status };
     }
-    return { ok: true, data: await response.json() as T };
+    return { ok: true, data: await response.json() };
   } catch {
     return { ok: false, status: null };
   }
-}
+});

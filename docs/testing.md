@@ -70,6 +70,8 @@ npm run test:unit:watch
 
 Vitest and React Testing Library cover pure data transformations and focused client-component behavior in a `jsdom` environment. Browser-dependent layout, computed styles, file downloads, image loading, navigation, and complete user workflows remain Playwright responsibilities.
 
+Server read tests launch Node with React's server condition and render through Next.js's bundled server renderer. They verify request-scoped deduplication, Cookie and timeout isolation, overlapping render isolation, fresh reads and recovery in subsequent renders, and HTTP/parse/timeout failures. Identical reads share their success or failure result within one render; the next render reads again. Sidebar tests mount desktop and mobile consumers together to verify a single refresh owner, independent expansion, late responses, unmount cleanup and retained data during outages.
+
 Identity checks use delayed responses to verify login, confirmed logout, cross-tab logout, session expiry and overlapping queries. Older successes and failures must not replace the current identity or end a newer query's loading state. Recovery Hook tests exercise failed departure writes, warning retention and successful retry, plus restoring a different new draft without replacing its source copy.
 
 Run `npm run test:coverage` to generate HTML, LCOV and Istanbul reports in `frontend/coverage`. See [quality gates](quality-gates.md) for enforced thresholds and [coverage measurements](coverage-baseline.md) for historical comparisons. Browser execution is not included in unit coverage.
@@ -84,6 +86,8 @@ npm run test:e2e
 ```
 
 Playwright builds the standalone frontend in `.next-e2e` and starts isolated servers on ports `3100` and `18080`; the separate build directory prevents a concurrently running `next dev` server from changing its static assets. It does not reuse development servers. Tests run with one worker. The desktop `chromium` project runs all applicable workflows; `mobile-chromium` selects `mobile.spec.ts`, `accessibility.spec.ts` and `keyboard.spec.ts` at a 375px viewport. Individual cases also exercise other widths.
+
+Shell navigation, article publication, file-reference workflows and Markdown toolbar validation have separate specs. Homepage link workflows remain in `homepage-links.spec.ts`. Shared authentication, article creation and file interaction helpers live in `e2e/support`; transition and failure assertions remain in the scenarios that exercise them.
 
 For a focused run:
 

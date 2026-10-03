@@ -1,7 +1,8 @@
 import { expect, test, type Locator } from "@playwright/test";
 import path from "node:path";
 import os from "node:os";
-import { loginAdmin, expectNoOverflow, scanAccessibility } from "./support/accessibility";
+import { expectNoOverflow, scanAccessibility } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 import type { HomepageLink } from "../src/lib/links";
 
@@ -482,27 +483,7 @@ test("a conflicting link edit retains the draft and invalidates the list for the
   } finally { await clearLinks(page, headers, ids); }
 });
 
-test("Markdown validation keeps rounded chrome and usable toolbar menus", async ({page}) => {
- await loginAdmin(page);
- await page.setViewportSize({width:1600,height:1000});
- await page.goto("/editor?edit=new");
- await page.getByRole("button",{name:"Save",exact:true}).click();
- const editor=page.locator(".custom-editor-wrapper .rc-md-editor");
- await expect(page.locator("#post-content-error")).toHaveText("Please enter some post content.");
- await expect(editor).toHaveCSS("border-radius","12px");
- await expect(editor.locator(".rc-md-navigation")).toHaveCSS("border-top-left-radius","11px");
- await expect(editor.locator(".editor-container")).toHaveCSS("border-bottom-left-radius","11px");
- await page.getByRole("button",{name:"Header",exact:true}).focus();
- await page.keyboard.press("Enter");
- await expect(page.getByRole("button",{name:"H1",exact:true})).toBeVisible();
- await page.keyboard.press("Escape");
- await page.locator("#post-content-error").scrollIntoViewIfNeeded();
- await page.screenshot({path:path.join(os.tmpdir(),"blog-editor-rounded-error.png")});
- await page.locator(".button-type-fullscreen").click();
- await expect(editor).toHaveClass(/full/);
- await expect(page.getByRole("button",{name:"Header",exact:true})).toBeVisible();
- await page.locator(".button-type-fullscreen").click();
-});
+
 
 for (const reducedMotion of [false, true]) {
   test(`Links share tab transitions and reuse resolved empty results without another read (reduced: ${reducedMotion})`, async ({ page }) => {

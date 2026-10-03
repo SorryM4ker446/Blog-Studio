@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiRequest } from "@/lib/api-client";
 import { AuthProvider, useAuth } from "./AuthContext";
-import TopBar from "@/components/TopBar";
+import TopBar from "@/components/shell/TopBar";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { recoveryStorage } from "@/lib/editor-recovery-store";
 import type { AuthUser } from "@/lib/app-shell-state";

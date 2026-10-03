@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
-import { loginAdmin } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { E2E_API_URL } from "./support/test-env";
 
 test("selected file types use supported extensions before upload", async ({ page }) => {

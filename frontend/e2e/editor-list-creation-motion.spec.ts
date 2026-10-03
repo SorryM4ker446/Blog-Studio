@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
-import { loginAdmin } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { createArticle } from "./support/articles";
 import { E2E_API_URL } from "./support/test-env";
 

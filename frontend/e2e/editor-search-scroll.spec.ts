@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
-import { loginAdmin } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 
 test("submitting an editor search starts each result at the top", async ({ page }) => {
   const errors: string[] = [];

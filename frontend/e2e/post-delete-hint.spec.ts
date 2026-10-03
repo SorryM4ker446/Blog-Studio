@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
-import { expectNoOverflow, loginAdmin } from "./support/accessibility";
+import { expectNoOverflow } from "./support/accessibility";
+import { loginAdmin } from "./support/auth";
 import { createArticle } from "./support/articles";
 import { E2E_API_URL, E2E_APP_URL } from "./support/test-env";
 

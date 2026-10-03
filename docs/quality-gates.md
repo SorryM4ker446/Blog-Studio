@@ -4,6 +4,8 @@ Coverage gates prevent regression within a fixed measurement scope. They supplem
 
 ## Enforced floors
 
+The frontend TypeScript configuration rejects unused locals and parameters during production builds. Lint and the full unit suite run alongside the numerical coverage gates.
+
 | Measurement | Minimum | Scope |
 | --- | ---: | --- |
 | Frontend statements / branches / functions / lines | 61% / 59% / 60% / 62% | All production `src` TS/TSX, including untested components |
@@ -45,8 +47,8 @@ npm run test:coverage --prefix frontend
 From `backend`, after configuring the guarded disposable test database:
 
 ```text
-go test -race -p 1 -count=1 -covermode=atomic -coverpkg=./... -coverprofile=coverage.out -json ./...
-go tool cover -func=coverage.out
+go test -json -race -p 1 '-count=1' '-covermode=atomic' '-coverpkg=./...' '-coverprofile=coverage.out' ./...
+go tool cover '-func=coverage.out'
 ```
 
 Save JSON test events to `test-results.json` and the function report to `coverage-summary.txt`, generate `coverage.html`, then run `node ../tools/quality/coverage.mjs backend .`. Stop if any command fails; shell pipelines must preserve the original test exit status. See [testing.md](testing.md) for PowerShell commands and database prerequisites.

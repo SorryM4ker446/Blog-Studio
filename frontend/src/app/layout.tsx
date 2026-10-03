@@ -1,6 +1,6 @@
 import "./globals.css";
-import { Providers } from "@/components/Providers";
-import ClientLayout from "@/components/ClientLayout";
+import { Providers } from "@/components/shell/Providers";
+import ClientLayout from "@/components/shell/ClientLayout";
 import { cookies } from "next/headers";
 import { loadInitialAppShellState } from "@/lib/server-app-shell";
 import { readPreference } from "@/lib/preference-cookies";

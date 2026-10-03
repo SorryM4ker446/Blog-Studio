@@ -14,7 +14,7 @@ npm run dev
 
 Open <http://localhost:3000>. `NEXT_PUBLIC_API_BASE_URL` is the browser API address; `API_INTERNAL_BASE_URL` is used by the Next.js server. Both default to `http://localhost:8080/api` for native development. Keep credentials out of these URLs.
 
-Routes are in `src/app`, shared components in `src/components`, and global styles in `src/app/globals.css`.
+Routes are in `src/app`. The layout, navigation and provider composition live in `src/components/shell`; shared state lives in `src/context`. Editor and link components keep their lifecycle hooks alongside the UI. `src/app/globals.css` imports the styles in `src/app/styles` in cascade order; keep that order when editing shared or theme overrides.
 
 ## Checks
 

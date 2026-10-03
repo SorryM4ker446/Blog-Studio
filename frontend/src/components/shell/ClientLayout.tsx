@@ -2,10 +2,11 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useSidebar, SidebarContent, SidebarFooter } from "./Providers";
+import { useSidebar } from "@/context/SidebarContext";
+import { SidebarContent, SidebarFooter } from "./Sidebar";
 import TopBar from "./TopBar";
 import MobileNavigation from "./MobileNavigation";
-import { TriangleIcon, StudioLogo } from "./Icons";
+import { TriangleIcon, StudioLogo } from "@/components/Icons";
 import { createSidebarLayoutMotion } from "@/lib/sidebar-layout-motion";
 import { readNavigationEntry, saveEntryScroll } from "@/lib/navigation-entry";
 import { restoreScroll } from "@/lib/restore-scroll";
