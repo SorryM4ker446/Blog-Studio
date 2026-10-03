@@ -8,6 +8,8 @@ Older `/api`-scoped session Cookies are expired during login, logout, and identi
 
 Logging out or changing the password increments `session_version`, immediately invalidating copies of the previous Cookie. Password changes require signing in again.
 
+Browser identity checks apply only the newest outstanding result for the current login state. Login, confirmed logout, matching cross-tab logout and session expiry invalidate earlier checks, so a delayed success or failure cannot restore a signed-out identity or replace a newer login. Superseded checks also cannot end a newer check's loading state. Backend role and session-version checks remain authoritative.
+
 ## CSRF protection
 
 Before login or another state-changing request, the frontend obtains a CSRF token from `GET /api/csrf`. State-changing requests must send the matching token in the `X-CSRF-Token` header. The server compares the header with the CSRF Cookie using a constant-time comparison.

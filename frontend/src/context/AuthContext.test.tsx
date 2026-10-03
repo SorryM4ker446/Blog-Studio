@@ -4,6 +4,8 @@ import { ApiError, apiRequest } from "@/lib/api-client";
 import { AuthProvider, useAuth } from "./AuthContext";
 import TopBar from "@/components/TopBar";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { recoveryStorage } from "@/lib/editor-recovery-store";
+import type { AuthUser } from "@/lib/app-shell-state";
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -23,8 +25,10 @@ vi.mock("@/lib/api", () => ({
   normalizeFileViewUrl: (value: string) => value,
 }));
 
-function AuthProbe() {
-  const { user, profile, authStatus, authError, isLoading, isProfileLoading } = useAuth();
+function AuthProbe({ onAuth }: { onAuth?: (auth: ReturnType<typeof useAuth>) => void } = {}) {
+  const auth = useAuth();
+  onAuth?.(auth);
+  const { user, profile, authStatus, authError, isLoading, isProfileLoading } = auth;
   return (
     <div>
       <span data-testid="status">{authStatus}</span>
@@ -40,6 +44,23 @@ function AuthProbe() {
 function LogoutButton() {
   const { logout } = useAuth();
   return <button type="button" onClick={() => void logout().catch(() => undefined)}>Log out</button>;
+}
+
+function pendingIdentity() {
+  let resolve!: (user: AuthUser | null) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<AuthUser | null>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+function renderAuthenticated() {
+  let auth!: ReturnType<typeof useAuth>;
+  const view = render(<AuthProvider initialState={{
+    user: { id: 1, username: "admin", role: "admin" },
+    profile: null, profileResolved: true, authStatus: "authenticated",
+    authNeedsClientCheck: false, categories: [], categoriesResolved: true,
+  }}><AuthProbe onAuth={value => { auth = value; }} /></AuthProvider>);
+  return { ...view, auth: () => auth };
 }
 
 describe("AuthProvider", () => {
@@ -159,6 +180,68 @@ describe("AuthProvider", () => {
     expect(mocks.replace).not.toHaveBeenCalled();
   });
 
+  it.each(["success", "failure"])("ignores an old identity check's %s after confirmed logout", async outcome => {
+    vi.spyOn(recoveryStorage, "clearUser").mockResolvedValue(undefined);
+    const old = pendingIdentity();
+    mocks.getCurrentUser.mockReturnValueOnce(old.promise);
+    const view = renderAuthenticated();
+    let checking!: Promise<void>;
+    act(() => { checking = view.auth().refreshAuth(); });
+    await act(() => view.auth().logout());
+    expect(screen.getByTestId("status")).toHaveTextContent("anonymous");
+    await act(async () => {
+      if (outcome === "success") old.resolve({ id: 1, username: "admin", role: "admin" });
+      else old.reject(new Error("Late outage"));
+      await checking;
+    });
+    expect(screen.getByTestId("status")).toHaveTextContent("anonymous");
+    expect(screen.getByTestId("user")).toHaveTextContent("none");
+    expect(screen.getByTestId("loading")).toHaveTextContent("false");
+    expect(screen.getByTestId("error-kind")).toHaveTextContent("none");
+    expect(mocks.replace).toHaveBeenCalledExactlyOnceWith("/");
+  });
+
+  it.each(["success", "failure"])("ignores an old identity check's %s after a newer login", async outcome => {
+    const old = pendingIdentity();
+    mocks.getCurrentUser.mockReturnValueOnce(old.promise);
+    const view = renderAuthenticated();
+    let checking!: Promise<void>;
+    act(() => { checking = view.auth().refreshAuth(); });
+    act(() => view.auth().login({ id: 2, username: "new-admin", role: "admin" }));
+    await act(async () => {
+      if (outcome === "success") old.resolve(null);
+      else old.reject(new Error("Late outage"));
+      await checking;
+    });
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+    expect(screen.getByTestId("user")).toHaveTextContent("new-admin");
+    expect(screen.getByTestId("loading")).toHaveTextContent("false");
+    expect(screen.getByTestId("error-kind")).toHaveTextContent("none");
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it.each(["success", "failure"])("ignores an older check's %s while a newer identity check is pending", async outcome => {
+    const old = pendingIdentity(), latest = pendingIdentity();
+    mocks.getCurrentUser.mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
+    const view = renderAuthenticated();
+    let first!: Promise<void>, second!: Promise<void>;
+    act(() => { first = view.auth().refreshAuth(); });
+    act(() => { second = view.auth().refreshAuth(); });
+    await act(async () => {
+      if (outcome === "success") old.resolve(null);
+      else old.reject(new Error("Late outage"));
+      await first;
+    });
+    expect(screen.getByTestId("status")).toHaveTextContent("checking");
+    expect(screen.getByTestId("user")).toHaveTextContent("admin");
+    expect(screen.getByTestId("loading")).toHaveTextContent("true");
+    expect(screen.getByTestId("error-kind")).toHaveTextContent("none");
+    await act(async () => { latest.resolve({ id: 2, username: "new-admin", role: "admin" }); await second; });
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+    expect(screen.getByTestId("user")).toHaveTextContent("new-admin");
+    expect(screen.getByTestId("loading")).toHaveTextContent("false");
+  });
+
   it("clears identity only for a matching cross-tab logout notification", async () => {
     const channels: { onmessage: ((event: { data: unknown }) => void) | null; close: () => void }[] = [];
     vi.stubGlobal("BroadcastChannel", class {
@@ -177,6 +260,26 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("status")).toHaveTextContent("anonymous");
   });
 
+  it("keeps a cross-tab logout anonymous when an earlier identity check returns", async () => {
+    const channels: { onmessage: ((event: { data: unknown }) => void) | null; close: () => void }[] = [];
+    vi.stubGlobal("BroadcastChannel", class {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      close = vi.fn();
+      constructor() { channels.push(this); }
+    });
+    const old = pendingIdentity();
+    mocks.getCurrentUser.mockReturnValueOnce(old.promise);
+    const view = renderAuthenticated();
+    let checking!: Promise<void>;
+    act(() => { checking = view.auth().refreshAuth(); });
+    act(() => channels[0].onmessage?.({ data: { action: "logout", userId: 1 } }));
+    expect(screen.getByTestId("status")).toHaveTextContent("anonymous");
+    await act(async () => { old.resolve({ id: 1, username: "admin", role: "admin" }); await checking; });
+    expect(screen.getByTestId("status")).toHaveTextContent("anonymous");
+    expect(screen.getByTestId("user")).toHaveTextContent("none");
+    expect(screen.getByTestId("loading")).toHaveTextContent("false");
+  });
+
   it("clears an expired session and redirects an admin path only once", async () => {
     mocks.getCurrentUser.mockResolvedValue({ id: 1, username: "admin", role: "admin" });
     window.history.replaceState({}, "", "/editor?tab=files");
@@ -188,8 +291,14 @@ describe("AuthProvider", () => {
       headers: { "Content-Type": "application/json" },
     })));
 
-    render(<AuthProvider><AuthProbe /></AuthProvider>);
+    let auth!: ReturnType<typeof useAuth>;
+    render(<AuthProvider><AuthProbe onAuth={value => { auth = value; }} /></AuthProvider>);
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+
+    const old = pendingIdentity();
+    mocks.getCurrentUser.mockReturnValueOnce(old.promise);
+    let checking!: Promise<void>;
+    act(() => { checking = auth.refreshAuth(); });
 
     await act(async () => {
       await apiRequest("/admin/posts", { auth: true }).catch(() => undefined);
@@ -200,5 +309,10 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("user")).toHaveTextContent("none");
     expect(mocks.replace).toHaveBeenCalledTimes(1);
     expect(mocks.replace).toHaveBeenCalledWith("/login?redirect=%2Feditor%3Ftab%3Dfiles");
+    await act(async () => { old.resolve({ id: 1, username: "admin", role: "admin" }); await checking; });
+    expect(screen.getByTestId("status")).toHaveTextContent("anonymous");
+    expect(screen.getByTestId("user")).toHaveTextContent("none");
+    expect(screen.getByTestId("loading")).toHaveTextContent("false");
+    expect(mocks.replace).toHaveBeenCalledOnce();
   });
 });

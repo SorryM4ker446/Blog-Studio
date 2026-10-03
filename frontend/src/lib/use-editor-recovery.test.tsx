@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { recoveryStorage, RECOVERY_TTL, type RecoveryCopy } from "./editor-recovery-store";
 import { useEditorRecovery, type RecoveryInput } from "./use-editor-recovery";
-import { preserveExpiredEditor } from "./editor-navigation";
+import { answerNavigationPrompt, getNavigationPrompt, preserveExpiredEditor, requestEditorNavigation } from "./editor-navigation";
 
 const baseline = { title: "Saved", summary: "", content: "Saved body", category_id: 0 };
 const fields = { ...baseline, content: "Recovered body" };
@@ -241,4 +241,47 @@ it("reports discarded malformed copies but ignores discovery failures after unmo
   const pending = renderHook(() => useEditorRecovery(initial));
   pending.unmount();
   await act(async () => reject(new Error("Late failure")));
+});
+
+it("keeps departure blocked after a failed recovery write and clears the warning when retry succeeds", async () => {
+  const view = renderHook(() => useEditorRecovery({ ...initial, dirty: true, fields }));
+  await waitFor(() => expect(view.result.current.checking).toBe(false));
+  vi.spyOn(recoveryStorage, "put").mockRejectedValueOnce(new Error("Storage full"));
+  const proceed = vi.fn();
+  expect(requestEditorNavigation("/posts", proceed)).toBe(false);
+  expect(getNavigationPrompt()?.error).toBe("");
+  await act(() => answerNavigationPrompt(true));
+  expect(proceed).not.toHaveBeenCalled();
+  expect(getNavigationPrompt()).toMatchObject({ busy: false, error: expect.stringContaining("could not be saved") });
+  expect(view.result.current.error).toContain("full or unavailable");
+  await act(() => answerNavigationPrompt(false));
+  expect(requestEditorNavigation("/posts", proceed)).toBe(false);
+  expect(getNavigationPrompt()?.error).toContain("full or unavailable");
+  await act(() => answerNavigationPrompt(true));
+  expect(proceed).toHaveBeenCalledOnce();
+  expect(getNavigationPrompt()).toBeNull();
+  expect(view.result.current.error).toBe("");
+  expect((await recoveryStorage.list(1, "post:7"))[0].fields).toEqual(fields);
+});
+
+it("restores a different new draft without replacing its source and removes only the current copy when edits revert", async () => {
+  vi.stubGlobal("BroadcastChannel", undefined);
+  const now = Date.now();
+  const source: RecoveryCopy = { id: "closed-draft", format: 1, userId: 1, tab: "another-tab", target: "new:original",
+    version: null, baseline, fields, updatedAt: now, expiresAt: now + RECOVERY_TTL };
+  await recoveryStorage.put(await recoveryStorage.start(1), source);
+  const onRestore = vi.fn();
+  const input = { ...initial, target: "new:current", version: null, onRestore };
+  const view = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: input });
+  await waitFor(() => expect(view.result.current.copies).toHaveLength(1));
+  act(() => view.result.current.restore(view.result.current.copies[0]));
+  expect(onRestore).toHaveBeenCalledWith(expect.objectContaining({ id: source.id }));
+  view.rerender({ ...input, dirty: true, fields });
+  await act(() => view.result.current.flush());
+  expect(await recoveryStorage.list(1, "new:current")).toEqual([expect.objectContaining({ fields, target: "new:current" })]);
+  expect(await recoveryStorage.list(1, "new:original")).toEqual([expect.objectContaining({ id: source.id, fields })]);
+  view.rerender({ ...input, dirty: false, fields: baseline });
+  await act(() => view.result.current.flush());
+  expect(await recoveryStorage.list(1, "new:current")).toEqual([]);
+  expect(await recoveryStorage.list(1, "new:original")).toEqual([expect.objectContaining({ id: source.id, fields })]);
 });

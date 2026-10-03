@@ -55,8 +55,13 @@ export function AuthProvider({
   const profileRequestIdRef = useRef(0);
   const sessionExpiryHandledRef = useRef(false);
   const authRevisionRef = useRef(0);
+  const authRequestIdRef = useRef(0);
 
   async function verifyAuth(silent = false) {
+    const revision = authRevisionRef.current;
+    const requestId = ++authRequestIdRef.current;
+    const isCurrent = () => isMountedRef.current
+      && revision === authRevisionRef.current && requestId === authRequestIdRef.current;
     if (!silent) {
       setIsLoading(true);
       setAuthStatus("checking");
@@ -64,13 +69,13 @@ export function AuthProvider({
     }
     try {
       const currentUser = await getCurrentUser();
-      if (isMountedRef.current) {
+      if (isCurrent()) {
         setUser(currentUser);
         setAuthStatus(currentUser ? "authenticated" : "anonymous");
         sessionExpiryHandledRef.current = false;
       }
     } catch (error) {
-      if (isMountedRef.current) {
+      if (isCurrent()) {
         const authCheckError = isApiError(error)
           ? error
           : new ApiError("Unable to verify the current session", {
@@ -83,7 +88,7 @@ export function AuthProvider({
         setAuthError(authCheckError);
       }
     } finally {
-      if (isMountedRef.current && !silent) setIsLoading(false);
+      if (isCurrent() && !silent) setIsLoading(false);
     }
   }
 
@@ -106,6 +111,7 @@ export function AuthProvider({
 
     return () => {
       isMountedRef.current = false;
+      authRequestIdRef.current += 1;
     };
   }, []);
 
@@ -116,7 +122,7 @@ export function AuthProvider({
       }
       sessionExpiryHandledRef.current = true;
       clearListReturnCache();
-      const revision = authRevisionRef.current;
+      const revision = ++authRevisionRef.current;
       await preserveExpiredEditor();
       if (!isMountedRef.current || revision !== authRevisionRef.current) return;
       setUser(null);

@@ -70,6 +70,8 @@ npm run test:unit:watch
 
 Vitest and React Testing Library cover pure data transformations and focused client-component behavior in a `jsdom` environment. Browser-dependent layout, computed styles, file downloads, image loading, navigation, and complete user workflows remain Playwright responsibilities.
 
+Identity checks use delayed responses to verify login, confirmed logout, cross-tab logout, session expiry and overlapping queries. Older successes and failures must not replace the current identity or end a newer query's loading state. Recovery Hook tests exercise failed departure writes, warning retention and successful retry, plus restoring a different new draft without replacing its source copy.
+
 Run `npm run test:coverage` to generate HTML, LCOV and Istanbul reports in `frontend/coverage`. See [quality gates](quality-gates.md) for enforced thresholds and [coverage measurements](coverage-baseline.md) for historical comparisons. Browser execution is not included in unit coverage.
 
 ## Browser workflow test
