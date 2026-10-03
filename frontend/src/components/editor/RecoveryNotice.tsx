@@ -34,7 +34,7 @@ export default function RecoveryNotice({ copies, error, onRestore, onDiscard, on
     try { await onDiscard(); } finally { setDiscarding(false); }
   }
   return <>
-    {error && <p className={styles.error} role="alert">{error}</p>}
+    {error && <p className={styles.recoveryStatus} role="alert">{error}</p>}
     {visible.length > 0 && <div className={styles.recoveryShell} data-recovery-shell data-leaving={leaving} onTransitionEnd={finishExit}>
       <div className={styles.recoveryClip}>
         <section className={styles.panel} aria-label="Browser recovery" aria-busy={discarding} aria-hidden={leaving} inert={leaving}>

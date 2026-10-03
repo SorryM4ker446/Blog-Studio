@@ -68,21 +68,9 @@ function LoginPageContent() {
           boxShadow: "0 12px 40px rgba(0,0,0,0.12)",
         }}
       >
-        <div
-          style={{
-            width: "64px",
-            height: "64px",
-            background: "rgba(168, 199, 250, 0.15)",
-            borderRadius: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "2rem",
-            marginBottom: "1.5rem",
-          }}
-        >
-          <KeyIcon size={32} />
-        </div>
+        <span className="login-symbol" aria-hidden="true">
+          <KeyIcon size={23} />
+        </span>
 
         <h1
           style={{

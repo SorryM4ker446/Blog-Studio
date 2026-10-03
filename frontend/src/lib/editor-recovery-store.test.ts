@@ -52,6 +52,12 @@ describe("Browser recovery storage", () => {
     expect(await recoveryStorage.list(1, row.target)).toEqual([]);
     expect(await persistedCopy(row.id)).toBeUndefined();
   });
+  it("accepts a recovery copy larger than the former 4 MiB limit", async () => {
+    const session = await recoveryStorage.start(1);
+    const row = copy({ fields: { ...fields, content: "x".repeat(4 * 1024 * 1024 + 1) } });
+    await expect(recoveryStorage.put(session, row)).resolves.toBeUndefined();
+    expect((await persistedCopy(row.id) as RecoveryCopy).fields.content).toHaveLength(4 * 1024 * 1024 + 1);
+  });
   it("keeps three copies per article or draft and evicts the oldest entry within that target", async () => {
     const session = await recoveryStorage.start(1);
     const now = Date.now();
@@ -190,7 +196,7 @@ describe("Recovery write scheduling", () => {
   it("reports quota failures and remains usable for manual retries", async () => {
     const error = vi.fn(); const put = vi.fn().mockRejectedValue(new Error("Quota"));
     const writer = new RecoveryWriter({ put } as unknown as RecoveryStorage, { userId: 1, epoch: 0, startedAt: Date.now() }, error);
-    writer.schedule(copy()); await writer.flush(); expect(error).toHaveBeenCalledOnce();
-    put.mockResolvedValue(undefined); writer.schedule(copy()); await writer.flush(); expect(put).toHaveBeenCalledTimes(2);
+    writer.schedule(copy()); expect(await writer.flush()).toBe(false); expect(error).toHaveBeenCalledOnce();
+    put.mockResolvedValue(undefined); writer.schedule(copy()); expect(await writer.flush()).toBe(true); expect(put).toHaveBeenCalledTimes(2);
   });
 });

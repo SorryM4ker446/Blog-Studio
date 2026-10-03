@@ -12,7 +12,7 @@ async function login(page: Page) {
   return { "X-CSRF-Token": (await response.json()).csrf_token };
 }
 async function copies(page: Page) {
-  return page.evaluate(() => new Promise<{ id: string; target: string; tab: string; version: number | null; updatedAt: number; fields: { title: string; content: string } }[]>((resolve, reject) => {
+  return page.evaluate(() => new Promise<{ id: string; userId: number; target: string; tab: string; version: number | null; updatedAt: number; fields: { title: string; content: string } }[]>((resolve, reject) => {
     const request = indexedDB.open("blog-studio-editor-recovery", 1);
     request.onerror = () => reject(new Error("Unable to inspect test copies"));
     request.onsuccess = () => {
@@ -332,13 +332,66 @@ test("unavailable storage leaves manual saving usable", async ({ page }) => {
   const headers = await login(page); page.on("dialog", dialog => dialog.accept());
   await page.addInitScript(() => { Object.defineProperty(window, "indexedDB", { configurable: true, get: () => { throw new DOMException("Denied", "SecurityError"); } }); });
   await page.goto("/editor?tab=posts&edit=new");
-  await expect(page.getByRole("alert").filter({ hasText: "Browser recovery is unavailable" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Browser recovery is full or unavailable" })).toBeVisible();
   await page.getByLabel("POST TITLE").fill(`Storage unavailable ${Date.now()}`); await body(page).fill("Manual save still works");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("All changes saved", { exact: true })).toBeVisible();
   const id = new URL(page.url()).searchParams.get("edit");
   expect(Number(id)).toBeGreaterThan(0);
   await page.request.delete(`${E2E_API_URL}/admin/posts/${id}`, { headers });
+});
+
+test("recovery capacity shows an inline error above the editor", async ({ page }, testInfo) => {
+  await login(page);
+  await page.goto("/editor?tab=posts&edit=new");
+  await page.getByLabel("POST TITLE").fill("Capacity example");
+  await body(page).fill("First unsaved change");
+  await expect.poll(async () => (await copies(page)).length).toBe(1);
+  const [current] = await copies(page);
+  await page.evaluate(userId => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("blog-studio-editor-recovery", 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction("copies", "readwrite");
+      const now = Date.now();
+      const baseline = { title: "", summary: "", content: "", category_id: 0 };
+      tx.objectStore("copies").put({ id: crypto.randomUUID(), format: 1, userId, target: "new:capacity-example", tab: "capacity-example",
+        updatedAt: now, expiresAt: now + 7 * 24 * 60 * 60_000, version: null, baseline,
+        fields: { ...baseline, content: "x".repeat(10_000_000) } });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  }), current.userId);
+  await body(page).fill("Second unsaved change exceeds browser recovery capacity");
+  const alert = page.getByRole("alert").filter({ hasText: "Browser recovery is full or unavailable" });
+  await expect(alert).toBeVisible();
+  await expect(alert.locator("svg")).toHaveCount(0);
+  await expect(alert).toContainText("Save to the server");
+  await expect(body(page)).toHaveValue("Second unsaved change exceeds browser recovery capacity");
+  await page.locator(".content-scroll").evaluate(element => { element.scrollTop = 0; });
+  await expect(alert).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("recovery-capacity-alert.png"), fullPage: false });
+  let refreshPrompt = false;
+  page.once("dialog", dialog => { refreshPrompt = dialog.type() === "beforeunload"; return dialog.dismiss(); });
+  await page.getByRole("button", { name: "Refresh page" }).click();
+  await expect.poll(() => refreshPrompt).toBe(true);
+  await expect(body(page)).toHaveValue("Second unsaved change exceeds browser recovery capacity");
+  await page.getByRole("button", { name: "Back to content list" }).click();
+  const leave = page.getByRole("alertdialog", { name: "Leave this editor?" });
+  await expect(leave.getByRole("alert")).toContainText("Browser recovery is full or unavailable");
+  await expect(leave.locator("svg")).toHaveCount(1);
+  await expect(leave.getByRole("alert").locator("svg")).toHaveCount(0);
+  await expect(leave.getByRole("button", { name: "Leave anyway" })).toBeVisible();
+  await expect(body(page)).toHaveValue("Second unsaved change exceeds browser recovery capacity");
+  await page.screenshot({ path: testInfo.outputPath("recovery-capacity-leave-error.png"), fullPage: false });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(leave).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("recovery-capacity-leave-mobile.png"), fullPage: false });
+  await leave.getByRole("button", { name: "Leave anyway" }).click();
+  await expect(leave).toHaveCount(0);
+  await expect(page).toHaveURL(/\/editor\?tab=posts/);
+  expect((await copies(page)).some(copy => copy.fields.content === "Second unsaved change exceeds browser recovery capacity")).toBe(false);
 });
 
 test("restarted browsers retain article recovery through authentication renewal without logout", async ({ playwright }, testInfo) => {

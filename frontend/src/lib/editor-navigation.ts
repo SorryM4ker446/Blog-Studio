@@ -2,12 +2,13 @@ export interface LeaveGuard {
   dirty: () => boolean;
   busy: () => boolean;
   flush: () => Promise<void>;
+  warning?: () => string;
   expire: () => Promise<void>;
 }
 let guard: LeaveGuard | null = null;
 type NavigationPrompt = { busy: boolean; error: string } | null;
 let prompt: NavigationPrompt = null;
-let pending: { owner: LeaveGuard; proceed: () => void } | null = null;
+let pending: { owner: LeaveGuard; proceed: () => void; warned: boolean } | null = null;
 let continuing = false;
 const listeners = new Set<() => void>();
 function publishPrompt(value: NavigationPrompt) { prompt = value; listeners.forEach(listener => listener()); }
@@ -23,8 +24,12 @@ export async function answerNavigationPrompt(leave: boolean) {
   publishPrompt({ busy: true, error: "" });
   try { await request.owner.flush(); }
   catch {
-    if (pending === request) publishPrompt({ busy: false, error: "Could not prepare browser recovery. Stay here and copy your text, or try again." });
-    return;
+    if (pending !== request) return;
+    if (!request.warned) {
+      request.warned = true;
+      publishPrompt({ busy: false, error: "Browser recovery could not be saved. Save or copy your edits before leaving." });
+      return;
+    }
   }
   if (pending !== request) return;
   cancelPrompt();
@@ -46,8 +51,9 @@ export function requestEditorNavigation(url?: string, proceed: () => void = () =
   if (guard.busy()) return false;
   if (!guard.dirty()) return true;
   if (!pending) {
-    pending = { owner: guard, proceed };
-    publishPrompt({ busy: false, error: "" });
+    const warning = guard.warning?.() ?? "";
+    pending = { owner: guard, proceed, warned: Boolean(warning) };
+    publishPrompt({ busy: false, error: warning });
   }
   return false;
 }
@@ -106,7 +112,11 @@ export function installEditorNavigation() {
     })) { event.preventDefault(); event.stopImmediatePropagation(); }
   };
   const unload = (event: BeforeUnloadEvent) => {
-    if (guard && (guard.dirty() || guard.busy())) { void guard.flush(); event.preventDefault(); event.returnValue = ""; }
+    if (guard && (guard.dirty() || guard.busy())) {
+      // Native unload cannot await recovery or display an application error.
+      void guard.flush().catch(() => {});
+      event.preventDefault(); event.returnValue = "";
+    }
   };
   window.addEventListener("popstate", pop, true);
   document.addEventListener("click", click, true);

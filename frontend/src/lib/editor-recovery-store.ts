@@ -1,7 +1,7 @@
 import type { PostSnapshot } from "./post-editor";
 
 export const RECOVERY_TTL = 7 * 24 * 60 * 60_000;
-export const RECOVERY_MAX_BYTES = 4 * 1024 * 1024;
+export const RECOVERY_MAX_BYTES = 10_000_000;
 export const RECOVERY_MAX_COPIES_PER_TARGET = 3;
 export const RECOVERY_DATABASE = "blog-studio-editor-recovery";
 export interface RecoveryCopy {
@@ -175,7 +175,7 @@ export class RecoveryWriter {
   private pending: { copy: RecoveryCopy; equivalentTo?: string } | undefined;
   private generation = 0;
   private chain: Promise<void> = Promise.resolve();
-  constructor(private storage: RecoveryStorage, private session: RecoverySession, private onError: () => void) {}
+  constructor(private storage: RecoveryStorage, private session: RecoverySession, private onError: () => void, private onSuccess?: () => void) {}
   schedule(copy: RecoveryCopy, equivalentTo?: string) {
     this.pending = { copy: structuredClone(copy), equivalentTo };
     if (!this.timer) this.timer = setTimeout(() => { this.timer = undefined; void this.flush(); }, 1000);
@@ -186,10 +186,13 @@ export class RecoveryWriter {
     const pending = this.pending;
     this.pending = undefined;
     const generation = this.generation;
-    if (pending) this.chain = this.chain.then(async () => {
-      if (generation === this.generation) await this.storage.put(this.session, pending.copy, pending.equivalentTo);
-    }).catch(this.onError);
-    return this.chain;
+    const result = pending ? this.chain.then(async () => {
+      if (generation !== this.generation) return false;
+      try { await this.storage.put(this.session, pending.copy, pending.equivalentTo); this.onSuccess?.(); return true; }
+      catch { this.onError(); return false; }
+    }) : this.chain.then(() => true);
+    this.chain = result.then(() => {});
+    return result;
   }
   cancel() { this.generation++; this.pending = undefined; if (this.timer) clearTimeout(this.timer); this.timer = undefined; }
   clear(ids: string[]) {

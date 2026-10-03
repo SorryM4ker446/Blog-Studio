@@ -48,13 +48,14 @@ export default function EditorLeaveDialog() {
         <p className={styles.eyebrow}>UNSAVED CHANGES</p>
         <h2 id={titleId} className={styles.title}>Leave this editor?</h2>
         <p id={descriptionId} className={styles.description}>Your changes haven’t been saved to the server. A browser recovery copy may be available when you return.</p>
-        <div className={styles.hint}>Choose Stay in editor to keep working or save your changes first.</div>
-        {prompt.error && <p className={styles.error} role="alert">{prompt.error}</p>}
-        <div className={styles.dialogActions}>
+        {prompt.error ? <p className={styles.dialogWarning} role="alert">
+          {prompt.error}
+        </p> : <div className={styles.hint}>Choose Stay in editor to keep working or save your changes first.</div>}
+        <div className={`${styles.dialogActions} ${prompt.error ? styles.dialogActionsWithWarning : ""}`}>
           <button ref={stayRef} type="button" className={`${styles.button} ${styles.secondary}`}
             onClick={() => void answerNavigationPrompt(false)}>Stay in editor</button>
           <button type="button" className={`${styles.button} ${styles.primary}`} disabled={prompt.busy}
-            onClick={() => void answerNavigationPrompt(true)}>{prompt.busy ? "Leaving…" : "Leave editor"}</button>
+            onClick={() => void answerNavigationPrompt(true)}>{prompt.busy ? "Leaving…" : prompt.error ? "Leave anyway" : "Leave editor"}</button>
         </div>
       </div>
     </dialog>, document.body,
