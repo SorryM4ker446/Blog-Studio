@@ -58,7 +58,13 @@ it("shows actual transfer progress only after upload starts and clears it after 
   expect(within(dialog).getByText("Replace").closest("button")).toBeEnabled();
 
   fireEvent.click(within(dialog).getByRole("button", { name: /^Upload$/ }));
-  expect(within(dialog).getByRole("progressbar")).not.toHaveAttribute("aria-valuenow");
+  const progressbar = within(dialog).getByRole("progressbar");
+  expect(progressbar).toHaveAttribute("aria-valuenow", "0");
+  expect(progressbar.firstElementChild).toHaveStyle({ width: "0%" });
+  expect(within(dialog).getByText("0 B of 100 B")).toBeVisible();
+  act(() => reportProgress(null));
+  expect(progressbar).toHaveAttribute("aria-valuenow", "0");
+  expect(progressbar.firstElementChild).toHaveStyle({ width: "0%" });
   expect(within(dialog).getByRole("button", { name: "Replace" })).toBeDisabled();
   act(() => reportProgress({ loaded: 68, total: 100 }));
   expect(within(dialog).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "68");
@@ -72,6 +78,11 @@ it("shows actual transfer progress only after upload starts and clears it after 
   expect(within(dialog).getByRole("alert")).toHaveTextContent("Upload failed");
   expect(within(dialog).getByRole("button", { name: "Replace" })).toBeEnabled();
   expect(within(dialog).getByRole("button", { name: /^Upload$/ })).toBeEnabled();
+  fireEvent.click(within(dialog).getByRole("button", { name: /^Upload$/ }));
+  expect(onUpload).toHaveBeenCalledTimes(2);
+  expect(within(dialog).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+  expect(within(dialog).getByRole("progressbar").firstElementChild).toHaveStyle({ width: "0%" });
+  await act(async () => finishUpload({ ok: false, error: "Upload failed" }));
 });
 
 it("keeps unsupported files blocked until a different file is selected", async () => {

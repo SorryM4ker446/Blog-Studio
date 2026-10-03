@@ -161,7 +161,7 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
       || errorCode === "unsupported_file_type");
   const progressPercent = uploadProgress && uploadProgress.total > 0
     ? Math.max(0, Math.min(100, Math.floor(uploadProgress.loaded / uploadProgress.total * 100)))
-    : null;
+    : 0;
   const uploadedFileBytes = selectedFile && uploadProgress && uploadProgress.total > 0
     ? Math.min(selectedFile.size, Math.round(selectedFile.size * uploadProgress.loaded / uploadProgress.total))
     : 0;
@@ -263,16 +263,15 @@ export function FileUploadDialog({ open, onClose, onUpload }: FileUploadDialogPr
             {saving && <div className={styles.uploadProgress}>
               <div className={styles.uploadProgressHeading}>
                 <span>{showProcessing ? "Processing file…" : "Uploading file…"}</span>
-                {progressPercent !== null && <span className={styles.uploadPercent}>{progressPercent}%</span>}
+                <span className={styles.uploadPercent}>{progressPercent}%</span>
               </div>
               <div className={styles.progressTrack} role="progressbar" aria-label="File upload progress"
-                aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent ?? undefined}>
-                <span className={`${styles.progressFill} ${progressPercent === null ? styles.progressIndeterminate : ""}`}
-                  style={progressPercent === null ? undefined : { width: `${progressPercent}%` }} />
+                aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
+                <span className={styles.progressFill} style={{ width: `${progressPercent}%` }} />
               </div>
-              {progressPercent !== null && <span className={styles.progressAmount}>
+              <span className={styles.progressAmount}>
                 {formatFileSize(uploadedFileBytes)} of {formatFileSize(selectedFile.size)}
-              </span>}
+              </span>
             </div>}
           </div>
         ) : (

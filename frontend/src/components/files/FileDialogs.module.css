@@ -318,23 +318,12 @@
   transition: width 120ms ease;
 }
 
-.progressIndeterminate {
-  width: 32%;
-  animation: uploadProgressSweep 1.4s ease-in-out infinite alternate;
-}
-
 .progressAmount {
   color: var(--text-muted);
   font-size: 0.7rem;
 }
 
-@keyframes uploadProgressSweep {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(315%); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .progressIndeterminate { animation: none; }
   .progressFill { transition: none; }
 }
 
