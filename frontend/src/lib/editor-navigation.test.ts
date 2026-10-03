@@ -128,6 +128,26 @@ it("allows cancellation while recovery is flushing and ignores its late completi
   finish(); await answer;
   expect(proceed).not.toHaveBeenCalled();
 });
+it("waits for the closing transition before navigating and cancels a stale continuation", async () => {
+  protect();
+  const proceed = vi.fn();
+  requestEditorNavigation("/posts", proceed);
+  let finish!: () => void;
+  const closing = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+  const answer = answerNavigationPrompt(true, closing);
+  await vi.waitFor(() => expect(closing).toHaveBeenCalledOnce());
+  expect(proceed).not.toHaveBeenCalled();
+  expect(getNavigationPrompt()?.busy).toBe(true);
+  finish(); await answer;
+  expect(proceed).toHaveBeenCalledOnce();
+
+  requestEditorNavigation("/posts", proceed);
+  const interrupted = answerNavigationPrompt(true, closing);
+  await vi.waitFor(() => expect(closing).toHaveBeenCalledTimes(2));
+  await answerNavigationPrompt(false);
+  finish(); await interrupted;
+  expect(proceed).toHaveBeenCalledOnce();
+});
 it("dismisses pending decisions on session expiry and confirmed logout", async () => {
   protect(); const proceed = vi.fn(); requestEditorNavigation("/posts", proceed);
   await preserveExpiredEditor(); await answerNavigationPrompt(true);

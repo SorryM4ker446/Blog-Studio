@@ -367,6 +367,8 @@ test("recovery capacity shows an inline error above the editor", async ({ page }
   const alert = page.getByRole("alert").filter({ hasText: "Browser recovery is full or unavailable" });
   await expect(alert).toBeVisible();
   await expect(alert.locator("svg")).toHaveCount(0);
+  await expect(page.locator("[data-recovery-status]")).toHaveAttribute("data-visible", "true");
+  expect(await alert.evaluate(element => getComputedStyle(element).animationName)).toContain("recoveryStatusIn");
   await expect(alert).toContainText("Save to the server");
   await expect(body(page)).toHaveValue("Second unsaved change exceeds browser recovery capacity");
   await page.locator(".content-scroll").evaluate(element => { element.scrollTop = 0; });

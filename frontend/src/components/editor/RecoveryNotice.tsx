@@ -3,7 +3,7 @@
 import { formatDateTime } from "@/lib/display-date";
 
 import type { RecoveryCopy } from "@/lib/editor-recovery-store";
-import { useState, type TransitionEvent } from "react";
+import { useState, type AnimationEvent, type TransitionEvent } from "react";
 import styles from "./EditorFeedback.module.css";
 
 export default function RecoveryNotice({ copies, error, onRestore, onDiscard, onContinue }: {
@@ -12,6 +12,13 @@ export default function RecoveryNotice({ copies, error, onRestore, onDiscard, on
 }) {
   const [discarding, setDiscarding] = useState(false);
   const [presentation, setPresentation] = useState({ source: copies, visible: copies, leaving: false });
+  const [status, setStatus] = useState({ source: error, visible: error, leaving: false });
+  if (error !== status.source) {
+    const reduceMotion = !error && typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    setStatus({ source: error, visible: error || (reduceMotion ? "" : status.visible),
+      leaving: !error && Boolean(status.visible) && !reduceMotion });
+  }
   if (copies !== presentation.source) {
     const reduceMotion = !copies.length && typeof window !== "undefined"
       && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -28,13 +35,31 @@ export default function RecoveryNotice({ copies, error, onRestore, onDiscard, on
     setPresentation(current => current.source.length ? current : { ...current, visible: [], leaving: false });
   }
 
+  function finishStatusExit(event: TransitionEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows" || error) return;
+    setStatus(current => current.source ? current : { ...current, visible: "", leaving: false });
+  }
+
+  function finishStatusExitWithoutCollapse(event: AnimationEvent<HTMLParagraphElement>) {
+    if (event.target !== event.currentTarget || !event.animationName.includes("recoveryStatusOut") || error) return;
+    const slot = event.currentTarget.closest("[data-recovery-status]");
+    if (slot?.getAnimations({ subtree: false }).length) return;
+    setStatus(current => current.source ? current : { ...current, visible: "", leaving: false });
+  }
+
   async function discard() {
     if (discarding) return;
     setDiscarding(true);
     try { await onDiscard(); } finally { setDiscarding(false); }
   }
   return <>
-    {error && <p className={styles.recoveryStatus} role="alert">{error}</p>}
+    <div className={styles.recoveryStatusSlot} data-recovery-status data-visible={Boolean(status.visible) && !status.leaving}
+      onTransitionEnd={finishStatusExit}>
+      <div className={styles.recoveryStatusClip}>
+        {status.visible && <p className={styles.recoveryStatus} role="alert" aria-hidden={status.leaving || undefined}
+          onAnimationEnd={finishStatusExitWithoutCollapse}>{status.visible}</p>}
+      </div>
+    </div>
     {visible.length > 0 && <div className={styles.recoveryShell} data-recovery-shell data-leaving={leaving} onTransitionEnd={finishExit}>
       <div className={styles.recoveryClip}>
         <section className={styles.panel} aria-label="Browser recovery" aria-busy={discarding} aria-hidden={leaving} inert={leaving}>

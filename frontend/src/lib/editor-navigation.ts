@@ -16,7 +16,7 @@ function cancelPrompt() { pending = null; publishPrompt(null); }
 export const getNavigationPrompt = () => prompt;
 export function subscribeNavigationPrompt(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 
-export async function answerNavigationPrompt(leave: boolean) {
+export async function answerNavigationPrompt(leave: boolean, beforeProceed?: () => Promise<void>) {
   const request = pending;
   if (!request) return;
   if (!leave) { cancelPrompt(); return; }
@@ -31,6 +31,8 @@ export async function answerNavigationPrompt(leave: boolean) {
       return;
     }
   }
+  if (pending !== request) return;
+  if (beforeProceed) await beforeProceed();
   if (pending !== request) return;
   cancelPrompt();
   if (guard !== request.owner || guard.busy()) return;
