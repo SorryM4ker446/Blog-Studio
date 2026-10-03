@@ -34,6 +34,7 @@ import { navigationRevision } from "@/lib/navigation-entry";
 import { requestEditorNavigation } from "@/lib/editor-navigation";
 import { useEditorRecovery } from "@/lib/use-editor-recovery";
 import RecoveryNotice from "@/components/editor/RecoveryNotice";
+import EditorRecoveryLayout from "@/components/editor/EditorRecoveryLayout";
 import { useResourcePage } from "@/lib/use-resource-page";
 import type { HomepageLink } from "@/lib/links";
 import useLinksManager from "@/components/links/use-links-manager";
@@ -642,9 +643,11 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
             : <p role="status">Loading article…</p>}
         </section>
       ) : (
-        <div className="editor-detail-frame">
-        <RecoveryNotice copies={recovery.copies} error={recovery.error}
+        <EditorRecoveryLayout checking={recovery.checking} owner={user?.id}>
+        <div data-editor-notice="recovery">
+        <RecoveryNotice copies={recovery.copies} checking={recovery.checking} error={recovery.error} conflict={conflict}
           onRestore={recovery.restore} onDiscard={recovery.discard} onContinue={recovery.continueWithoutRestoring} />
+        </div>
         <PostEditorForm
           MarkdownComponent={preparedEditor?.component}
           validationAttempted={validationAttempted}
@@ -657,7 +660,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           action={saveAction}
           conflict={conflict}
           recoveryPending={recovery.checking || recovery.copies.length > 0 || (editTarget === "new" && !draftId)}
-          recoveryChecking={recovery.checking}
+          recoveryChecking={recovery.checking || (editTarget === "new" && !draftId)}
           latestPost={latestPost}
           loadingLatest={loadingLatest}
           latestError={latestError}
@@ -693,7 +696,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           onRetryCategories={() => void loadCategories()}
           onImageUpload={handleImageUpload}
         />
-        </div>
+        </EditorRecoveryLayout>
       )}
       </EditorViewTransition>
       {urlTab === "links" && linkResource.dialogs}

@@ -9,7 +9,7 @@ import MobileNavigation from "./MobileNavigation";
 import { TriangleIcon, StudioLogo } from "@/components/Icons";
 import { createSidebarLayoutMotion } from "@/lib/sidebar-layout-motion";
 import { readNavigationEntry, saveEntryScroll } from "@/lib/navigation-entry";
-import { restoreScroll } from "@/lib/restore-scroll";
+import { resetPageScroll, restoreScroll } from "@/lib/restore-scroll";
 
 function getLocationKey(pathname: string, searchParams: URLSearchParams | Readonly<URLSearchParams>) {
   const query = searchParams.toString();
@@ -99,7 +99,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     committedLocationRef.current = locationKey;
     navigationStartedRef.current = false;
     const navigation = initialLocationRef.current ? performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined : undefined;
-    const reloaded = navigation?.type === "reload" || navigation?.type === "back_forward";
+    const reloaded = navigation?.type === "reload";
+    const restoredDocument = navigation?.type === "back_forward";
     const cancelledBeforeHydration = initialLocationRef.current && document.documentElement.hasAttribute("data-initial-scroll-cancelled");
     document.documentElement.removeAttribute("data-initial-scroll-cancelled");
     window.dispatchEvent(new Event("blog:initial-view-ready"));
@@ -107,7 +108,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     const pathChanged = previousPathRef.current !== pathname;
     previousPathRef.current = pathname;
     focusAfterNavigationRef.current = false;
-    if (cancelledBeforeHydration || (!historyTraversalRef.current && !reloaded)) {
+    if (reloaded && !cancelledBeforeHydration) {
+      cancelRestorationRef.current?.();
+      restorationInProgressRef.current = false;
+      historyTraversalRef.current = false;
+      resetPageScroll();
+      saveEntryScroll(0);
+      return;
+    }
+    if (cancelledBeforeHydration || (!historyTraversalRef.current && !restoredDocument)) {
       focusAfterNavigationRef.current = pathChanged;
       restorationInProgressRef.current = false;
       if (pathChanged && contentScrollRef.current) {

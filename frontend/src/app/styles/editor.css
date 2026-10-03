@@ -79,7 +79,7 @@
   outline: 2px solid var(--text-primary);
   outline-offset: 3px;
 }
-.editor-save-button:disabled { cursor: wait; opacity: 1; }
+.editor-save-button:disabled { cursor: default; opacity: 1; }
 
 .editor-form-surface {
   margin: 0;
@@ -565,5 +565,10 @@ button:focus-visible,
 [role="button"]:focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 3px;
+}
+
+.editor-detail-frame { overflow-anchor: none; }
+.editor-detail-frame [data-editor-notice] {
+  display: flow-root;
 }
 

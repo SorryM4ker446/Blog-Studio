@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { scrollPageToTop } from "@/lib/restore-scroll";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { MoonIcon, SunIcon } from "@/components/Icons";
@@ -9,6 +10,8 @@ export default function TopBar({ navigation }: { navigation?: React.ReactNode })
   const { profile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
+  const refresh = useRef<(() => void) | null>(null);
+  useEffect(() => () => refresh.current?.(), []);
   const avatarFailed = !!profile?.avatar && failedAvatarUrl === profile.avatar;
   const targetTheme = theme === "dark" ? "Light" : "Dark";
 
@@ -59,7 +62,13 @@ export default function TopBar({ navigation }: { navigation?: React.ReactNode })
         <button
           type="button"
           className="top-bar-action"
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            if (refresh.current) return;
+            refresh.current = scrollPageToTop(() => {
+              refresh.current = null;
+              window.location.reload();
+            }, () => { refresh.current = null; });
+          }}
           title="Refresh page"
           aria-label="Refresh page"
         >

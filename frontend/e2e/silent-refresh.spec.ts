@@ -69,7 +69,7 @@ test("article refresh keeps its source highlight before and after hydration", as
   }
 });
 
-test("editor refresh preserves a short page's reserved height and scroll before hydration", async ({ page }) => {
+test("editor refresh preserves a short page's reserved height and resets scroll before hydration", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 700 });
   const headers = await login(page);
   const query = `Silent layout ${Date.now()}`;
@@ -95,22 +95,22 @@ test("editor refresh preserves a short page's reserved height and scroll before 
     await expect.poll(() => viewport.evaluate(node => node.getAnimations({ subtree: true }).filter(a => a.playState === "running").length)).toBe(0);
     expect((await viewport.boundingBox())!.height).toBeCloseTo(fullHeight, 0);
     await page.locator(".content-scroll").evaluate(node => { node.scrollTop = 120; });
-    const before = await currentPage.boundingBox();
+    const before = await currentPage.evaluate(node => node.getBoundingClientRect().top + document.querySelector(".content-scroll")!.scrollTop);
     const release = await holdHydration(page);
     try {
       await page.reload({ waitUntil: "commit" });
       await expect(page.locator(".editor-post-card")).toHaveCount(1);
       await expect(currentPage).toBeVisible();
       expect((await viewport.boundingBox())!.height).toBeCloseTo(fullHeight, 0);
-      expect((await currentPage.boundingBox())!.y).toBeCloseTo(before!.y, 0);
-      await expect(page.locator(".content-scroll")).toHaveJSProperty("scrollTop", 120);
+      expect((await currentPage.boundingBox())!.y).toBeCloseTo(before, 0);
+      await expect(page.locator(".content-scroll")).toHaveJSProperty("scrollTop", 0);
       await expect(page.locator(".route-transition-frame")).not.toHaveClass(/route-transition-active/);
     } finally { release(); }
     await expect.poll(() => viewport.evaluate(node => Number.parseFloat(getComputedStyle(node).minHeight) || 0)).toBeGreaterThan(0);
     await expect(page.getByRole("button", { name: "Previous page" })).toBeEnabled();
     await page.unrouteAll({ behavior: "wait" });
     expect((await viewport.boundingBox())!.height).toBeCloseTo(fullHeight, 0);
-    expect((await currentPage.boundingBox())!.y).toBeCloseTo(before!.y, 0);
+    expect((await currentPage.boundingBox())!.y).toBeCloseTo(before, 0);
     const releaseNarrow = await holdHydration(page);
     try {
       await page.reload({ waitUntil: "commit" });

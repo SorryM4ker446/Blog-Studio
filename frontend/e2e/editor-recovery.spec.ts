@@ -44,7 +44,7 @@ test("continuing the saved version keeps the previous browser copy recoverable",
     const notice = page.getByRole("region", { name: "Browser recovery" });
     await expect(notice).toBeVisible();
     await expect(page.getByLabel("POST TITLE")).toBeDisabled();
-    await expect(page.getByText("Choose a recovery option above", { exact: true })).toBeVisible();
+    await expect(page.getByText("Editing paused · Browser recovery", { exact: true })).toBeVisible();
     await notice.getByRole("button", { name: "Keep copies and continue" }).click();
     await expect(notice).toHaveCount(0);
     await expect(body(page)).toHaveValue("Server content");

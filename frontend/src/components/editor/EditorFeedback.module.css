@@ -13,6 +13,12 @@
   transition: grid-template-rows 220ms ease-in-out 120ms, margin-bottom 220ms ease-in-out 120ms;
 }
 .recoveryShell[data-leaving="true"] { grid-template-rows: 0fr; margin-bottom: 0; }
+.recoveryShell[data-loading="true"] { display: none; }
+.recoveryShell[data-loading="true"] [data-recovery-copy] { display: none; }
+@starting-style {
+  .recoveryShell:not([data-loading="true"]) .panel { opacity: 0; }
+}
+.recoveryShell[data-handoff="true"] { transition-delay: 0ms; transition-duration: 340ms; transition-timing-function: cubic-bezier(.2,.8,.2,1); }
 .recoveryClip { min-height: 0; overflow: hidden; }
 .recoveryClip .panel { margin: 0; transition: opacity 120ms ease-out; }
 .recoveryShell[data-leaving="true"] .panel { opacity: 0; }
@@ -22,9 +28,17 @@
   margin-bottom: 28px;
   transition: grid-template-rows 220ms ease-in-out 120ms, margin-bottom 220ms ease-in-out 120ms;
 }
+.conflictExitShell:not([data-leaving="true"]) {
+  transition: grid-template-rows 340ms cubic-bezier(.2,.8,.2,1), margin-bottom 340ms cubic-bezier(.2,.8,.2,1);
+}
+@starting-style {
+  .conflictExitShell:not([data-leaving="true"]) { grid-template-rows: 0fr; margin-bottom: 0; }
+  .conflictExitShell:not([data-leaving="true"]) .panel { opacity: 0; transform: translateY(6px); }
+}
 .conflictExitShell[data-leaving="true"] { grid-template-rows: 0fr; margin-bottom: 0; }
 .conflictExitClip { min-height: 0; overflow: hidden; }
 .conflictExitClip .panel { margin: 0; transition: opacity 120ms ease-out; }
+.conflictExitShell:not([data-leaving="true"]) .panel { transition: opacity 220ms ease-out 80ms, transform 340ms cubic-bezier(.2,.8,.2,1); }
 .conflictExitShell[data-leaving="true"] .panel { opacity: 0; }
 .panelHeader { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .icon {
@@ -94,6 +108,7 @@
   .dialogActions { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .recoveryShell[data-handoff="true"], .conflictExitShell:not([data-leaving="true"]), .conflictExitShell:not([data-leaving="true"]) .panel { transition: none; }
   .button, .recoveryShell, .recoveryClip .panel, .conflictExitShell, .conflictExitClip .panel, .recoveryStatusSlot { transition: none; }
   .recoveryStatus, .recoveryStatusSlot[data-visible="false"] .recoveryStatus, .dialog, .dialog::backdrop, .dialog[data-closing="true"], .dialog[data-closing="true"]::backdrop { animation: none; }
 }

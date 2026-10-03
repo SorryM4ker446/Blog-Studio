@@ -88,6 +88,9 @@ vi.mock("@/components/editor/EditorListView", () => ({
 }));
 
 vi.mock("@/components/editor/EditorDeleteDialog", () => ({ default: () => null }));
+vi.mock("@/components/editor/EditorRecoveryLayout", () => ({
+  default: ({ children }: { children: import("react").ReactNode }) => <div className="editor-detail-frame">{children}</div>,
+}));
 vi.mock("@/components/editor/PostEditorForm", () => ({
   default: (props: ComponentProps<typeof PostEditorForm>) => (
     <div>

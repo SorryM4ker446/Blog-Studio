@@ -115,8 +115,11 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </div>
       </div>
 
-      <div className="editor-save-state" role="status">
-        <span>{props.saving ? "Saving changes…" : props.recoveryChecking ? "Checking browser recovery…" : props.recoveryPending ? "Choose a recovery option above" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}</span>
+      <div className="editor-save-state" role="status" aria-busy={props.recoveryChecking}
+        aria-label={props.recoveryChecking ? "Checking editor state" : undefined}>
+        <span data-loading={Boolean(props.recoveryChecking)}>
+          {props.saving ? "Saving changes…" : !props.recoveryChecking && props.recoveryPending ? "Editing paused · Browser recovery" : props.dirty ? "Unsaved changes" : props.editingPost ? "All changes saved" : "New draft"}
+        </span>
         {props.editingPost?.status === "published" && <Link className="editor-view-link" href={`/posts/${props.editingPost.id}?returnTo=${encodeURIComponent(returnTo)}`} aria-disabled={props.saving}
           onNavigate={(event) => { if (props.saving) event.preventDefault(); else props.onViewArticle(); }}>
           <span>View article</span>
@@ -126,6 +129,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </Link>}
       </div>
       {props.sessionExpired && <p role="alert">Your edits are still here. <a href="/login?redirect=%2Feditor" target="_blank" rel="noopener noreferrer">Sign in in a new tab</a>, then return here and try again.</p>}
+      <div data-editor-notice="conflict">
       <CollapsingConflictPanel open={props.conflict}>
       {props.conflict && <section className={`${feedback.panel} ${feedback.conflictPanel}`} aria-label="Article version conflict" aria-busy={props.loadingLatest}>
         <div className={feedback.panelHeader}>
@@ -159,6 +163,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </div>}
       </section>}
       </CollapsingConflictPanel>
+      </div>
       <fieldset className="editor-form-surface" disabled={props.saving || props.recoveryPending} inert={props.saving || props.recoveryPending}>
         <div style={{ marginBottom: "2rem" }}>
           <label htmlFor="post-title" style={labelStyle}>POST TITLE</label>

@@ -22,6 +22,7 @@ html[data-sidebar-state="collapsed"] .sidebar {
 }
 
 .sidebar-header {
+  position: relative;
   height: 56px;
   padding: 0 0.5rem 0 0.85rem;
   display: flex;
@@ -43,17 +44,20 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-header {
   align-items: center;
   gap: 0.5rem;
   overflow: hidden;
-  flex: 1;
+  flex: 0 0 auto;
+  width: calc(100% - 40px);
   min-width: 0;
-  max-width: 180px;
   opacity: 1;
-  transition: opacity 180ms ease, max-width var(--sidebar-motion-duration) var(--sidebar-motion-easing);
+  transform: translateX(0);
+  transition: opacity 160ms ease-out 100ms, transform 240ms ease-out 100ms;
 }
 
 .sidebar.collapsed .sidebar-logo-container,
 html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-container {
-  max-width: 0;
   opacity: 0;
+  transform: translateX(-6px);
+  transition-delay: 0s;
+  transition-duration: 100ms, 200ms;
 }
 
 .sidebar-logo-icon {
@@ -62,26 +66,19 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-container {
 }
 
 .sidebar-logo-text {
+  flex-shrink: 0;
   font-weight: 600;
   font-size: 1.15rem;
   letter-spacing: -0.4px;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
-  max-width: 180px;
-  opacity: 1;
-  transition:
-    opacity 0.15s ease,
-    max-width var(--sidebar-motion-duration) var(--sidebar-motion-easing);
-}
-
-.sidebar.collapsed .sidebar-logo-text,
-html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-text {
-  opacity: 0;
-  max-width: 0;
 }
 
 .sidebar-toggle {
+  position: absolute;
+  right: 8px;
+  top: 12px;
   width: 32px;
   height: 32px;
   display: flex;
@@ -96,7 +93,7 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-text {
   transition:
     background 0.18s ease,
     color 0.18s ease,
-    transform var(--sidebar-motion-duration) var(--sidebar-motion-easing);
+    right var(--sidebar-motion-duration) var(--sidebar-motion-easing);
 }
 
 .sidebar-toggle:hover {
@@ -106,6 +103,14 @@ html[data-sidebar-state="collapsed"] .sidebar .sidebar-logo-text {
 
 .sidebar.collapsed .sidebar-toggle,
 html[data-sidebar-state="collapsed"] .sidebar .sidebar-toggle {
+  right: 10px;
+}
+
+.sidebar-toggle svg {
+  transition: transform var(--sidebar-motion-duration) var(--sidebar-motion-easing);
+}
+.sidebar.collapsed .sidebar-toggle svg,
+html[data-sidebar-state="collapsed"] .sidebar .sidebar-toggle svg {
   transform: rotate(180deg);
 }
 
@@ -284,6 +289,36 @@ html[data-sidebar-state="collapsed"] .sidebar .nav-item-label {
   gap: 0.1rem;
   flex-shrink: 0;
   transition: padding var(--sidebar-motion-duration) var(--sidebar-motion-easing);
+}
+
+/* Upper navigation fades as a row; its labels keep their natural width. */
+.sidebar .nav-menu .nav-item-label {
+  flex: 0 0 auto;
+  max-width: none;
+  transition: opacity 160ms ease-out 100ms;
+}
+.sidebar.collapsed .nav-menu .nav-item-label,
+html[data-sidebar-state="collapsed"] .sidebar .nav-menu .nav-item-label {
+  max-width: none;
+  transition-duration: 100ms;
+  transition-delay: 0s;
+}
+.sidebar .nav-menu .hide-on-collapse {
+  transition: opacity 160ms ease-out 100ms,
+    max-height var(--sidebar-motion-duration) var(--sidebar-motion-easing),
+    padding var(--sidebar-motion-duration) var(--sidebar-motion-easing),
+    gap var(--sidebar-motion-duration) var(--sidebar-motion-easing);
+}
+.sidebar.collapsed .nav-menu .hide-on-collapse,
+html[data-sidebar-state="collapsed"] .sidebar .nav-menu .hide-on-collapse {
+  transition-duration: 100ms, var(--sidebar-motion-duration), var(--sidebar-motion-duration), var(--sidebar-motion-duration);
+  transition-delay: 0s;
+}
+.sidebar .nav-menu .hide-on-collapse .nav-item-label,
+.sidebar.collapsed .nav-menu .hide-on-collapse .nav-item-label,
+html[data-sidebar-state="collapsed"] .sidebar .nav-menu .hide-on-collapse .nav-item-label {
+  opacity: 1;
+  transition: none;
 }
 
 .sidebar.collapsed .sidebar-footer,
