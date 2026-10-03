@@ -28,7 +28,7 @@ for (const theme of ["dark", "light"]) test(`post actions open from the More con
     const otherIndicatorOpacity = () => otherRow.evaluate(node => getComputedStyle(node, "::after").opacity);
     const normalOtherTitleColor = await otherTitle.evaluate(node => getComputedStyle(node).color);
     const normalMoreBackground = await more.evaluate(node => getComputedStyle(node).backgroundColor);
-    const expandedMoreBackground = await more.evaluate(node => {
+    const expandedMoreBackground = await more.evaluate(() => {
       const probe = document.createElement("span");
       probe.style.backgroundColor = "var(--bg-hover)";
       document.body.append(probe);

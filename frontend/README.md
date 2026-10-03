@@ -8,7 +8,7 @@ Use Node.js 22 and the committed npm lockfile. From this directory:
 
 ```bash
 npm ci
-cp .env.example .env.local
+if [ ! -e .env.local ]; then cp .env.example .env.local; fi
 npm run dev
 ```
 

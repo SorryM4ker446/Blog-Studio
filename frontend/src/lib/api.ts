@@ -12,10 +12,12 @@ import {
 import { rebaseFileViewURLs } from "@/lib/file-url";
 import { MAX_UPLOAD_BYTES } from "@/lib/file-upload";
 import { searchAPIParams, type ResourceQuery } from "@/lib/resource-query";
+import type { AuthUser } from "@/lib/app-shell-state";
 
 export { API_BASE, ApiError, getApiErrorMessage, isApiError } from "@/lib/api-client";
 export type { ApiErrorKind } from "@/lib/api-client";
 export type { UploadProgress } from "@/lib/api-client";
+export type { AuthUser } from "@/lib/app-shell-state";
 
 interface Category {
   id: number;
@@ -93,12 +95,6 @@ export interface FileMutationResult {
   status?: number | null;
   kind?: import("@/lib/api-client").ApiErrorKind;
   retryAfterSeconds?: number;
-}
-
-export interface AuthUser {
-  id: number;
-  username: string;
-  role: string;
 }
 
 function fileMutationFailure(error: unknown, fallback: string): FileMutationResult {
@@ -212,17 +208,6 @@ export async function getAdminPosts(
     cache: "no-store",
     auth: true,
   });
-}
-
-export async function getPost(id: string): Promise<PostDetail | null> {
-  try {
-    return await publicApiRequest<PostDetail>(`/posts/${encodeURIComponent(id)}`);
-  } catch (error) {
-    if (isApiError(error) && error.status === 404) {
-      return null;
-    }
-    throw error;
-  }
 }
 
 export async function getAdminPost(id: number, options: { signal?: AbortSignal; handleSessionExpiry?: boolean } = {}): Promise<PostDetail> {
