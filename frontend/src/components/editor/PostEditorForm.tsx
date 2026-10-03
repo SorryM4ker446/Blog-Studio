@@ -5,7 +5,7 @@ import { formatDateTime } from "@/lib/display-date";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState, type AnimationEvent, type ClipboardEvent, type FormEvent, type TransitionEvent } from "react";
+import { useState, type AnimationEvent, type ClipboardEvent, type FormEvent, type ReactNode, type TransitionEvent } from "react";
 import type { Category, PostDetail } from "@/lib/api";
 import { normalizeMarkdownFileUrls } from "@/lib/api";
 import { createMarkdownParser } from "@/lib/markdown";
@@ -126,6 +126,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         </Link>}
       </div>
       {props.sessionExpired && <p role="alert">Your edits are still here. <a href="/login?redirect=%2Feditor" target="_blank" rel="noopener noreferrer">Sign in in a new tab</a>, then return here and try again.</p>}
+      <CollapsingConflictPanel open={props.conflict}>
       {props.conflict && <section className={`${feedback.panel} ${feedback.conflictPanel}`} aria-label="Article version conflict" aria-busy={props.loadingLatest}>
         <div className={feedback.panelHeader}>
           <span className={feedback.icon} aria-hidden="true">
@@ -138,7 +139,8 @@ export default function PostEditorForm(props: PostEditorFormProps) {
         <p className={feedback.description}>Your edits are still editable below. Review the saved version, then choose which content to continue with. Keeping your edits does not merge changes from the server.</p>
         <div className={feedback.conflictToolbar}>
           <span className={feedback.timestamp}>Saving and publishing are paused until this conflict is resolved.</span>
-          <button type="button" className={`${feedback.button} ${feedback.secondary}`} onClick={props.onLoadLatest} disabled={props.loadingLatest}>{props.loadingLatest ? "Loading…" : (props.latestPost ? "Refresh saved version" : "Review saved version")}</button>
+          <button type="button" className={`${feedback.button} ${feedback.secondary}`} onClick={props.onLoadLatest} disabled={props.loadingLatest}>{props.latestPost ? "Refresh saved version" : "Review saved version"}</button>
+          <span className="sr-only" role="status">{props.loadingLatest ? "Loading saved version…" : ""}</span>
         </div>
         {props.latestError && <p className={feedback.error} role="alert">{props.latestError}</p>}
         {props.latestPost && <div className={feedback.conflictPreview}>
@@ -156,6 +158,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
           </div>
         </div>}
       </section>}
+      </CollapsingConflictPanel>
       <fieldset className="editor-form-surface" disabled={props.saving || props.recoveryPending} inert={props.saving || props.recoveryPending}>
         <div style={{ marginBottom: "2rem" }}>
           <label htmlFor="post-title" style={labelStyle}>POST TITLE</label>
@@ -243,6 +246,28 @@ export default function PostEditorForm(props: PostEditorFormProps) {
       </fieldset>
     </form>
   );
+}
+
+function CollapsingConflictPanel({ open, children }: { open: boolean; children: ReactNode }) {
+  const [presentation, setPresentation] = useState({ source: open, visible: open, leaving: false, content: children });
+  if (open !== presentation.source) {
+    const reduceMotion = !open && typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    setPresentation({ source: open, visible: open || !reduceMotion, leaving: !open && !reduceMotion, content: open ? children : presentation.content });
+  } else if (open && children !== presentation.content) {
+    setPresentation({ ...presentation, content: children });
+  }
+
+  function finishExit(event: TransitionEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows" || open) return;
+    setPresentation(current => current.source ? current : { ...current, visible: false, leaving: false, content: null });
+  }
+
+  if (!presentation.visible) return null;
+  return <div className={feedback.conflictExitShell} data-conflict-shell data-leaving={presentation.leaving}
+    aria-hidden={presentation.leaving} inert={presentation.leaving} onTransitionEnd={finishExit}>
+    <div className={feedback.conflictExitClip}>{open ? children : presentation.content}</div>
+  </div>;
 }
 
 function SaveFeedback({ message }: { message: string }) {

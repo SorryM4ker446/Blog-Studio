@@ -16,6 +16,16 @@
 .recoveryClip { min-height: 0; overflow: hidden; }
 .recoveryClip .panel { margin: 0; transition: opacity 120ms ease-out; }
 .recoveryShell[data-leaving="true"] .panel { opacity: 0; }
+.conflictExitShell {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-bottom: 28px;
+  transition: grid-template-rows 220ms ease-in-out 120ms, margin-bottom 220ms ease-in-out 120ms;
+}
+.conflictExitShell[data-leaving="true"] { grid-template-rows: 0fr; margin-bottom: 0; }
+.conflictExitClip { min-height: 0; overflow: hidden; }
+.conflictExitClip .panel { margin: 0; transition: opacity 120ms ease-out; }
+.conflictExitShell[data-leaving="true"] .panel { opacity: 0; }
 .panelHeader { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .icon {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -68,7 +78,7 @@
   .dialogActions { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .button, .recoveryShell, .recoveryClip .panel { transition: none; }
+  .button, .recoveryShell, .recoveryClip .panel, .conflictExitShell, .conflictExitClip .panel { transition: none; }
 }
 
 .recoveryActions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -87,7 +97,7 @@
 .conflictFooter .hint { margin: 0; max-width: 34rem; }
 .replaceAction { flex-shrink: 0; background: var(--bg-base); color: var(--accent-red); border-color: color-mix(in srgb, var(--accent-red) 35%, var(--border-color)); }
 .replaceAction:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-red) 8%, var(--bg-base)); border-color: var(--accent-red); }
-.conflictToolbar .button:disabled { opacity: .65; }
+.conflictToolbar .button:disabled { opacity: 1; }
 .conflictFooter .button:disabled { opacity: 1; }
 @media (max-width: 600px) {
   .conflictMetadata, .conflictFooter { flex-direction: column; gap: 10px; }

@@ -13,7 +13,7 @@ afterEach(() => vi.unstubAllGlobals());
 async function seed() {
   const now = Date.now();
   const copy: RecoveryCopy = { id: "source", format: 1, userId: 1, tab: "another-tab", target: "post:7", version: 1, baseline, fields, updatedAt: now, expiresAt: now + RECOVERY_TTL };
-  await recoveryStorage.put(await recoveryStorage.start(1), copy); return copy;
+  await recoveryStorage.put(await recoveryStorage.start(1), copy); return { ...copy, createdAt: now };
 }
 it("offers recovery without restoring or writing before an explicit choice", async () => {
   const copy = await seed(); const onRestore = vi.fn();
@@ -25,9 +25,44 @@ it("offers recovery without restoring or writing before an explicit choice", asy
   rerender({ ...initial, onRestore, dirty: true, fields });
   await act(async () => result.current.flush());
   const copies = await recoveryStorage.list(1, "post:7");
-  expect(copies).toHaveLength(2); expect(new Set(copies.map(row => row.id)).size).toBe(2);
+  expect(copies).toEqual([copy]);
   await act(async () => result.current.clear());
   expect(await recoveryStorage.list(1, "post:7")).toEqual([copy]);
+});
+it("writes a new copy after adopting a newer server version, then reuses it on an unchanged restore", async () => {
+  const source = await seed();
+  const first = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: initial });
+  await waitFor(() => expect(first.result.current.copies).toHaveLength(1));
+  act(() => first.result.current.restore(source));
+  first.rerender({ ...initial, dirty: true, fields });
+  await act(() => first.result.current.flush());
+  expect(await recoveryStorage.list(1, "post:7")).toHaveLength(1);
+  first.rerender({ ...initial, dirty: true, fields, version: 2 });
+  await act(() => first.result.current.flush());
+  const rows = await recoveryStorage.list(1, "post:7");
+  expect(rows).toHaveLength(2);
+  const newer = rows.find(row => row.id !== source.id)!;
+  expect(newer.version).toBe(2);
+  first.unmount();
+
+  const second = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: { ...initial, version: 2 } });
+  await waitFor(() => expect(second.result.current.copies).toHaveLength(2));
+  act(() => second.result.current.restore(newer));
+  second.rerender({ ...initial, version: 2, dirty: true, fields });
+  await act(() => second.result.current.flush());
+  expect(await recoveryStorage.list(1, "post:7")).toHaveLength(2);
+});
+it("preserves new edits as a separate copy after restoring an older one", async () => {
+  const source = await seed();
+  const view = renderHook((props: RecoveryInput) => useEditorRecovery(props), { initialProps: initial });
+  await waitFor(() => expect(view.result.current.copies).toHaveLength(1));
+  act(() => view.result.current.restore(source));
+  view.rerender({ ...initial, dirty: true, fields: { ...fields, content: "Edited after restore" } });
+  await act(() => view.result.current.flush());
+  const rows = await recoveryStorage.list(1, "post:7");
+  expect(rows).toHaveLength(2);
+  expect(rows.find(row => row.id === source.id)?.fields.content).toBe("Recovered body");
+  expect(rows.find(row => row.id !== source.id)?.fields.content).toBe("Edited after restore");
 });
 it("discards selected records without changing the server baseline or calling restore", async () => {
   await seed(); const onRestore = vi.fn();

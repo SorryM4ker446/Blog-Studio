@@ -109,11 +109,11 @@ File tests cover content/extension mismatches, size limits, multipart temporary 
 
 ### Article editing and recovery
 
-Component and browser tests cover direct editor URLs, failed detail reads, retry, versioned saves/publication, duplicate submission, stale responses, two-tab conflicts and session expiry. Conflict review preserves local input and requires an explicit choice against the reviewed server version; a later concurrent update must conflict again.
+Component and browser tests cover direct editor URLs, failed detail reads, retry, versioned saves/publication, duplicate submission, stale responses, two-tab conflicts and session expiry. Conflict review preserves local input and requires an explicit choice against the reviewed server version; a later concurrent update must conflict again. Browser checks also cover a steady Refresh button during loading and the review card's exit after either choice.
 
 First-save and document-refresh checks retain the form, fields and Markdown preview through saved-ID adoption and hydration. English/Chinese browser contexts check toolbar locale changes without replacing the editor. Include a development-server browser check when changing this lifecycle: development hydration diagnostics can expose mismatches not reported the same way in production.
 
-Recovery tests use the real IndexedDB adapter with fake-indexeddb for validation, ownership, expiry, bounds, storage denial, queued writes and logout invalidation. Chromium covers reload, browser restart, duplicated tabs, explicit restore/discard/keep, recovery-panel exit and form movement, failed cleanup, navigation cancellation and native unload prompts. Restoring a copy must not write an article to the server. See [editor behavior and recovery limits](editor.md).
+Recovery tests use the real IndexedDB adapter with fake-indexeddb for validation, ownership, expiry, per-target FIFO retention including older stored copies, unchanged-restore deduplication, missing-source recovery, storage denial, queued writes and logout invalidation. Chromium covers reload, browser restart, duplicated tabs, explicit restore/discard/keep, recovery-panel exit and form movement, failed cleanup, navigation cancellation and native unload prompts. Repeated restore and exit without edits does not consume another copy slot, including while an old-version conflict is unresolved. After an unsaved conflict resolution, the newer copy retains the adopted version while the original stale copy still requires conflict review. Restoring a copy must not write an article to the server. See [editor behavior and recovery limits](editor.md).
 
 ### Homepage links and dialogs
 

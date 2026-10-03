@@ -1,6 +1,6 @@
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { RECOVERY_DATABASE, RECOVERY_MAX_BYTES, RECOVERY_MAX_COPIES, RECOVERY_TTL, RecoveryWriter, recoveryStorage, validRecovery, openRecoveryChannel, type RecoveryCopy, type RecoveryStorage } from "./editor-recovery-store";
+import { RECOVERY_DATABASE, RECOVERY_MAX_BYTES, RECOVERY_MAX_COPIES_PER_TARGET, RECOVERY_TTL, RecoveryWriter, recoveryStorage, validRecovery, openRecoveryChannel, type RecoveryCopy, type RecoveryStorage } from "./editor-recovery-store";
 
 const fields = { title: "Local", summary: "", content: "Unsaved body", category_id: 0 };
 function persistedCopy(id: string): Promise<unknown> {
@@ -40,23 +40,95 @@ describe("Browser recovery storage", () => {
     expect(await recoveryStorage.list(1, "new:other")).toEqual([]);
     await recoveryStorage.remove([first.id]);
     await expect(recoveryStorage.put(session, first)).rejects.toThrow();
-    expect(await recoveryStorage.list(1, "post:7")).toEqual([second]);
+    expect(await recoveryStorage.list(1, "post:7")).toEqual([{ ...second, createdAt: second.updatedAt }]);
   });
   it("rejects corrupt formats, wrong baselines, expired and oversized records", async () => {
     for (const row of [copy({ format: 2 as 1 }), copy({ expiresAt: 0 }), copy({ version: null }), copy({ fields: null as never }), copy({ target: "other" }), copy({ updatedAt: Date.now() + 10000 })]) expect(validRecovery(row)).toBe(false);
     const session = await recoveryStorage.start(1);
     await expect(recoveryStorage.put(session, copy({ fields: { ...fields, content: "x".repeat(RECOVERY_MAX_BYTES) } }))).rejects.toThrow();
     const row = copy(); await recoveryStorage.put(session, row);
-    expect(await persistedCopy(row.id)).toEqual(row);
+    expect(await persistedCopy(row.id)).toEqual({ ...row, createdAt: row.updatedAt });
     vi.spyOn(Date, "now").mockReturnValue(row.expiresAt);
     expect(await recoveryStorage.list(1, row.target)).toEqual([]);
     expect(await persistedCopy(row.id)).toBeUndefined();
   });
-  it("refuses capacity overflow without evicting existing unsaved copies", async () => {
+  it("keeps three copies per article or draft and evicts the oldest entry within that target", async () => {
     const session = await recoveryStorage.start(1);
-    for (let i = 0; i < RECOVERY_MAX_COPIES; i++) await recoveryStorage.put(session, copy());
-    await expect(recoveryStorage.put(session, copy())).rejects.toThrow();
-    expect(await recoveryStorage.list(1, "post:7")).toHaveLength(RECOVERY_MAX_COPIES);
+    const now = Date.now();
+    const first = copy({ id: "first", updatedAt: now - 4000, expiresAt: now - 4000 + RECOVERY_TTL });
+    const second = copy({ id: "second", updatedAt: now - 3000, expiresAt: now - 3000 + RECOVERY_TTL });
+    const third = copy({ id: "third", updatedAt: now - 2000, expiresAt: now - 2000 + RECOVERY_TTL });
+    for (const row of [first, second, third]) await expect(recoveryStorage.put(session, row)).resolves.toBeUndefined();
+    await expect(recoveryStorage.put(session, { ...first, updatedAt: now - 1000, expiresAt: now - 1000 + RECOVERY_TTL })).resolves.toBeUndefined();
+    expect((await persistedCopy(first.id) as RecoveryCopy).createdAt).toBe(now - 4000);
+    const fourth = copy({ id: "fourth", updatedAt: now, expiresAt: now + RECOVERY_TTL });
+    await expect(recoveryStorage.put(session, fourth)).resolves.toBeUndefined();
+    expect(await persistedCopy(first.id)).toBeUndefined();
+    expect((await recoveryStorage.list(1, "post:7")).map(row => row.id).sort()).toEqual([second.id, third.id, fourth.id].sort());
+    expect(await recoveryStorage.list(1, "post:7")).toHaveLength(RECOVERY_MAX_COPIES_PER_TARGET);
+    await expect(recoveryStorage.put(session, { ...first, updatedAt: now - 1000, expiresAt: now - 1000 + RECOVERY_TTL })).rejects.toThrow();
+    vi.spyOn(Date, "now").mockReturnValue(now + 1000);
+    await expect(recoveryStorage.put(session, { ...first, updatedAt: now + 1000, expiresAt: now + 1000 + RECOVERY_TTL })).resolves.toBeUndefined();
+    expect((await recoveryStorage.list(1, "post:7")).map(row => row.id).sort()).toEqual([first.id, third.id, fourth.id].sort());
+  });
+  it("reserves three positions for each target without evicting another article or draft", async () => {
+    const session = await recoveryStorage.start(1);
+    for (const target of ["post:7", "post:8", "new:abc", "new:def"]) {
+      for (let index = 0; index < RECOVERY_MAX_COPIES_PER_TARGET; index++) {
+        await recoveryStorage.put(session, copy({ target, version: target.startsWith("new:") ? null : 2 }));
+      }
+    }
+    for (const target of ["post:7", "post:8", "new:abc", "new:def"]) {
+      expect(await recoveryStorage.list(1, target)).toHaveLength(RECOVERY_MAX_COPIES_PER_TARGET);
+    }
+    expect(await recoveryStorage.list(1, "new:*")).toHaveLength(2 * RECOVERY_MAX_COPIES_PER_TARGET);
+    await recoveryStorage.put(session, copy());
+    expect(await recoveryStorage.list(1, "post:8")).toHaveLength(RECOVERY_MAX_COPIES_PER_TARGET);
+    expect(await recoveryStorage.list(1, "post:7")).toHaveLength(RECOVERY_MAX_COPIES_PER_TARGET);
+  });
+  it("reuses an unchanged restored source atomically and writes when it changes or disappears", async () => {
+    const session = await recoveryStorage.start(1);
+    const source = copy({ id: "source" });
+    await recoveryStorage.put(session, source);
+    const fork = copy({ id: "fork" });
+    await recoveryStorage.put(session, fork, source.id);
+    expect(await recoveryStorage.list(1, source.target)).toHaveLength(1);
+    await recoveryStorage.put(session, { ...fork, version: 3 }, source.id);
+    expect((await recoveryStorage.list(1, source.target)).map(row => row.id).sort()).toEqual(["fork", "source"]);
+    await recoveryStorage.remove([source.id]);
+    const later = copy({ id: "later", fields: source.fields });
+    await recoveryStorage.put(session, later, source.id);
+    expect((await recoveryStorage.list(1, source.target)).map(row => row.id).sort()).toEqual(["fork", "later"]);
+  });
+  it("does not merge independent copies without an explicit restored source", async () => {
+    const session = await recoveryStorage.start(1);
+    const first = copy({ id: "first" }), second = copy({ id: "second" });
+    await recoveryStorage.put(session, first);
+    await recoveryStorage.put(session, second);
+    expect(await recoveryStorage.list(1, first.target)).toHaveLength(2);
+  });
+  it("trims older copies saved by the previous format on discovery", async () => {
+    await recoveryStorage.start(1);
+    const now = Date.now();
+    const rows = Array.from({ length: 5 }, (_, index) => copy({
+      id: `legacy-${index}`,
+      updatedAt: now - (5 - index) * 1000,
+      expiresAt: now - (5 - index) * 1000 + RECOVERY_TTL,
+    }));
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(RECOVERY_DATABASE, 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("copies", "readwrite");
+        for (const row of rows) tx.objectStore("copies").put(row);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      };
+    });
+    expect((await recoveryStorage.list(1, "post:7")).map(row => row.id).sort()).toEqual(["legacy-2", "legacy-3", "legacy-4"]);
+    expect(await persistedCopy("legacy-0")).toBeUndefined();
+    expect(await persistedCopy("legacy-1")).toBeUndefined();
   });
   it("invalidates old writers on logout, including writers in other tabs", async () => {
     const old = await recoveryStorage.start(1), other = await recoveryStorage.start(2);

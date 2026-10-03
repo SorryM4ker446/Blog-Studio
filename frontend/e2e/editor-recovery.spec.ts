@@ -12,7 +12,7 @@ async function login(page: Page) {
   return { "X-CSRF-Token": (await response.json()).csrf_token };
 }
 async function copies(page: Page) {
-  return page.evaluate(() => new Promise<{ id: string; target: string; tab: string; updatedAt: number; fields: { title: string; content: string } }[]>((resolve, reject) => {
+  return page.evaluate(() => new Promise<{ id: string; target: string; tab: string; version: number | null; updatedAt: number; fields: { title: string; content: string } }[]>((resolve, reject) => {
     const request = indexedDB.open("blog-studio-editor-recovery", 1);
     request.onerror = () => reject(new Error("Unable to inspect test copies"));
     request.onsuccess = () => {
@@ -170,7 +170,7 @@ test("cancelled links and history preserve the editor and refresh recovery never
     // Save clears the chosen source and current edit, preserving unselected alternatives.
     await expect.poll(async () => (await copies(page)).map(copy => copy.id).sort()).toEqual(retainedIDs);
     await page.reload(); await expect(body(page)).toHaveValue("Unsaved text\n".repeat(80));
-    await page.getByRole("button", { name: "Keep copies and continue" }).click();
+    if (retainedIDs.length) await page.getByRole("button", { name: "Keep copies and continue" }).click();
     await expect(page.getByRole("region", { name: "Browser recovery" })).toHaveCount(0);
     expect((await copies(page)).map(copy => copy.id).sort()).toEqual(retainedIDs);
     expect(writes).toBe(1);
@@ -238,6 +238,62 @@ test("separate tabs keep independent copies and restoring an older version requi
     await expect(body(other)).toHaveValue("First tab text");
     await expect.poll(async () => (await copies(other)).length).toBe(0);
   } finally { await other.close(); await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers }); }
+});
+
+test("restoring the original stale copy still requires review after an unsaved keep-edits exit", async ({ page }) => {
+  const headers = await login(page);
+  const response = await page.request.post(`${E2E_API_URL}/admin/posts`, { headers, data: { title: "Repeated recovery conflict", content: "Server version one" } });
+  const post = await response.json();
+  page.on("dialog", dialog => dialog.accept());
+  const url = `/editor?tab=posts&edit=${post.id}`;
+  try {
+    await page.goto(url);
+    await body(page).fill("Unpublished local draft");
+    await expect.poll(async () => (await copies(page)).length).toBe(1);
+    const original = (await copies(page))[0];
+    const update = await page.request.put(`${E2E_API_URL}/admin/posts/${post.id}`, { headers, data: { title: post.title, content: "Server version two", version: post.version } });
+    expect(update.ok()).toBeTruthy();
+    await page.reload();
+    await restore(page);
+    await expect(page.getByRole("region", { name: "Article version conflict" })).toBeVisible();
+    await page.getByRole("button", { name: "Back to content list" }).click();
+    await answerLeaveDialog(page, true);
+    await page.goto(url);
+    expect((await copies(page)).map(copy => copy.id)).toEqual([original.id]);
+    await restore(page);
+    await expect(page.getByRole("region", { name: "Article version conflict" })).toBeVisible();
+    await page.getByRole("button", { name: "Keep my edits and continue" }).click();
+    await expect(body(page)).toHaveValue("Unpublished local draft");
+    await expect.poll(async () => (await copies(page)).some(copy => copy.id !== original.id && copy.version === post.version + 1)).toBe(true);
+    expect((await copies(page)).find(copy => copy.id === original.id)?.version).toBe(post.version);
+
+    await page.getByRole("button", { name: "Back to content list" }).click();
+    await answerLeaveDialog(page, true);
+    await page.goto(url);
+    const newer = (await copies(page)).find(copy => copy.id !== original.id && copy.version === post.version + 1);
+    expect(newer).toBeTruthy();
+    const newerIndex = (await copies(page)).sort((a, b) => b.updatedAt - a.updatedAt).findIndex(copy => copy.id === newer?.id) + 1;
+    await page.getByRole("button", { name: `Restore copy ${newerIndex}`, exact: true }).click();
+    await expect(body(page)).toHaveValue("Unpublished local draft");
+    await expect(page.getByRole("region", { name: "Article version conflict" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Back to content list" }).click();
+    await answerLeaveDialog(page, true);
+    await page.goto(url);
+    expect((await copies(page)).map(copy => copy.id).sort()).toEqual([original.id, newer!.id].sort());
+    const sameNewerIndex = (await copies(page)).sort((a, b) => b.updatedAt - a.updatedAt).findIndex(copy => copy.id === newer?.id) + 1;
+    await page.getByRole("button", { name: `Restore copy ${sameNewerIndex}`, exact: true }).click();
+    await expect(page.getByRole("region", { name: "Article version conflict" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to content list" }).click();
+    await answerLeaveDialog(page, true);
+    await page.goto(url);
+    expect((await copies(page)).map(copy => copy.id).sort()).toEqual([original.id, newer!.id].sort());
+    const rows = (await copies(page)).sort((a, b) => b.updatedAt - a.updatedAt);
+    const originalIndex = rows.findIndex(copy => copy.id === original.id) + 1;
+    expect(originalIndex).toBeGreaterThan(0);
+    await page.getByRole("button", { name: `Restore copy ${originalIndex}`, exact: true }).click();
+    await expect(page.getByRole("region", { name: "Article version conflict" })).toBeVisible();
+  } finally { await page.request.delete(`${E2E_API_URL}/admin/posts/${post.id}`, { headers }); }
 });
 
 test("expired sessions preserve a new draft and confirmed logout clears copies across tabs", async ({ page, context }) => {

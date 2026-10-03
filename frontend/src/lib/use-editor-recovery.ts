@@ -64,6 +64,7 @@ export function useEditorRecovery(input: RecoveryInput) {
   const writer = useRef<RecoveryWriter | null>(null);
   const id = useRef("");
   const adopted = useRef<string[]>([]);
+  const restoredSource = useRef<string | undefined>(undefined);
   const decided = useRef(false);
   const suppress = useRef(false);
   const revoked = useRef(false);
@@ -74,13 +75,14 @@ export function useEditorRecovery(input: RecoveryInput) {
     if (!writer.current || !current.userId || !current.target || !current.ready || !current.dirty || !decided.current || suppress.current || revoked.current) return;
     const now = Date.now();
     writer.current.schedule({ id: id.current, format: 1, userId: current.userId, target: current.target, tab: tabIdentity(),
-      updatedAt: now, expiresAt: now + RECOVERY_TTL, version: current.version, baseline: current.baseline, fields: current.fields });
+      updatedAt: now, expiresAt: now + RECOVERY_TTL, version: current.version, baseline: current.baseline, fields: current.fields }, restoredSource.current);
   }, []);
   const flush = useCallback(async () => { schedule(); await writer.current?.flush(); }, [schedule]);
   const clear = useCallback(async () => {
     suppress.current = true;
     const ids = [id.current, ...adopted.current];
     adopted.current = [];
+    restoredSource.current = undefined;
     id.current = crypto.randomUUID();
     await writer.current?.clear(ids);
   }, []);
@@ -93,7 +95,7 @@ export function useEditorRecovery(input: RecoveryInput) {
     if (!input.userId || !input.target) return;
     let active = true;
     const userId = input.userId, target = input.target;
-    decided.current = false; suppress.current = false; revoked.current = false; adopted.current = [];
+    decided.current = false; suppress.current = false; revoked.current = false; adopted.current = []; restoredSource.current = undefined;
     id.current = crypto.randomUUID();
     void Promise.all([recoveryStorage.start(userId), recoveryStorage.list(userId, target.startsWith("new:") ? "new:*" : target, () => {
       if (active) setError("Some browser copies expired or could not be read and were removed. Valid copies remain available below.");
@@ -137,6 +139,7 @@ export function useEditorRecovery(input: RecoveryInput) {
   const restore = (copy: RecoveryCopy) => {
     // A fork owns a fresh key; it never writes into another document's copy.
     if (copy.tab === tabIdentity()) adopted.current.push(copy.id);
+    restoredSource.current = copy.target === input.target ? copy.id : undefined;
     decided.current = true;
     setCopies([]);
     input.onRestore(copy);
@@ -145,6 +148,7 @@ export function useEditorRecovery(input: RecoveryInput) {
     if (checking || revoked.current || live.current.userId !== input.userId || live.current.target !== input.target) return;
     // Existing copies remain independently recoverable, including this tab's old copy.
     adopted.current = [];
+    restoredSource.current = undefined;
     decided.current = true;
     setCopies([]);
     schedule();
