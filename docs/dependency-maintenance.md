@@ -26,6 +26,10 @@ Govulncheck uses verbose text output to retain reachable, package and module adv
 
 The September 14–15, 2026 review found reachable advisories in Go 1.26.2, pgx 5.9.1 and quic-go 0.59.0. The repository now requires Go 1.26.8 and pins that Docker build image; pgx is 5.9.2 and quic-go 0.59.1. x/crypto is 0.56.0 to include reported SSH security fixes, with its required x/text 0.41.0. This replaces the older Go 1.25 build baseline while staying on the existing local toolchain's 1.26 release line.
 
-The SSH/OpenPGP packages are not imported by this application, which uses x/crypto for bcrypt. The unmaintained OpenPGP package advisory has no fixed module version; retaining bcrypt does not justify importing OpenPGP. This boundary remains visible in govulncheck reports and the risk register. Ordinary frontend newer versions remain informational; the frontend lockfile was not upgraded.
+The SSH/OpenPGP packages are not imported by this application, which uses x/crypto for bcrypt. The unmaintained OpenPGP package advisory has no fixed module version; retaining bcrypt does not justify importing OpenPGP. This boundary remains visible in govulncheck reports and the risk register.
+
+The October 2026 frontend security update pins Next.js and its ESLint configuration to 16.3.8 and markdown-it to 15.0.2. The lockfile also updates undici to 7.29.1 and the two brace-expansion release lines to 1.1.21 and 5.0.12, within their existing consumers' dependency ranges. Rebuild frontend deployment images to apply these updates.
+
+The development-only `eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces` chain still contains braces 3.0.3. GHSA-vfj7-8cjw-p6xm has no upstream patched release at the time of this review. Full dependency auditing continues to report it and fail the frontend health job, including the affected parent packages. See the [risk register](security-risk-register.md) for the input boundary; a clean production-only audit does not establish a clean full dependency tree. Ordinary newer versions remain informational.
 
 Use matching PostgreSQL 18 clients and retain extension/restore permission checks. Local tests, vulnerability reports and native builds are evidence for those commands only; remote CI, container execution and deployment-host operation require their own results.

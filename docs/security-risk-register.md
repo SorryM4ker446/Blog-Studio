@@ -51,3 +51,10 @@
 ## Dependency module advisory boundary
 
 GO-2026-5932 marks the unmaintained x/crypto OpenPGP package unsafe, with no fixed version. The application imports bcrypt from that module and does not import OpenPGP. Retain the advisory in dependency reports; do not describe module-wide scanning as completely clean. Importing OpenPGP or adding new cryptographic functionality requires separate review. The weekly reachable-code scan continues to fail for reachable vulnerabilities and execution errors; no advisory suppression was added. See [dependency maintenance](dependency-maintenance.md).
+
+### Frontend development glob parsing
+
+- Current state: Next.js's ESLint plugin depends on braces 3.0.3 through fast-glob and micromatch. [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) describes stack exhaustion from deeply nested patterns and has no upstream patched release as of October 2026.
+- Input boundary: this chain belongs to development tooling. The Next.js plugin's fast-glob input comes from the ESLint `settings.next.rootDir` configuration; the project does not configure that setting or pass article content or HTTP input to it. This limits the identified application exposure but is not a claim that the dependency itself is safe.
+- Operational behavior: retain the full audit failure and its affected parent-package findings. Do not downgrade the Next.js ESLint configuration or suppress development findings to obtain a passing health job.
+- Revisit when: an upstream fix or compatible dependency replacement becomes available, or tooling starts accepting untrusted glob patterns. Review code and configuration from untrusted sources before running tooling.
