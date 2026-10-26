@@ -27,7 +27,7 @@ Blog Studio is a full-stack blog and content management application. The reposit
 Native development uses:
 
 - Node.js 22 with the locked dependencies in `frontend/package-lock.json`.
-- Go 1.26.8.
+- Go 1.26.10.
 - PostgreSQL 18.
 - The `pg_trgm` extension installed in the `public` schema for the indexed-search migration.
 
