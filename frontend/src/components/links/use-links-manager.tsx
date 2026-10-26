@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createLink, deleteLink, getAdminLinks, moveLink, swapLinkPositions, updateLink, type HomepageLink, type LinkFields } from "@/lib/links";
 import { getApiErrorMessage } from "@/lib/api-client";
@@ -59,7 +59,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(initialError);
   const [resolved, setResolved] = useState(!initialError);
-  const needsRead = useRef(Boolean(initialError));
+  const [needsRead, setNeedsRead] = useState(Boolean(initialError));
   const read = useRef<AbortController | null>(null);
   const [wasActive, setWasActive] = useState(active);
   const [animatePages, setAnimatePages] = useState(false);
@@ -70,27 +70,31 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   const pendingDeletion = useRef<{ snapshot: DeletedListSnapshot; links: HomepageLink[] } | null>(null);
   const deletionMotion = useRef<(() => void) | null>(null);
   const pendingCreation = useRef<{ id: number; snapshot: ListRowsSnapshot | null; links: HomepageLink[] } | null>(null);
+  const [createdLinkId, setCreatedLinkId] = useState<number | null>(null);
   const creationMotion = useRef<(() => void) | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [openActions, setOpenActions] = useState<number | null>(null);
   if (wasActive !== active) {
     setWasActive(active);
-    setLoading(active && needsRead.current);
-    if (!active) { setEditing(null); setDeleting(null); setOpenActions(null); }
+    setLoading(active && needsRead);
+    if (!active) { setEditing(null); setCreatedLinkId(null); setDeleting(null); setOpenActions(null); }
   }
   const live = useRef(true), working = useRef(false);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
-  useEffect(() => {
-    if (!active || !needsRead.current) return;
+  const loadLinks = useEffectEvent(() => {
+    if (!needsRead) return;
     if (working.current) { setLoading(false); return; }
     setLoading(true);
     const controller = new AbortController();
     read.current = controller;
-    getAdminLinks(controller.signal).then(data => { if (!controller.signal.aborted) { needsRead.current = false; setLinks(data); setResolved(true); setError(""); } })
+    getAdminLinks(controller.signal).then(data => { if (!controller.signal.aborted) { setNeedsRead(false); setLinks(data); setResolved(true); setError(""); } })
       .catch(err => { if (!controller.signal.aborted) setError(getApiErrorMessage(err)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
+  });
+  useEffect(() => {
+    if (active) return loadLinks();
   }, [attempt, active]);
   const filtered = links.filter(link => `${link.title} ${link.description} ${link.url}`.toLowerCase().includes(query.toLowerCase()));
   const pages = Math.max(1, Math.ceil(filtered.length / 8));
@@ -120,14 +124,13 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   } }, [active]);
   const orderUnavailable = Boolean(query) || links.length < 2;
   function navigate(search: string, next: number, replace = false) {
-    setOpenActions(null);
     const target = new URLSearchParams(window.location.search);
     if (search) target.set("link_q", search); else target.delete("link_q");
     if (next > 1) target.set("link_page", String(next)); else target.delete("link_page");
     window.history[replace ? "replaceState" : "pushState"](null,"",`/editor?${target}`);
   }
   useEffect(() => { if (active && !loading && !error && page !== requestedPage) navigate(query,page,true); }, [active,loading,error,page,requestedPage,query]);
-  function refresh() { if (working.current) return; needsRead.current = true; setLoading(true); setAttempt(n => n+1); }
+  function refresh() { if (working.current) return; setNeedsRead(true); setLoading(true); setAttempt(n => n+1); }
   const saveBlockedReason = busy ? "Wait for the current link update to finish before saving."
     : loading ? "Wait for links to finish loading before saving."
     : !resolved ? "Close this dialog and retry loading links before saving."
@@ -144,8 +147,9 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
         id: result.id, links,
         snapshot: captureListRows(document.querySelector<HTMLElement>("[data-editor-links-list]"), page),
       };
+      if (creating) setCreatedLinkId(result.id);
       setLinks(current => [...current.filter(item => item.id !== result.id),result].sort((a,b) => a.position-b.position || a.id-b.id));
-    } catch (err) { needsRead.current = true; throw err; }
+    } catch (err) { setNeedsRead(true); throw err; }
     finally { working.current = false; if (live.current) setBusy(false); }
   }
   async function move(link: HomepageLink, target: HomepageLink, direct = false) {
@@ -162,13 +166,13 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
       if (live.current && crossesPage) await grid.current?.exitBoundary(link.id, direction, direct);
       if (live.current && !crossesPage) await grid.current?.exitSamePageSwap(link.id, target.id, direction);
       if (live.current) {
-        needsRead.current = false;
+        setNeedsRead(false);
         if (incoming) setBoundary({ id: incoming.id, direction, swap: direct });
         else setSamePageSwap({ sourceId: link.id, targetId: target.id, direction });
         setLinks(result);
       }
     }
-    catch (err) { needsRead.current = true; if (live.current) setError(getApiErrorMessage(err)); }
+    catch (err) { setNeedsRead(true); if (live.current) setError(getApiErrorMessage(err)); }
     finally { working.current = false; if (live.current) setBusy(false); }
   }
   async function remove() {
@@ -180,12 +184,12 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
       pendingDeletion.current = snapshot ? { snapshot, links } : null;
       setLinks(items => items.filter(item => item.id !== deleting.id)); setDeleteCompleted(true); setDeleting(null);
     } }
-    catch (err) { needsRead.current = true; if (live.current) setDeleteError(getApiErrorMessage(err)); }
+    catch (err) { setNeedsRead(true); if (live.current) setDeleteError(getApiErrorMessage(err)); }
     finally { working.current = false; if (live.current) setBusy(false); }
   }
   return {
     query, loading, error, count: resolved ? filtered.length : null,
-    search: (value: string) => navigate(value.trim(), 1),
+    search: (value: string) => { setOpenActions(null); navigate(value.trim(), 1); },
     toolbar: <button type="button" className="editor-primary-action" disabled={resolved && links.length >= 100} onClick={() => { setEditing({link:null}); }}><PlusIcon size={16} /> New Link</button>,
     content: <>
     {error && <ErrorState title="Links could not be updated" message={error} onRetry={refresh} retrying={loading} />}
@@ -195,14 +199,14 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
       message={query ? "Try a different search term." : "Create a link to get started."}
       icon={<InboxIcon size={54} />}
     /> : <EditorPageLayout resource="links" count={Math.min(8, filtered.length)} pages={pages}><PaginatedResults stablePageHeight allowOverflow page={page} totalPages={pages} resultKey={String(page)} pending={loading || busy}
-      transitionGroup={query} animateChanges={animatePages} onPageChange={next => { setAnimatePages(true); navigate(query,next); }}>
+      transitionGroup={query} animateChanges={animatePages} onPageChange={next => { setOpenActions(null); setAnimatePages(true); navigate(query,next); }}>
     <div className={styles.list} data-editor-links-list>
       <div className={styles.header} aria-hidden="true"><span>Link &amp; Description</span><span>Destination</span><span>Status</span><span>Order</span><span>Actions</span></div>
     <LinkGrid ref={grid} boundary={boundary} samePageSwap={samePageSwap} order={pageLinks.map(link => link.id)}>{pageLinks.map(link => {
       const index = links.findIndex(item => item.id === link.id);
       return <article className={`${styles.row} ${highlightStyles.row} ${openActions === link.id ? highlightStyles.active : ""}`} data-link-id={link.id} data-editor-row-id={link.id} key={link.id} aria-label={link.title}
-        style={pendingCreation.current?.id === link.id && editing ? { opacity: 0 } : undefined}
-        aria-hidden={pendingCreation.current?.id === link.id && Boolean(editing) || undefined}>
+        style={createdLinkId === link.id && editing ? { opacity: 0 } : undefined}
+        aria-hidden={createdLinkId === link.id && Boolean(editing) || undefined}>
         <div className={styles.linkInfo}><LinkCardContent link={link} /></div>
         <div className={styles.meta}><ClampedText paragraph className={styles.url} text={link.url || "Set a destination before enabling this link."} />
           <span className={styles.status} data-state={link.visible ? "visible" : link.url ? "hidden" : "missing"}>{link.visible ? "Visible" : link.url ? "Hidden" : "Needs a URL"}</span></div>
@@ -220,7 +224,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
     </PaginatedResults></EditorPageLayout>}
     </>,
     dialogs: <>
-  {editing && <LinkEditorDialog key={editing.link?.id ?? "new"} link={editing.link} blockedReason={saveBlockedReason} onSave={save} onClose={() => setEditing(null)} />}
+  {editing && <LinkEditorDialog key={editing.link?.id ?? "new"} link={editing.link} blockedReason={saveBlockedReason} onSave={save} onClose={() => { setEditing(null); setCreatedLinkId(null); }} />}
   <EditorDeleteDialog open={Boolean(deleting)} completed={deleteCompleted} resourceType="link" busy={busy} blocked={false} error={deleteError} onConfirm={() => void remove()} onCancel={() => { if (!working.current) { setDeleteCompleted(false); setDeleting(null); } }} />
   </>,
   };

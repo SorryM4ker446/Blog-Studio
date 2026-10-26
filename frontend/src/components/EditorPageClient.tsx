@@ -138,7 +138,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   const postsLoading = postResource.loading;
   const filesLoading = fileResource.loading;
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const { pendingListDeletion, pendingCreatedPostId, postListBeforeCreate, pendingCreatedFile } = useEditorListMotion({
+  const { pendingListDeletion: pendingListDeletionRef, pendingCreatedPostId: pendingCreatedPostIdRef, postListBeforeCreate: postListBeforeCreateRef, pendingCreatedFile: pendingCreatedFileRef } = useEditorListMotion({
     urlTab, editTarget, postData, fileData, postPage, filePage, postsError, filesError, uploadDialogOpen,
   });
   const [hasShownList, setHasShownList] = useState(editTarget === null);
@@ -274,7 +274,9 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   }
 
   const recoveryActions = useRef({ loadCategories, posts: postResource.retry, files: fileResource.retry });
-  recoveryActions.current = { loadCategories, posts: postResource.retry, files: fileResource.retry };
+  useEffect(() => {
+    recoveryActions.current = { loadCategories, posts: postResource.retry, files: fileResource.retry };
+  });
   useEffect(() => {
     if (!authorized) return;
     const recovery = initialRecoveryRef.current;
@@ -349,7 +351,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       if (detailError) { setDetailError(""); setDetailAttempt(value => value + 1); }
       return;
     }
-    postListBeforeCreate.current = post === null
+    postListBeforeCreateRef.current = post === null
       ? captureListRows(document.querySelector<HTMLElement>('[data-editor-list][data-resource="posts"]'), postPage)
       : null;
     writeEditorTarget(target);
@@ -360,7 +362,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   function closeEditor() {
     if (saveOperationRef.current) return;
     const proceed = () => {
-      if (pendingCreatedPostId.current === null) postListBeforeCreate.current = null;
+      if (pendingCreatedPostIdRef.current === null) postListBeforeCreateRef.current = null;
       writeEditorTarget(null, true);
       resetForm(null);
     };
@@ -420,7 +422,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
       } else if (!editingPost) {
         savedDraft = await createPost(payload);
         if (!isCurrentSave()) return;
-        pendingCreatedPostId.current = savedDraft.id;
+        pendingCreatedPostIdRef.current = savedDraft.id;
         setEditingPost(savedDraft);
         result = action === "publish" ? await publishPost(savedDraft.id, { ...payload, version: savedDraft.version }) : savedDraft;
       } else {
@@ -507,7 +509,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
         const deleted = await deletePost(id);
         if (!deleted) throw new Error("Failed to delete post.");
         const snapshot = captureDeletedListRow(document.querySelector<HTMLElement>('[data-editor-list][data-resource="posts"]'), id, postPage);
-        pendingListDeletion.current = snapshot ? { type, snapshot, data: postData } : null;
+        pendingListDeletionRef.current = snapshot ? { type, snapshot, data: postData } : null;
         if (editingPost?.id === id) {
           setEditingPost(null);
           writeEditorTarget(null, true);
@@ -523,7 +525,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
           return;
         }
         const snapshot = captureDeletedListRow(document.querySelector<HTMLElement>('[data-editor-list][data-resource="files"]'), id, filePage);
-        pendingListDeletion.current = snapshot ? { type, snapshot, data: fileData } : null;
+        pendingListDeletionRef.current = snapshot ? { type, snapshot, data: fileData } : null;
         await refreshFiles(filePage);
       } else {
         const deleted = await deleteCategory(id);
@@ -545,7 +547,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
   async function handleManagedFileUpload(file: File, displayName: string, description: string, onProgress: (progress: UploadProgress | null) => void) {
     const result = await uploadFileWithMetadata(file, { displayName, description }, false, onProgress);
     if (result.ok && result.file) {
-      pendingCreatedFile.current = {
+      pendingCreatedFileRef.current = {
         id: result.file.id,
         snapshot: captureListRows(document.querySelector<HTMLElement>('[data-editor-list][data-resource="files"]'), filePage),
         data: fileData,
@@ -703,7 +705,7 @@ function EditorSession({ initialState }: { initialState: EditorPageInitialState 
 
       {uploadDialogOpen && <FileUploadDialog open onClose={() => {
         setUploadDialogOpen(false);
-        if (pendingCreatedFile.current) void refreshFiles(1);
+        if (pendingCreatedFileRef.current) void refreshFiles(1);
       }} onUpload={handleManagedFileUpload} />}
       <FilePreviewDialog
         file={previewFile}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { useEditorRouter as useRouter } from "@/lib/use-editor-router";
 import { useAuth } from "@/context/AuthContext";
@@ -84,7 +84,7 @@ export default function SettingsPageClient({
     };
   }, []);
 
-  const loadSettings = useCallback(async () => {
+  async function loadSettings() {
     const requestId = ++settingsRequestIdRef.current;
     setSettingsLoading(true);
     setSettingsError("");
@@ -105,7 +105,7 @@ export default function SettingsPageClient({
         setSettingsLoading(false);
       }
     }
-  }, [user]);
+  }
 
   async function handleSaveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
