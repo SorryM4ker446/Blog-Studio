@@ -100,6 +100,8 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
   const pages = Math.max(1, Math.ceil(filtered.length / 8));
   const page = Math.min(requestedPage, pages);
   const pageLinks = filtered.slice((page - 1) * 8, page * 8);
+  const correctingPage = active && !loading && !error && page !== requestedPage;
+  if (correctingPage && openActions !== null) setOpenActions(null);
   useLayoutEffect(() => {
     const pending = pendingDeletion.current;
     if (!pending || pending.links === links) return;
@@ -129,7 +131,7 @@ export default function useLinksManager(active: boolean, initialLinks: HomepageL
     if (next > 1) target.set("link_page", String(next)); else target.delete("link_page");
     window.history[replace ? "replaceState" : "pushState"](null,"",`/editor?${target}`);
   }
-  useEffect(() => { if (active && !loading && !error && page !== requestedPage) navigate(query,page,true); }, [active,loading,error,page,requestedPage,query]);
+  useEffect(() => { if (correctingPage) navigate(query,page,true); }, [correctingPage,page,requestedPage,query]);
   function refresh() { if (working.current) return; setNeedsRead(true); setLoading(true); setAttempt(n => n+1); }
   const saveBlockedReason = busy ? "Wait for the current link update to finish before saving."
     : loading ? "Wait for links to finish loading before saving."

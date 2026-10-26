@@ -125,19 +125,19 @@ Recovery tests use the real IndexedDB adapter with fake-indexeddb for validation
 
 ### Homepage links and dialogs
 
-Links tests cover migration replay, hidden templates, URL and color validation, visibility, collection limits, version conflicts, idempotent create retries, and atomic adjacent or direct position swaps. Browser checks cover server-rendered lists, failed-read retry, drafts during pending ordering, save/reopen persistence, aligned management rows, clamped homepage cards, touch/mouse scrolling, and keyboard activation.
+Links tests cover migration replay, hidden templates, URL and color validation, visibility, collection limits, version conflicts, idempotent create retries, and atomic adjacent or direct position swaps. Read lifecycle checks include Strict Mode cancellation, obsolete failures and reuse of a resolved list. Browser checks cover server-rendered lists, failed-read retry, drafts during pending ordering, save/reopen persistence, aligned management rows, clamped homepage cards, touch/mouse scrolling, keyboard activation, and closing row actions when an exhausted history page is corrected. New link rows stay hidden until the save dialog finishes its exit; opening another dialog must not hide them or replay their entrance.
 
 Dialog tests cover Cancel, Escape, backdrop dismissal, drag-out protection, busy blocking, failed-save retention and focus restoration. Actual exit animations are paused to inspect mounted-but-inactive states and background isolation. The color picker covers dragging, keyboard sliders, invalid HEX recovery, viewport positioning, interrupted dismissal and reduced motion.
 
 ### Settings
 
-Settings tests cover draft discard, failed-save retention, blocked dismissal while saving, automatic close after success, password cleanup and inline validation. Browser coverage includes focus, both themes, narrow screens, reduced motion, accessibility and Unicode boundaries for profile limits.
+Settings tests cover read retries through loading, repeated failure and successful profile recovery, draft discard, failed-save retention, blocked dismissal while saving, automatic close after success, password cleanup and inline validation. Browser coverage includes focus, both themes, narrow screens, reduced motion, accessibility and Unicode boundaries for profile limits.
 
 ### Search and navigation
 
 Unit tests cover URL normalization, independent search section pages, stale responses, cancellation, exhausted-page correction and history metadata. Browser checks exercise all list/search routes through back/forward/reload, delayed requests, empty results, failures and rapid scope changes. Clearing a list search retains its results and URL until an explicit empty submission.
 
-Initial search keeps its loading status visually hidden for screen readers; results enter without a preceding placeholder exit. Later searches retain resolved content while pending, then transition to the new result. Idle scope changes leave the keyword prompt stable. The Posts category field becomes inactive immediately on exit and hides after its transition; reversing an unfinished exit and reduced-motion behavior are checked.
+Initial search keeps its loading status visually hidden for screen readers; results enter without a preceding placeholder exit. Later searches retain resolved content while pending, then transition to the new result. Idle scope changes leave the keyword prompt stable. The Posts category field becomes inactive immediately on exit and hides after its transition; reversing an unfinished exit and reduced-motion behavior are checked. Category animation checks capture the CSS transitions when `data-open` commits to `false`, then pause them at their midpoint. Desktop and narrow viewports run at normal speed and with browser CPU throttling so an early animation frame cannot be mistaken for a committed filter change.
 
 Pagination tests check stable outgoing height, sequential result replacement and coordinated list/pagination transitions without duplicate layers or nested animations. Editor checks cover full-page spacing on short last pages, reloads and resizing, with spacing removed for single-page results. Links coverage includes filtered counts, tab resets, long content, same-page swaps, and cross-page swaps in both directions with reduced motion. Navigation checks use 991 articles/files, deep pages and repeated detail round trips with storage blocked or snapshots expired. This is a functional navigation fixture, not a performance benchmark.
 

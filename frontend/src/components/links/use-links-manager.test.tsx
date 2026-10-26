@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { HomepageLink } from "@/lib/links";
 import { createLink, getAdminLinks, moveLink } from "@/lib/links";
@@ -169,4 +170,37 @@ it("counts matching links rather than the unfiltered collection", () => {
   render(<Harness />);
   expect(screen.getByTestId("count")).toHaveTextContent("1");
   expect(screen.getAllByRole("article")).toHaveLength(1);
+});
+
+it("closes row actions when correcting an exhausted history page", () => {
+  const links = Array.from({ length: 9 }, (_, index) => link(index + 1));
+  window.history.replaceState(null, "", "/editor?tab=links&link_page=2");
+  const view = render(<Harness links={links} />);
+  const more = screen.getByRole("button", { name: "More actions for Link 9" });
+  fireEvent.click(more);
+  expect(more).toHaveAttribute("aria-expanded", "true");
+
+  window.history.replaceState(null, "", "/editor?tab=links&link_page=99");
+  view.rerender(<Harness links={links} />);
+
+  expect(new URL(window.location.href).searchParams.get("link_page")).toBe("2");
+  expect(more).toHaveAttribute("aria-expanded", "false");
+  expect(getAdminLinks).not.toHaveBeenCalled();
+});
+
+it("ignores the read cancelled by Strict Mode without restarting a resolved list", async () => {
+  const obsolete = deferred<HomepageLink[]>(), current = deferred<HomepageLink[]>();
+  vi.mocked(getAdminLinks).mockReturnValueOnce(obsolete.promise).mockReturnValueOnce(current.promise);
+  const view = render(<StrictMode><Harness links={[]} error="Initial read failed" /></StrictMode>);
+  expect(getAdminLinks).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(getAdminLinks).mock.calls[0][0]!.aborted).toBe(true);
+
+  await act(async () => current.resolve([link(2)]));
+  await act(async () => obsolete.reject(new Error("Obsolete read failed")));
+  expect(screen.getByRole("article")).toHaveAttribute("aria-label", "Link 2");
+  expect(screen.getByTestId("loading")).toHaveTextContent("false");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+  view.rerender(<StrictMode><Harness links={[]} error="Initial read failed" /></StrictMode>);
+  expect(getAdminLinks).toHaveBeenCalledTimes(2);
 });

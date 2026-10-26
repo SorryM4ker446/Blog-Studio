@@ -2,16 +2,37 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest";
 import SettingsPageClient from "./SettingsPageClient";
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), password: vi.fn(), refresh: vi.fn(), replace: vi.fn() }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), password: vi.fn(), refresh: vi.fn(), replace: vi.fn() }));
 vi.mock("@/lib/use-editor-router", () => ({ useEditorRouter: () => ({ replace: mocks.replace }) }));
 vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: { id: 1, username: "admin", role: "admin" }, authStatus: "authenticated", isLoading: false, refreshProfile: mocks.refresh }) }));
 vi.mock("@/lib/api", () => ({
-  updateSettings: mocks.save, updatePassword: mocks.password,
+  getSettings: mocks.read, updateSettings: mocks.save, updatePassword: mocks.password,
   normalizeFileViewUrl: (value: string) => value,
   getApiErrorMessage: (error: Error, fallback: string) => error?.message || fallback,
 }));
 beforeEach(() => { mocks.save.mockResolvedValue(true); mocks.refresh.mockResolvedValue(undefined); });
 const initialSettings = { profile_name: "Saved name", profile_description: "Introduction", profile_tag: "Writer" };
+
+it("keeps a failed settings read retryable and applies the successful response", async () => {
+  let resolve!: (settings: Record<string, string>) => void;
+  mocks.read.mockRejectedValueOnce(new Error("Read unavailable"))
+    .mockReturnValueOnce(new Promise<Record<string, string>>(done => { resolve = done; }));
+  render(<SettingsPageClient initialSettings={initialSettings} initialSettingsError="Initial read failed" />);
+  expect(mocks.read).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await screen.findByText("Read unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(screen.getByRole("status")).toHaveTextContent("Loading settings");
+
+  await act(async () => resolve({ profile_name: "Recovered name", profile_description: "Recovered description" }));
+  expect(screen.getByRole("heading", { name: "Recovered name" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Edit profile" }));
+  expect(screen.getByLabelText("Profile Name")).toHaveValue("Recovered name");
+  expect(screen.getByLabelText("Profile Description")).toHaveValue("Recovered description");
+  expect(mocks.read).toHaveBeenCalledTimes(2);
+  expect(mocks.read).toHaveBeenLastCalledWith({ fresh: true });
+  expect(mocks.save).not.toHaveBeenCalled();
+});
 
 it("rejects oversized profile fields and accepts Unicode at the limits", async () => {
   render(<SettingsPageClient initialSettings={initialSettings} />);

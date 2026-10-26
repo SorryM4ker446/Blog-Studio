@@ -2,8 +2,15 @@ import { expect, test } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
 
-for (const reducedMotion of ["no-preference", "reduce"] as const) {
-  test(`idle search stays stable and categories retract with ${reducedMotion} motion`, async ({ page }) => {
+for (const [reducedMotion, cpuRate] of [
+  ["no-preference", 1], ["reduce", 1],
+  ["no-preference", 6], ["reduce", 6],
+] as const) {
+  test(`idle search stays stable and categories retract with ${reducedMotion} motion${cpuRate > 1 ? " on a throttled CPU" : ""}`, async ({ page }) => {
+    if (cpuRate > 1) {
+      const session = await page.context().newCDPSession(page);
+      await session.send("Emulation.setCPUThrottlingRate", { rate: cpuRate });
+    }
     await page.emulateMedia({ reducedMotion });
     await page.goto("/search");
     await expect(page).toHaveTitle("Blog Studio");
@@ -26,19 +33,26 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     for (const width of [1280, 375]) {
       await page.setViewportSize({ width, height: 900 });
       await choose("Posts");
+      await expect(category).toHaveAttribute("data-open", "true");
       await expect(category).toHaveCSS("opacity", "1");
       await expect(page.getByRole("combobox", { name: "Search category" })).toBeEnabled();
       await expect(results).toHaveAttribute("aria-busy", "false");
       await page.getByRole("combobox", { name: "Search scope" }).click();
       const exit = await page.getByRole("option", { name: "Posts and files", exact: true }).evaluate(option => {
-        (option as HTMLElement).click();
-        return new Promise<{ count: number; opacity: number }>(resolve => requestAnimationFrame(() => {
-          const node = document.querySelector<HTMLElement>('.search-filter-field[data-open]')!;
-          const animations = node.getAnimations();
-          for (const animation of animations) { animation.pause(); animation.currentTime = 110; }
-          resolve({ count: animations.length, opacity: Number(getComputedStyle(node).opacity) });
-        }));
+        const node = document.querySelector<HTMLElement>('.search-filter-field[data-open]')!;
+        return new Promise<{ count: number; opacity: number }>(resolve => {
+          const observer = new MutationObserver(() => {
+            if (node.dataset.open !== "false") return;
+            observer.disconnect();
+            const animations = node.getAnimations();
+            for (const animation of animations) { animation.pause(); animation.currentTime = 110; }
+            resolve({ count: animations.length, opacity: Number(getComputedStyle(node).opacity) });
+          });
+          observer.observe(node, { attributes: true, attributeFilter: ["data-open"] });
+          (option as HTMLElement).click();
+        });
       });
+      await expect(category).toHaveAttribute("data-open", "false");
       await expect(category).toHaveAttribute("inert", "");
       await expect(page.getByRole("combobox", { name: "Search category" })).toHaveCount(0);
       if (reducedMotion === "no-preference") {
@@ -60,7 +74,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     expect(await page.evaluate(() => (window as unknown as { idleAnimations: number }).idleAnimations)).toBe(0);
     expect(errors).toEqual([]);
   });
+}
 
+for (const reducedMotion of ["no-preference", "reduce"] as const) {
   test(`search scope fades to current results with ${reducedMotion} motion`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion });
     await page.goto("/search");
