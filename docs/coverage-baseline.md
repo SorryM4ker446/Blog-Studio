@@ -44,7 +44,7 @@ The removal of duplicated client list/request state reduces the frontend denomin
 
 ## Fixed measurement scope
 
-`npm run test:coverage` uses Vitest/V8 4.1.11 and includes all `src/**/*.{ts,tsx}`, excluding only test files, test setup and declaration files. Reports in `frontend/coverage` include text, HTML, LCOV, JSON summary and full Istanbul JSON. Untested production files remain in the denominator. Keep the Vitest coverage provider version aligned with Vitest on upgrades.
+`npm run test:coverage` uses Vitest/V8 4.1.12 and includes all `src/**/*.{ts,tsx}`, excluding only test files, test setup and declaration files. Reports in `frontend/coverage` include text, HTML, LCOV, JSON summary and full Istanbul JSON. Untested production files remain in the denominator. Keep the Vitest coverage provider version aligned with Vitest on upgrades.
 
 Async server components, browser layout, hydration and native navigation still require Playwright. The Next.js testing guide shipped at `node_modules/next/dist/docs/01-app/02-guides/testing/vitest.md` recommends E2E for async components. Their source is not silently removed from this global baseline, and Playwright execution is not merged into V8 unit coverage.
 

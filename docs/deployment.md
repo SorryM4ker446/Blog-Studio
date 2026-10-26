@@ -163,7 +163,7 @@ The committed CI workflow validates that the fixed proxy address is separated fr
 
 ## Build and dependency maintenance
 
-The backend build stage is pinned to `golang:1.26.9-alpine`, matching `backend/go.mod` and CI. It compiles the API, migration, seed and backup/restore commands; rebuild both backend and maintenance targets after dependency fixes. The frontend continues to use Node.js 22, locked npm dependencies and standalone output.
+The backend build stage is pinned to `golang:1.26.10-alpine`, matching `backend/go.mod` and CI. It compiles the API, migration, seed and backup/restore commands; rebuild both backend and maintenance targets after dependency fixes. The frontend continues to use Node.js 22, locked npm dependencies and standalone output.
 
 [Dependency health](dependency-maintenance.md) reports npm and Go findings but does not audit OS image packages or run a deployment. CI keeps its full image-build and disposable Compose topology checks. Local native/cross-compilation evidence is distinct from those container results; run and review the latter after publishing the change.
 
