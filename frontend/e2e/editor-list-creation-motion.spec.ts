@@ -206,6 +206,18 @@ test("a new link enters after its dialog closes and editing it does not replay e
     await page.goto(`/editor?tab=links&link_q=${encodeURIComponent(prefix)}`);
     await expect(page.locator(`[data-editor-links-list] [data-editor-row-id="${existingLink.id}"]`)).toBeVisible();
     await trackRowMotions(page);
+    await page.evaluate(() => {
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (...args) {
+        const motion = animate.apply(this, args);
+        const frames = args[0] as Keyframe[];
+        if (this.hasAttribute("data-modal-panel") && Array.isArray(frames) && frames.at(-1)?.opacity === 0) {
+          motion.pause();
+          Element.prototype.animate = animate;
+        }
+        return motion;
+      };
+    });
     await page.getByRole("button", { name: "New Link", exact: true }).click();
     expect(await rowMotions(page)).toEqual([]);
     const dialog = page.getByRole("dialog", { name: "New link" });
@@ -216,8 +228,14 @@ test("a new link enters after its dialog closes and editing it does not replay e
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     createdLink = await response.json();
-    await expect(dialog).toHaveCount(0);
     const row = page.locator(`[data-editor-links-list] [data-editor-row-id="${createdLink!.id}"]`);
+    await expect(page.locator("[data-modal-overlay]")).toHaveAttribute("data-state", "closing");
+    await expect(dialog).toBeAttached();
+    await expect(row).toHaveAttribute("aria-hidden", "true");
+    await expect(row).toHaveCSS("opacity", "0");
+    expect((await rowMotions(page)).filter(motion => motion.id === String(createdLink!.id))).toEqual([]);
+    await dialog.evaluate(node => node.getAnimations().forEach(motion => motion.finish()));
+    await expect(dialog).toHaveCount(0);
     await expect(row).toBeVisible();
     await expect.poll(async () => (await rowMotions(page)).some(motion => motion.id === String(createdLink!.id) && motion.opacity === "0")).toBe(true);
     expect(await rowMotions(page)).toEqual(expect.arrayContaining([
@@ -226,6 +244,11 @@ test("a new link enters after its dialog closes and editing it does not replay e
     expect((await rowMotions(page)).filter(motion => motion.id === String(createdLink.id)).every(motion => motion.background === "")).toBe(true);
     await expectEntranceGlow(page, String(createdLink.id));
     await page.evaluate(() => { (window as typeof window & { rowMotions?: RowMotion[] }).rowMotions = []; });
+    await page.getByRole("button", { name: "New Link", exact: true }).click();
+    await expect(row).not.toHaveAttribute("aria-hidden", "true");
+    await expect(row).toHaveCSS("opacity", "1");
+    await page.getByRole("dialog", { name: "New link" }).getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "New link" })).toHaveCount(0);
     await row.getByRole("button", { name: /More actions for/ }).click();
     await row.getByRole("button", { name: "Edit", exact: true }).click();
     const editDialog = page.getByRole("dialog", { name: "Edit link" });

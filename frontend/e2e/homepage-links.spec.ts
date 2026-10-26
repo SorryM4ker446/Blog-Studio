@@ -418,6 +418,11 @@ test("link search, last-page deletion and direct dialog cancellation preserve na
     await page.goto("/editor?tab=links&link_page=2&edit=1");
     await expect(page.getByRole("article",{name:"Managed 9",exact:true})).toBeVisible();
     await page.getByRole("article",{name:"Managed 9",exact:true}).getByRole("button",{name:"More actions for Managed 9"}).click();
+    await expect(page.getByRole("button", { name: "More actions for Managed 9" })).toHaveAttribute("aria-expanded", "true");
+    await page.evaluate(() => window.history.pushState(null, "", "/editor?tab=links&link_page=99"));
+    await expect(page).toHaveURL(/link_page=2/);
+    await expect(page.getByRole("button", { name: "More actions for Managed 9" })).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "More actions for Managed 9" }).click();
     await page.getByRole("article",{name:"Managed 9",exact:true}).getByRole("button",{name:"Delete",exact:true}).click();
     await page.getByRole("alertdialog").getByRole("button",{name:"Delete",exact:true}).click();
     await expect(page).not.toHaveURL(/link_page=/);
