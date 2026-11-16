@@ -50,7 +50,7 @@
 
 ## Dependency module advisory boundary
 
-GO-2026-5932 marks the unmaintained x/crypto OpenPGP package unsafe, with no fixed version. The application imports bcrypt from that module and does not import OpenPGP. Retain the advisory in dependency reports; do not describe module-wide scanning as completely clean. Importing OpenPGP or adding new cryptographic functionality requires separate review. The weekly reachable-code scan continues to fail for reachable vulnerabilities and execution errors; no advisory suppression was added. See [dependency maintenance](dependency-maintenance.md).
+[GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) marks the unmaintained x/crypto OpenPGP packages unsafe. x/crypto 0.59.0 removes these packages. The application uses bcrypt from that module. Adding OpenPGP support or other cryptographic functionality requires separate review. The weekly reachable-code scan fails for reachable vulnerabilities and execution errors. See [dependency maintenance](dependency-maintenance.md).
 
 ### Withdrawn frontend glob advisory
 
