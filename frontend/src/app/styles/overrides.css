@@ -26,11 +26,11 @@ html, body, .app-container, .main-content { height: 100dvh; }
 .custom-select-management .custom-select-rename { width: 100%; }
 .custom-select-container, .custom-select-rename input { min-width: 0; }
 .custom-select-rename input { width: 0; flex: 1; }
-.page-title, .post-title, .post-body, .custom-html-style { overflow-wrap: anywhere; }
+.page-title, .post-title, .post-body { overflow-wrap: anywhere; }
 .ai-card { min-width: 0; overflow-wrap: anywhere; }
 .card-icon, .page-title > svg { flex-shrink: 0; }
-.post-body table, .custom-html-style table { display: block; max-width: 100%; overflow-x: auto; }
-.post-body pre, .custom-html-style pre { max-width: 100%; overflow-x: auto; overflow-wrap: normal; }
+.post-body table { display: block; max-width: 100%; overflow-x: auto; }
+.post-body pre { max-width: 100%; overflow-x: auto; overflow-wrap: normal; }
 .post-body a { color: var(--accent-blue); }
 .rc-md-editor .rc-md-navigation .button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
 @media (max-width: 1100px) {

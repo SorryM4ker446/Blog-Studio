@@ -5,21 +5,28 @@ import { ProfileForm, ProfileSummary, SecurityForm, SessionPanel } from "./Setti
 
 describe("settings sections", () => {
   it("announces avatar feedback independently from the profile form", () => {
-    render(
-      <ProfileSummary
-        user={{ id: 1, username: "ada", role: "admin" }}
-        profileName="Ada"
-        profileTag="admin"
-        profileAvatar=""
-        avatarFailed={false}
-        avatarUploading={false}
-        message="❌ Avatar upload failed."
-        onAvatarUpload={vi.fn()}
-        onAvatarError={vi.fn()}
-      />,
-    );
+    const props = {
+      user: { id: 1, username: "ada", role: "admin" },
+      profileName: "Ada",
+      profileTag: "admin",
+      profileAvatar: "",
+      avatarFailed: false,
+      onAvatarUpload: vi.fn(),
+      onAvatarError: vi.fn(),
+    };
+    const { rerender } = render(<ProfileSummary {...props} avatarUploading={false} message="" />);
+    const note = screen.getByText("Avatar changes are saved immediately.");
 
+    rerender(<ProfileSummary {...props} avatarUploading message="" />);
+    expect(note).toHaveTextContent("Uploading avatar…");
+
+    rerender(<ProfileSummary {...props} avatarUploading={false} message="✅ Avatar updated!" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Avatar updated!");
+    expect(note).toContainElement(screen.getByRole("status"));
+
+    rerender(<ProfileSummary {...props} avatarUploading={false} message="❌ Avatar upload failed." />);
     expect(screen.getByRole("alert")).toHaveTextContent("Avatar upload failed.");
+    expect(note).toContainElement(screen.getByRole("alert"));
   });
 
   it("associates profile labels and exposes failures as alerts", () => {
