@@ -80,6 +80,33 @@ it("animates all scrolling regions to the top before completing refresh", () => 
   expect(vi.getTimerCount()).toBe(0);
 });
 
+it("does not scroll farther down when the first frame predates refresh", () => {
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  const requestFrame = vi.fn<typeof requestAnimationFrame>().mockReturnValue(1);
+  vi.stubGlobal("requestAnimationFrame", requestFrame);
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  document.body.innerHTML = "<div></div>";
+  const region = document.querySelector("div")!;
+  region.scrollTop = 200;
+  const done = vi.fn();
+  const clock = vi.spyOn(performance, "now").mockReturnValue(100);
+  const cancel = scrollPageToTop(done, vi.fn());
+  try {
+    requestFrame.mock.calls[0][0](90);
+    expect(region.scrollTop).toBe(200);
+    expect(done).not.toHaveBeenCalled();
+
+    requestFrame.mock.calls[1][0](260);
+    expect(region.scrollTop).toBe(25);
+    requestFrame.mock.calls[2][0](420);
+    expect(region.scrollTop).toBe(0);
+    expect(done).toHaveBeenCalledOnce();
+  } finally {
+    cancel();
+    clock.mockRestore();
+  }
+});
+
 it("cancels refresh motion on user scrolling and honors reduced motion", () => {
   vi.useFakeTimers();
   vi.stubGlobal("matchMedia", () => ({ matches: false }));
