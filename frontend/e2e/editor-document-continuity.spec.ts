@@ -37,7 +37,7 @@ for (const flow of ["refresh", "return"]) test(`editor ${flow} preserves its doc
             const rect = form.getBoundingClientRect();
             const categoryButton = document.querySelector('[aria-label="Create category"]');
             frames.push({ opacity, categoryOpacity: categoryButton ? Number(getComputedStyle(categoryButton).opacity) : 0, width: rect.width, top: rect.top + (document.querySelector(".content-scroll")?.scrollTop ?? 0),
-              title: title.value, attached: original === title, body: document.querySelector(".custom-html-style")?.textContent ?? "" });
+              title: title.value, attached: original === title, body: document.querySelector(".custom-editor-wrapper .post-body")?.textContent ?? "" });
           }
           frame = requestAnimationFrame(sample);
         };
@@ -51,7 +51,7 @@ for (const flow of ["refresh", "return"]) test(`editor ${flow} preserves its doc
         await page.reload({ waitUntil: "commit" });
         await expect(page.locator("#post-title")).toHaveValue(post.title);
         await expect(page.locator(".custom-editor-wrapper textarea")).toHaveValue(post.content);
-        await expect(page.locator(".custom-html-style")).toContainText(post.content);
+        await expect(page.locator(".custom-editor-wrapper .post-body")).toContainText(post.content);
         await expect(page.locator(".button-type-header")).toHaveAttribute("title", "Header");
         await expect(page.getByRole("button", { name: "Create category", exact: true })).toBeDisabled();
         await expect(page.getByRole("button", { name: "Create category", exact: true })).toHaveCSS("opacity", "1");

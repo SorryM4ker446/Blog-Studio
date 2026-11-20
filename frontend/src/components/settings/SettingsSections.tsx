@@ -152,7 +152,9 @@ export function ProfileSummary({
           <span className="settings-profile-tag">{(profileTag || user.role || "admin").trim()}</span>
         </div>
       </div>
-      {message && <SettingsFeedback message={message} />}
+      <p className="settings-avatar-note">
+        {message ? <SettingsFeedback message={message} /> : avatarUploading ? "Uploading avatar…" : "Avatar changes are saved immediately."}
+      </p>
     </section>
   );
 }

@@ -36,7 +36,8 @@ body.theme-light .settings-profile-tag { color: color-mix(in srgb, var(--accent-
 .settings-dialog-header h2 { margin: 0; font-size: 1.25rem; }
 .settings-dialog-fields { min-width: 0; padding: 0; margin: 0; border: 0; }
 .settings-dialog #profile-summary-heading, .settings-dialog #profile-form-heading, .settings-dialog #security-heading { display: none; }
-.settings-avatar-note { margin: 14px 0 24px; color: var(--text-muted); font-size: .8rem; }
+.settings-avatar-note { display: flex; align-items: center; margin: 14px 0 24px; color: var(--text-muted); font-size: .8rem; line-height: 1.25rem; overflow-wrap: anywhere; }
+.settings-avatar-note .settings-feedback { padding: 0; background: none; font: inherit; }
 @media (max-width: 600px) {
   .settings-identity, .settings-row, .settings-session { padding: 20px; }
   .settings-row { align-items: flex-start; flex-direction: column; gap: 14px; }

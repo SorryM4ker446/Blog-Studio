@@ -295,7 +295,6 @@ export default function SettingsPageClient({
                   onAvatarUpload={handleAvatarUpload}
                   onAvatarError={() => setFailedAvatarUrl(profileAvatar)}
                 />
-                <p className="settings-avatar-note">Avatar changes are saved immediately.</p>
                 <ProfileForm
                   profileName={profileName}
                   profileDescription={profileDesc}

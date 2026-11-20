@@ -234,6 +234,7 @@ export default function PostEditorForm(props: PostEditorFormProps) {
             >
               <MdEditor
                 id="post-markdown"
+                htmlClass="post-body"
                 invalid={Boolean(errors.content)}
                 errorId={errors.content ? "post-content-error" : undefined}
                 value={props.content}

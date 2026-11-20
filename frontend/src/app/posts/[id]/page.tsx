@@ -61,7 +61,7 @@ export default async function PostPage({ params }: PostPageProps) {
         </div>
 
         <section
-          className="post-body custom-html-style"
+          className="post-body"
           dangerouslySetInnerHTML={{
             __html: md.render(normalizeMarkdownFileUrls(post.content || "")),
           }}
