@@ -65,7 +65,9 @@ export function scrollPageToTop(done: () => void, interrupted: () => void) {
   const onKey = (event: KeyboardEvent) => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) cancel(); };
   const animate = (now: number) => {
     if (!active) return;
-    const progress = reduced || !positions.length ? 1 : Math.min(1, (now - started) / 320);
+    // The first frame timestamp can precede the refresh click.
+    const elapsed = Math.max(0, now - started);
+    const progress = reduced || !positions.length ? 1 : Math.min(1, elapsed / 320);
     positions.forEach(({ element, top }) => { element.scrollTop = top * (1 - progress) ** 3; });
     if (progress < 1) frame = requestAnimationFrame(animate);
     else { resetPageScroll(); cleanup(); done(); }

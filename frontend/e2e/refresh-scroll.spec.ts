@@ -16,16 +16,22 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     try {
       await page.goto(`/editor?edit=${post.id}`);
       await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
-      const scrollDown = () => page.evaluate(() => {
-        const nodes = Array.from(document.querySelectorAll("*")).filter(element => element.scrollHeight > element.clientHeight + 100);
-        nodes.forEach(element => { element.scrollTop = 200; });
-        return nodes.filter(element => element.scrollTop > 0).length;
-      });
-      expect(await scrollDown()).toBeGreaterThanOrEqual(3);
+      const source = page.locator(".custom-editor-wrapper textarea");
+      const scrollRegions = page.locator(".content-scroll, .custom-editor-wrapper textarea, .custom-editor-wrapper .html-wrap");
+      const scrollDown = async () => {
+        // Let the preview follow the source using the editor's scroll ratio.
+        await source.hover();
+        await source.evaluate(element => { element.scrollTop = 200; });
+        await page.locator(".content-scroll").evaluate(element => { element.scrollTop = 200; });
+        await expect.poll(() => scrollRegions.evaluateAll(regions =>
+          regions.filter(region => region.scrollTop > 0).length,
+        )).toBe(3);
+      };
+      await scrollDown();
       await page.reload();
       await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
       expect(await page.evaluate(() => Array.from(document.querySelectorAll("*")).every(element => !element.scrollTop))).toBe(true);
-      expect(await scrollDown()).toBeGreaterThanOrEqual(3);
+      await scrollDown();
       await page.evaluate(() => {
         const frames: number[][] = [];
         const nodes = Array.from(document.querySelectorAll("*")).filter(element => element.scrollTop > 0);
